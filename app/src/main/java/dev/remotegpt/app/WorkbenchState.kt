@@ -16,6 +16,7 @@ enum class WorkspaceTab { SESSIONS, FILES, TERMINAL }
     val remotePath: String = "", val state: String = "uploading", val error: String? = null)
 @Serializable data class Draft(val text: String = "", val attachments: List<Attachment> = emptyList(), val delivery: String = "draft", val pendingId: String? = null,
     val model: String? = null, val effort: String? = null)
+data class PendingQuestions(val request: ServerRequest, val submitted: Boolean = false)
 data class PendingApproval(val request: ServerRequest, val submitted: Boolean = false)
 data class TerminalTab(val id: String, val name: String, val session: TerminalSession, val projectPath: String = "")
 data class TerminalPreferences(val fontSize: Float = 14f, val extraKeys: Boolean = false)
@@ -45,6 +46,7 @@ data class HostWorkspace(
     val imageLoading: Set<String> = emptySet(),
     val projectFiles: Map<String, ProjectFiles> = emptyMap(), val projectTerminals: Map<String, String> = emptyMap(),
     val drafts: Map<String, Draft> = emptyMap(), val approvals: List<PendingApproval> = emptyList(),
+    val pendingQuestions: List<PendingQuestions> = emptyList(),
     val models: List<Pair<String, String>> = emptyList(), val model: String? = null,
     val modelOptions: List<ModelOption> = emptyList(),
     val filePath: String = "", val files: List<RemoteFile> = emptyList(), val loadingFiles: Boolean = false,

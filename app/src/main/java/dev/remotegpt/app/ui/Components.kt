@@ -81,6 +81,7 @@ import java.io.File
     onLoadImage: (String) -> Unit = {},
 ) {
     val user = item.kind == "userMessage"
+    val questionReply = remember(item.kind, item.text) { if (user) UserQuestions.parseReply(item.text) else null }
     val tool = item.kind !in setOf("userMessage", "agentMessage")
     // Tool output is secondary context. Keep command results, plans, reasoning and
     // failures compact by default; the final assistant answer stays open.
@@ -113,11 +114,18 @@ import java.io.File
                 }
                 if (expanded) {
                     if (item.kind == "commandExecution") CommandExecutionContent(item)
+                    else if (questionReply != null) QuestionReplyContent(questionReply)
                     else SelectionContainer {
                         if (item.kind == "agentMessage") key(item.identityKey) { StyledMarkdown(item.text.ifBlank { "…" }, item.complete) }
                         else Text(item.text.ifBlank { if (item.imagePaths.isEmpty()) tr(R.string.ui_running) else tr(R.string.ui_image_attachment) }, style = if (tool) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                             fontFamily = if (tool) FontFamily.Monospace else FontFamily.Default,
                             modifier = Modifier.padding(bottom = if (tool) 14.dp else 0.dp))
+                    }
+                    item.questions.forEach { question ->
+                        Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(question.title, style = MaterialTheme.typography.bodyLarge)
+                            question.options.forEach { option -> Text("• $option", style = MaterialTheme.typography.bodyMedium) }
+                        }
                     }
                     item.imagePaths.forEachIndexed { index, path ->
                         val imageName = path.substringAfterLast('/').ifBlank { tr(R.string.ui_image) }

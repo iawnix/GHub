@@ -90,6 +90,7 @@ data class TimelineItem(
     // When present, text contains only the output. Older caches retain their
     // original combined text and must never be split by guessing at newlines.
     val commandExecution: CommandExecutionDetails? = null,
+    val questions: List<AsyncUserQuestion> = emptyList(),
 ) {
     // Identity within a conversation. Length-prefixing avoids delimiter collisions.
     // Computed, so existing serialized caches remain compatible.
@@ -100,12 +101,20 @@ data class TimelineItem(
 data class Conversation(
     val threadId: String, val items: List<TimelineItem> = emptyList(), val activeTurn: String? = null,
     val nextCursor: String? = null, val status: String = "idle",
+    // A truncated cache is readable, but has no trustworthy backwards cursor.
+    val historyTruncated: Boolean = false,
+    // Runtime provenance: incomplete event-only objects must never replace disk history.
+    @kotlinx.serialization.Transient val baselineLoaded: Boolean = true,
+    // Detect even idle -> active -> idle transitions while a history read is in flight.
+    @kotlinx.serialization.Transient val stateRevision: Long = 0,
 )
 
 data class ServerRequest(val epoch: String, val id: JsonElement, val method: String, val params: JsonObject) {
     val key get() = "$epoch:$id"
     val threadId get() = params.string("threadId").orEmpty()
     val supportedApproval get() = method in setOf("item/commandExecution/requestApproval", "item/fileChange/requestApproval")
+    val userQuestions get() = if (method == "item/tool/requestUserInput") UserQuestions.parseRequest(params) else null
+    val isBlocking get() = (params["isBlocking"] as? JsonPrimitive)?.booleanOrNull ?: true
     val command get() = params.string("command")
     val reason get() = params.string("reason")
     val workingDirectory get() = params.string("cwd")

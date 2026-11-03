@@ -33,9 +33,22 @@ proxy 通道使用原始字节流，无 PTY；stderr 单独读取。终端功能
 | 对话与中断 | `turn/start`、`turn/interrupt` |
 | 流式状态 | `thread/status/changed`、`turn/*`、`item/*` |
 | 命令与文件审批 | `item/commandExecution/requestApproval`、`item/fileChange/requestApproval` |
-| 审批同步 | `serverRequest/resolved` |
+| 用户提问与回答 | `item/tool/requestUserInput`，通过原请求 ID 返回 `answers` |
+| 审批与提问同步 | `serverRequest/resolved` |
 
 枚举沿用实际 schema，例如 `approvalPolicy: on-request`、`sandbox: workspace-write`。扩展字段可被忽略，未知时间线类型显示占位内容；暂未接入的服务端交互请求返回协议错误，用户可转到 CLI 处理。默认连接使用常规 API。
+
+### 用户问答
+
+根据 Codex 0.165.0 导出的 `ToolRequestUserInputParams` / `ToolRequestUserInputResponse`，客户端将 `item/tool/requestUserInput` 展示为问题卡片，支持多问题、选项说明、无选项时的文字输入，以及 `isOther` 开启的自定义答案。`isSecret` 输入使用密码显示且不进入页面保存状态。选项不会自动选中或提交。
+
+回答通过原 JSON-RPC 请求 ID 返回，例如 `{"answers":{"scope":{"answers":["Prepare structures"]}}}`；它不是 `turn/start` 消息，也不使用审批的 `decision` 字段。提交后禁止重复发送，直到 `serverRequest/resolved` 关闭卡片；另一客户端回答、回合中断及重连重放由同一机制处理。请求绑定连接 epoch，旧连接上的问题不能重放到新连接。
+
+`isBlocking: true` 显示「等待回答」；`false` 保留任务运行状态并提示用户可以在任务继续时回答。旧请求缺少该字段时按阻塞处理，不根据已废弃的 `autoResolutionMs` 自动替用户回答。
+
+历史中的用户消息若以 `<send_user_message_question_reply>` 开头，客户端解析其中的 JSON 数组，显示问题、答案和标签后附加的文字。`questionItemId` 按不透明字符串保留；原始消息仍完整存入缓存。字段损坏、未闭合标签及普通引用示例保留原文。`agentMessage.questions` 中的问题和选项也会显示并保存，但这些历史元数据本身不创建可提交的 RPC 请求。
+
+`request_user_input_async` 是用户示例中的工具名称，不是 App Server 方法。本机 0.165.0 未提供该工具；客户端不会从历史 ID 猜测提交接口。可交互的提问以服务端实际发出的 `item/tool/requestUserInput` 为准。
 
 ## 会话生命周期
 

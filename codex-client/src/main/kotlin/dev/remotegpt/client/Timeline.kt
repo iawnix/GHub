@@ -3,6 +3,12 @@ package dev.remotegpt.client
 import kotlinx.serialization.json.*
 
 object Timeline {
+    /** These events need a body baseline before they can be applied or persisted. */
+    fun needsBaseline(method: String): Boolean = method in setOf(
+        "turn/started", "turn/completed", "item/started", "item/completed",
+        "item/agentMessage/delta", "item/commandExecution/outputDelta", "item/plan/delta", "item/reasoning/summaryTextDelta",
+    )
+
     /** Collapse repeated records of the same turn/item, preserving their first position. */
     fun normalized(conversation: Conversation): Conversation {
         val items = linkedMapOf<String, TimelineItem>()
@@ -43,7 +49,12 @@ object Timeline {
                 workingDirectory = raw.string("cwd"),
                 exitCode = (raw["exitCode"] as? JsonPrimitive)?.intOrNull,
                 durationMs = (raw["durationMs"] as? JsonPrimitive)?.longOrNull?.takeIf { it >= 0 },
-            ) else null)
+            ) else null,
+            questions = if (type == "agentMessage") raw.array("questions").mapNotNull { value ->
+                val question = value as? JsonObject ?: return@mapNotNull null
+                question.string("title")?.let { title -> AsyncUserQuestion(title,
+                    question.array("options").mapNotNull { (it as? JsonPrimitive)?.takeIf { it.isString }?.content }) }
+            } else emptyList())
     }
 
     fun history(threadId: String, page: JsonObject): Conversation {
@@ -57,15 +68,19 @@ object Timeline {
     fun notification(state: Conversation, method: String, params: JsonObject): Conversation {
         if (params.string("threadId") != state.threadId) return state
         return when (method) {
-            "turn/started" -> state.copy(activeTurn = params.obj("turn").string("id"), status = "active")
+            "turn/started" -> state.copy(activeTurn = params.obj("turn").string("id"), status = "active", stateRevision = state.stateRevision + 1)
             "turn/completed" -> {
                 val turn = params.obj("turn")
                 val id = turn.string("id")
                 var items = state.items.map { if (it.turnId == id) it.copy(complete = true) else it }
                 turn.array("items").forEach { raw -> items = upsert(items, parseItem(raw.jsonObject, id.orEmpty(), true)) }
-                state.copy(items = items, activeTurn = null, status = turn.string("status") ?: "completed")
+                // An older turn finishing must not clear a newer active turn.
+                if (state.activeTurn != null && state.activeTurn != id) state.copy(items = items)
+                else state.copy(items = items, activeTurn = null, status = turn.string("status") ?: "completed",
+                    stateRevision = state.stateRevision + 1)
             }
-            "thread/status/changed" -> state.copy(status = params.obj("status").string("type") ?: state.status)
+            "thread/status/changed" -> state.copy(status = params.obj("status").string("type") ?: state.status,
+                stateRevision = state.stateRevision + 1)
             "item/started", "item/completed" -> state.copy(items = upsert(state.items,
                 parseItem(params.obj("item"), params.string("turnId").orEmpty(), method == "item/completed")))
             "item/agentMessage/delta", "item/commandExecution/outputDelta", "item/plan/delta", "item/reasoning/summaryTextDelta" -> {
@@ -81,6 +96,7 @@ object Timeline {
     }
 
     fun older(current: Conversation, page: Conversation): Conversation {
+        require(current.baselineLoaded && !current.historyTruncated) { "Restore the latest history before paging a truncated cache" }
         val ids = current.items.map { it.identityKey }.toSet()
         return normalized(current.copy(items = page.items.filterNot { it.identityKey in ids } + current.items, nextCursor = page.nextCursor))
     }
@@ -89,7 +105,8 @@ object Timeline {
     fun refresh(before: Conversation, live: Conversation, page: Conversation): Conversation {
         val pageTurns = page.items.map { it.turnId }.toSet()
         val overlap = live.items.indexOfFirst { it.turnId in pageTurns }
-        val older = if (page.nextCursor != null && overlap > 0) live.items.take(overlap) else emptyList()
+        val preserveOlder = live.baselineLoaded && !live.historyTruncated && !before.historyTruncated
+        val older = if (preserveOlder && page.nextCursor != null && overlap > 0) live.items.take(overlap) else emptyList()
         val beforeItems = before.items.associateBy { it.identityKey }
         val liveItems = live.items.associateBy { it.identityKey }
         val snapshotIds = page.items.map { it.identityKey }.toSet()
@@ -97,17 +114,40 @@ object Timeline {
             val current = liveItems[snapshot.identityKey]
             when {
                 snapshot.complete -> snapshot
+                current != null && current.complete && current != beforeItems[current.identityKey] -> current
+                current != null && snapshot.text.startsWith(current.text) -> snapshot
                 current != null && current != beforeItems[current.identityKey] -> current
                 current != null && current.text.startsWith(snapshot.text) -> current
                 else -> snapshot
             }
         }
-        val arrived = live.items.filter { it.identityKey !in snapshotIds && it.identityKey !in beforeItems }
+        val stateChanged = live.stateRevision != before.stateRevision || live.activeTurn != before.activeTurn || live.status != before.status
+        val activeTurn = if (stateChanged) live.activeTurn else page.activeTurn
+        // Active history can omit unfinished items entirely. Absence is not deletion;
+        // keep the stream already on screen as well as events received during the read.
+        val arrived = live.items.filter { it.identityKey !in snapshotIds && (
+            it.identityKey !in beforeItems || it != beforeItems[it.identityKey] ||
+                it.turnId == page.activeTurn || it.turnId == activeTurn) }
+        // Anchor omitted messages to the next shared item, preserving live order.
+        // Appending them all at the end moves commentary behind later tool calls.
+        val arrivedIds = arrived.map { it.identityKey }.toSet()
+        val preceding = mutableMapOf<String, List<TimelineItem>>()
+        val pending = mutableListOf<TimelineItem>()
+        live.items.forEach { item ->
+            if (item.identityKey in arrivedIds) pending += item
+            else if (item.identityKey in snapshotIds && pending.isNotEmpty()) {
+                preceding[item.identityKey] = pending.toList()
+                pending.clear()
+            }
+        }
+        val mergedItems = items.flatMap { preceding[it.identityKey].orEmpty() + it } + pending
         return normalized(page.copy(
-            items = older + items + arrived,
+            items = older + mergedItems,
             nextCursor = if (older.isNotEmpty()) live.nextCursor else page.nextCursor,
-            activeTurn = if (live.activeTurn != before.activeTurn) live.activeTurn else page.activeTurn,
-            status = if (live.status != before.status) live.status else page.status,
+            activeTurn = activeTurn,
+            status = if (stateChanged) live.status else page.status,
+            baselineLoaded = true,
+            stateRevision = live.stateRevision,
         ))
     }
 

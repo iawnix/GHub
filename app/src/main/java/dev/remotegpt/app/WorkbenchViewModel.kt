@@ -73,6 +73,11 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     private val memoryBudgets = mutableMapOf<String, ConversationMemoryBudget>()
     private val trims = mutableMapOf<String, Job>()
     private val cacheWrites = Mutex()
+    private var conversationCacheGeneration = 0L
+    private val conversationCheckpoints = ConversationCheckpoints<Pair<String, String>>(
+        viewModelScope, SystemClock::elapsedRealtime,
+        { (host, thread) -> writeConversation(host, thread) }, ::storageFailed,
+    )
     private val backgroundRelease = BackgroundRelease(viewModelScope) {
         if (!connectionActive) {
             (fileRuntimes.keys + runtimes.keys + connections.keys).toSet().forEach { releaseConnection(it) }
@@ -155,10 +160,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         (current.conversations.keys - previous.conversations.keys).forEach(budget::touch)
         if (current.selectedThread != previous.selectedThread) current.selectedThread?.let(budget::touch)
         if (current.conversations !== previous.conversations || current.selectedThread != previous.selectedThread ||
-            current.historySyncingThreads != previous.historySyncingThreads || current.approvals != previous.approvals) scheduleTrim(host)
+            current.historySyncingThreads != previous.historySyncingThreads || current.approvals != previous.approvals || current.pendingQuestions != previous.pendingQuestions) scheduleTrim(host)
     }
     private fun pinned(ws: HostWorkspace) = setOfNotNull(ws.selectedThread) +
-        ws.approvals.map { it.request.threadId } + ws.historySyncingThreads
+        ws.approvals.map { it.request.threadId } + ws.pendingQuestions.map { it.request.threadId } + ws.historySyncingThreads
 
     private fun scheduleTrim(host: String, aggressive: Boolean = false) {
         if (trims[host]?.isActive == true) return
@@ -167,14 +172,14 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 delay(750)
                 val budget = memoryBudgets.getOrPut(host) { ConversationMemoryBudget() }
                 for (thread in budget.evictions(ui(host).conversations, pinned(ui(host)), aggressive)) {
-                    val snapshot = ui(host).conversations[thread] ?: continue
+                    val snapshot = ui(host).conversations[thread]?.takeIf { it.baselineLoaded } ?: continue
                     cacheWrites.withLock {
                         val chunks = withContext(Dispatchers.Default) { cacheConversationChunks(host, thread, snapshot) }
                         val ws = ui(host)
                         if (ws.conversations[thread] === snapshot && thread !in pinned(ws) && snapshot.activeTurn == null) {
                             dao.replaceConversationChunks(host, thread, chunks)
                             if (ui(host).conversations[thread] === snapshot && thread !in pinned(ui(host))) {
-                                persistence.remove("conversation:$host:$thread")?.cancel()
+                                conversationCheckpoints.cancel(host to thread)
                                 runtimes[host]?.sessions?.dirty(thread)
                                 update(host) { it.copy(conversations = it.conversations - thread) }
                             }
@@ -298,13 +303,15 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun deleteProfile(profile: HostProfile) = launchStorage {
         disconnect(profile.id)
+        conversationCacheGeneration++
+        conversationCheckpoints.cancelMatching { it.first == profile.id }
         trims.remove(profile.id)?.cancel()
         memoryBudgets.remove(profile.id)
         editorDrafts.write(profile.id, null)
         persistence.keys.filter { it.contains(":${profile.id}:") }.forEach { persistence.remove(it)?.cancel() }
         ui(profile.id).drafts.values.flatMap { it.attachments }.forEach { uploads.remove(it.id)?.cancel() }
         mutable.update { it.copy(workspaces = it.workspaces - profile.id) }
-        dao.deleteWorkspace(profile.id)
+        cacheWrites.withLock { dao.deleteWorkspace(profile.id) }
         withContext(Dispatchers.IO) { (profile.jumps + profile.endpoint).forEach { app.secrets.remove(it.credentialId) } }
     }
 
@@ -348,7 +355,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         connectionEpochs[host] = epoch
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             update(host) { it.copy(connection = if (recovering) ConnectionStatus.RECONNECTING else ConnectionStatus.CONNECTING,
-                error = null, needsBootstrap = false, approvals = emptyList()) }
+                error = null, needsBootstrap = false, approvals = emptyList(), pendingQuestions = emptyList()) }
             var ssh: SshConnection? = null
             var rpc: RpcClient? = null
             var stage = "ssh"
@@ -406,7 +413,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         val permanent = requiresAttention(e, stage)
                         if (permanent) retryBlocked += host
                         update(host) { it.copy(connection = if (permanent) ConnectionStatus.ERROR else recoveryStatus(),
-                            error = errorText(e), approvals = emptyList()) }
+                            error = errorText(e), approvals = emptyList(), pendingQuestions = emptyList()) }
                         record("connect_failed", "epoch=${epoch} stage=${stage} reason=${connectionDiagnostic(e)} retry=${!permanent}")
                     }
                 }
@@ -449,7 +456,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         renderPending.remove(host)
         resultMonitors.remove(host)?.cancel()
         rt.rpc.invalidate()
-        update(host) { it.copy(approvals = emptyList(), loadingHistory = false, loadingThreads = false) }
+        update(host) { it.copy(approvals = emptyList(), pendingQuestions = emptyList(), loadingHistory = false, loadingThreads = false) }
         // Keep the SSH transport for SFTP/terminal while only the Codex proxy
         // is being rebuilt. Full disconnect closes it below.
         viewModelScope.launch(Dispatchers.IO) { rt.rpc.close() }
@@ -474,7 +481,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         connections.remove(host)?.cancel()
         runtimes[host]?.let { retireRuntime(host, it) }
         fileRuntimes.remove(host)?.let { runtime -> viewModelScope.launch(Dispatchers.IO) { runCatching { runtime.ssh.close() } } }
-        update(host) { it.copy(connection = ConnectionStatus.OFFLINE, approvals = emptyList(), error = null, reconnectAttempt = 0,
+        update(host) { it.copy(connection = ConnectionStatus.OFFLINE, approvals = emptyList(), pendingQuestions = emptyList(), error = null, reconnectAttempt = 0,
             terminals = emptyList(), selectedTerminal = null, projectTerminals = emptyMap(), openingTerminalProjects = emptySet(), imageLoading = emptySet()) }
     }
 
@@ -565,7 +572,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         // A rejected thread resume/read does not make an otherwise healthy SSH
                         // connection unusable. Keep independent terminals and file transfers alive.
                         retryBlocked += host
-                        update(host) { it.copy(connection = ConnectionStatus.ERROR, approvals = emptyList(),
+                        update(host) { it.copy(connection = ConnectionStatus.ERROR, approvals = emptyList(), pendingQuestions = emptyList(),
                             error = tr(R.string.ui_the_server_is_connected_but_session_sync)) }
                         return@launch
                     }
@@ -644,6 +651,11 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         ws.copy(approvals = ws.approvals.filterNot { it.request.key == event.request.key } +
                             (previous?.copy(request = event.request) ?: PendingApproval(event.request)))
                     }
+                    else if (event.request.userQuestions != null) update(host) { ws ->
+                        val previous = ws.pendingQuestions.firstOrNull { it.request.key == event.request.key }
+                        ws.copy(pendingQuestions = ws.pendingQuestions.filterNot { it.request.key == event.request.key } +
+                            (previous?.copy(request = event.request) ?: PendingQuestions(event.request)))
+                    }
                     else {
                         rt.rpc.rejectUnsupported(event.request)
                         message(tr(R.string.ui_this_client_cannot_handle_no_permission_was , event.request.method))
@@ -659,7 +671,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         rt.activeWake.trySend(Unit)
                         if (event.method in setOf("thread/started", "thread/archived", "thread/unarchived", "thread/name/updated")) rt.overviewWake.trySend(Unit)
                     }
-                    if (event.method == "serverRequest/resolved") update(host) { ws -> ws.copy(approvals = ws.approvals.filterNot { it.request.id == event.params["requestId"] }) }
+                    if (event.method == "serverRequest/resolved") update(host) { ws -> ws.copy(approvals = ws.approvals.filterNot { it.request.id == event.params["requestId"] },
+                        pendingQuestions = ws.pendingQuestions.filterNot { it.request.id == event.params["requestId"] }) }
                     if (event.method == "thread/started") {
                         val summary = threadSummary(event.params.obj("thread"))
                         rt.observedThreads[summary.id] = summary
@@ -685,10 +698,17 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                                 persistResults(host)
                             }
                         }
+                        // Hydrate the durable body before applying a delta. The ordered
+                        // event consumer holds subsequent events while this read completes.
+                        val after = applyConversationNotification(thread, event.method, event.params,
+                            current = { ui(host).conversations[thread] },
+                            restore = { loadConversationCache(host, thread) },
+                            isCurrent = { runtimes[host] === rt && rt.rpc.isConnected },
+                        )
+                        if (runtimes[host] !== rt || !rt.rpc.isConnected) break
                         var conversationChanged = false
                         update(host) { ws ->
-                            val before = ws.conversations[thread] ?: Conversation(thread)
-                            val after = Timeline.notification(before, event.method, event.params)
+                            val before = ws.conversations[thread]
                             val threads = when (event.method) {
                                 "thread/name/updated" -> ws.threads.map { if (it.id == thread) it.copy(title = event.params.string("name") ?: it.title) else it }
                                 "thread/status/changed" -> ws.threads.map { if (it.id == thread) it.copy(status = event.params.obj("status").string("type") ?: it.status) else it }
@@ -697,13 +717,13 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                                 }
                                 else -> ws.threads
                             }
-                            conversationChanged = after != before
-                            ws.copy(conversations = if (conversationChanged) ws.conversations + (thread to after) else ws.conversations, threads = threads,
+                            conversationChanged = after != null && after != before
+                            ws.copy(conversations = if (conversationChanged && after != null) ws.conversations + (thread to after) else ws.conversations, threads = threads,
                                 threadListRevision = ws.threadListRevision +
                                     if (event.method in setOf("thread/archived", "thread/unarchived")) 1 else 0)
                         }
                         if (conversationChanged) {
-                            persistConversation(host, thread)
+                            if (Timeline.needsBaseline(event.method)) persistConversation(host, thread, immediate = event.method == "turn/completed")
                             if (ui(host).selectedThread == thread) ui(host).conversations[thread]?.let {
                                 renderPending[host] = it to SystemClock.elapsedRealtime()
                             }
@@ -989,7 +1009,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         ws.copy(results = ws.results + (id to receipt),
                             threads = ws.threads.map { if (it.id == id) it.copy(status = observed.status, awaitingFirstMessage = false) else it },
                             conversations = if (conversation != null && changed) ws.conversations + (id to conversation.copy(
-                                activeTurn = if (status == "inProgress") turnId else null, status = status)) else ws.conversations)
+                                activeTurn = if (status == "inProgress") turnId else null, status = status, stateRevision = conversation.stateRevision + 1)) else ws.conversations)
                     }
                     if (receipt != before) persistResults(host)
                     // Full message history is fetched only for the selected session,
@@ -1214,35 +1234,41 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         message(tr(R.string.ui_empty_local_record_removed))
     }
 
-    private suspend fun loadCached(host: String, thread: String) {
-        if (ui(host).conversations[thread] == null) {
-            val chunks = runCatching { dao.conversationChunks(host, thread) }.getOrElse {
-                record("cache_read_failed", it.javaClass.simpleName); emptyList()
+    /** Serialize cache hydration with writes and eviction. A failed read must not
+     * be treated as an empty baseline that is then allowed to overwrite disk. */
+    private suspend fun loadConversationCache(host: String, thread: String) = cacheWrites.withLock {
+        if (ui(host).conversations[thread]?.baselineLoaded == true) return@withLock
+        val generation = conversationCacheGeneration
+        val chunks = dao.conversationChunks(host, thread)
+        val restored = if (chunks.isNotEmpty()) {
+            withContext(Dispatchers.Default) { decodeConversationCache(chunks.map { it.json }) }
+        } else {
+            // Legacy single-row caches use the same conservative pagination migration.
+            val legacy = try { dao.conversation(host, thread) }
+            catch (e: Exception) {
+                if (!isOversizedCache(e)) throw e
+                record("cache_read_failed", "cursor_window")
+                dao.deleteConversation(host, thread)
+                message(tr(R.string.ui_local_session_cache_was_too_large_and))
+                null
             }
-            val restored = withContext(Dispatchers.Default) {
-                decodeConversationCache(chunks.map { it.json })?.let(Timeline::normalized)
-            }
-            if (restored != null) {
-                update(host) { if (thread !in it.conversations) it.copy(conversations = it.conversations + (thread to restored)) else it }
-            } else {
-                // Legacy 0.1.6/0.1.7 cache. A single oversized row can fail while creating
-                // CursorWindow, so the query itself must be inside the recovery boundary.
-                val legacy = try { dao.conversation(host, thread) }
-                catch (e: Exception) {
-                    if (isOversizedCache(e)) {
-                        record("cache_read_failed", "cursor_window")
-                        runCatching { dao.deleteConversation(host, thread) }
-                        message(tr(R.string.ui_local_session_cache_was_too_large_and))
-                    } else record("cache_read_failed", e.javaClass.simpleName)
-                    null
-                }
-                legacy?.let { row ->
-                    runCatching { wireJson.decodeFromString<Conversation>(row.json) }.getOrNull()?.let { conversation ->
-                        update(host) { if (thread !in it.conversations) it.copy(conversations = it.conversations + (thread to Timeline.normalized(conversation))) else it }
-                    }
-                }
-            }
+            legacy?.let { withContext(Dispatchers.Default) { decodeConversationCache(listOf(it.json)) } }
         }
+        if (generation != conversationCacheGeneration || host !in state.value.workspaces) return@withLock
+        // A successful read establishes what is recoverable locally. Missing or
+        // malformed serialized data requires a fresh server page and a new cursor.
+        // IO/SQLite failures propagate above; those never establish a baseline.
+        if (chunks.isNotEmpty() && restored == null) record("cache_read_failed", "invalid_serialization")
+        val baseline = restored?.takeIf { it.threadId == thread }?.let(Timeline::normalized)
+            ?: Conversation(thread, historyTruncated = true)
+        update(host) { ws ->
+            if (ws.conversations[thread]?.baselineLoaded == true) ws
+            else ws.copy(conversations = ws.conversations + (thread to baseline))
+        }
+    }
+
+    private suspend fun loadCached(host: String, thread: String) {
+        loadConversationCache(host, thread)
         if (ui(host).drafts[thread] == null) {
             val draft = dao.draft(host, thread)?.let { runCatching { wireJson.decodeFromString<Draft>(it.json) }.getOrNull() } ?: Draft()
             val restored = draft.copy(attachments = draft.attachments.distinctBy { it.id }.map { if (it.state == "uploading") it.copy(state = "failed", error = tr(R.string.ui_upload_interrupted_select_the_file_again)) else it },
@@ -1257,23 +1283,28 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             rt.sessions.history(thread, more) {
                 if (runtimes[host] !== rt) return@history false
                 val started = SystemClock.elapsedRealtime()
-                val current = ui(host).conversations[thread] ?: Conversation(thread)
+                loadConversationCache(host, thread)
+                if (runtimes[host] !== rt) return@history false
+                val generation = conversationCacheGeneration
+                val current = ui(host).conversations[thread] ?: Conversation(thread, baselineLoaded = false)
+                val append = more && current.baselineLoaded && !current.historyTruncated
+                if (append && current.nextCursor == null) return@history true
                 val beforeReceipt = ui(host).results[thread]
-                val response = rt.api.history(thread, if (more) current.nextCursor else null)
+                val response = rt.api.history(thread, if (append) current.nextCursor else null)
                 rt.rpc.awaitEventsApplied()
                 val page = withContext(Dispatchers.Default) { Timeline.history(thread, response) }
-                if (runtimes[host] !== rt) return@history false
+                if (runtimes[host] !== rt || generation != conversationCacheGeneration) return@history false
                 update(host) { ws ->
                     val live = ws.conversations[thread] ?: current
-                    val merged = if (more) Timeline.older(live, page) else Timeline.refresh(current, live, page)
+                    val merged = if (append) Timeline.older(live, page) else Timeline.refresh(current, live, page)
                     val latest = response.array("data").firstOrNull() as? JsonObject
-                    val results = if (!more && ws.results[thread] == beforeReceipt) ws.results + (thread to observeResult(beforeReceipt,
+                    val results = if (!append && ws.results[thread] == beforeReceipt) ws.results + (thread to observeResult(beforeReceipt,
                         latest?.string("id").orEmpty(), latest?.string("status").orEmpty(), ws.threads.firstOrNull { it.id == thread }?.updatedAt ?: 0)) else ws.results
                     ws.copy(conversations = ws.conversations + (thread to merged), results = results)
                 }
-                if (!more) persistResults(host)
-                persistConversation(host, thread)
-                timing(if (more) "history_older" else "history_latest", started)
+                if (!append) persistResults(host)
+                persistConversation(host, thread, immediate = page.activeTurn == null)
+                timing(if (append) "history_older" else "history_latest", started)
                 true
             }
         } finally {
@@ -1291,7 +1322,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         if (thread in ui(id).archivingThreads) return@perform
         val original = summary(id, thread) ?: restoreSummary
         if (value && (original?.status == "active" || ui(id).results[thread]?.status == "inProgress" ||
-                ui(id).conversations[thread]?.activeTurn != null || ui(id).approvals.any { it.request.threadId == thread })) {
+                ui(id).conversations[thread]?.activeTurn != null || ui(id).approvals.any { it.request.threadId == thread } ||
+                ui(id).pendingQuestions.any { it.request.threadId == thread })) {
             message(tr(R.string.ui_this_session_is_running_or_waiting_for))
             return@perform
         }
@@ -1408,6 +1440,20 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             rt.rpc.approve(request, decision)
             update(host) { it.copy(approvals = it.approvals.map { p -> if (p.request.key == request.key) p.copy(submitted = true) else p }) }
         } catch (e: Exception) { message(errorText(e)) }
+    }
+
+    fun answerQuestions(request: ServerRequest, answers: Map<String, List<String>>) {
+        val host = state.value.workspaces.entries.firstOrNull { (_, ws) -> ws.pendingQuestions.any { it.request.key == request.key } }?.key ?: return
+        val rt = runtimes[host] ?: return
+        if (ui(host).connection != ConnectionStatus.ONLINE || !rt.rpc.isConnected) return
+        try {
+            rt.rpc.answerQuestions(request, answers)
+        } catch (e: Exception) { message(errorText(e)) }
+        finally {
+            if (rt.rpc.questionsSubmitted(request)) update(host) {
+                it.copy(pendingQuestions = it.pendingQuestions.map { p -> if (p.request.key == request.key) p.copy(submitted = true) else p })
+            }
+        }
     }
 
     fun listFiles(path: String? = null) {
@@ -1600,14 +1646,17 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun dismissClipboard() { mutable.update { it.copy(clipboardRequest = null) } }
 
-    private fun persistConversation(host: String, thread: String) {
-        val key = "conversation:${host}:${thread}"
-        persistLater(key, 350) { cacheWrites.withLock {
-            ui(host).conversations[thread]?.let { conversation ->
-                val chunks = withContext(Dispatchers.Default) { cacheConversationChunks(host, thread, conversation) }
-                dao.replaceConversationChunks(host, thread, chunks)
-            }
-        } }
+    private fun persistConversation(host: String, thread: String, immediate: Boolean = false) {
+        if (ui(host).conversations[thread]?.baselineLoaded == true)
+            conversationCheckpoints.changed(host to thread, immediate)
+    }
+
+    private suspend fun writeConversation(host: String, thread: String) = cacheWrites.withLock {
+        val generation = conversationCacheGeneration
+        val conversation = ui(host).conversations[thread]?.takeIf { it.baselineLoaded } ?: return@withLock
+        val chunks = withContext(Dispatchers.Default) { cacheConversationChunks(host, thread, conversation) }
+        if (generation == conversationCacheGeneration && host in state.value.workspaces)
+            dao.replaceConversationChunks(host, thread, chunks)
     }
     private fun persistLater(key: String, milliseconds: Long, block: suspend () -> Unit) {
         persistence.remove(key)?.cancel()
@@ -1628,12 +1677,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             flushEditor(host)
             app.settings.results(host, ws.results)
             ws.drafts.forEach { (thread, _) -> flushDraft(host, thread) }
-            ws.conversations.keys.forEach { thread -> cacheWrites.withLock {
-                ui(host).conversations[thread]?.let { c ->
-                    val chunks = withContext(Dispatchers.Default) { cacheConversationChunks(host, thread, c) }
-                    dao.replaceConversationChunks(host, thread, chunks)
-                }
-            } }
+            ws.conversations.keys.forEach { thread -> writeConversation(host, thread) }
         }
     }
 
@@ -1654,18 +1698,23 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     fun clearCache() = launchStorage {
         imageGeneration++
         imageLoads.values.forEach { it.cancel() }; imageLoads.clear()
-        trims.values.forEach { it.cancel() }; trims.clear()
-        memoryBudgets.clear()
         mutable.update { all -> all.copy(previewImage = null, workspaces = all.workspaces.mapValues { (_, ws) ->
             ws.copy(imagePreviews = emptyMap(), imageLoading = emptySet())
         }) }
         clearingImages = true
         try { imageCache.clear() } finally { clearingImages = false }
-        persistence.keys.filter { it.startsWith("conversation:") }.forEach { persistence.remove(it)?.cancel() }
-        runtimes.values.forEach { it.sessions.clearHistory() }
-        mutable.update { all -> all.copy(workspaces = all.workspaces.mapValues { (_, ws) -> ws.copy(conversations = emptyMap(), threads = emptyList(), nextThreads = null) }) }
-        cacheWrites.withLock { dao.clearConversations(); dao.clearConversationChunks(); dao.clearThreads() }
-        runtimes.values.forEach { it.persistedThreads.clear() }
+        cacheWrites.withLock {
+            // Invalidate at the actual clear boundary, after any suspended image
+            // cleanup and previous body IO, so neither can reinstall an old base.
+            conversationCacheGeneration++
+            conversationCheckpoints.clear()
+            trims.values.forEach { it.cancel() }; trims.clear()
+            memoryBudgets.clear()
+            runtimes.values.forEach { it.sessions.clearHistory() }
+            mutable.update { all -> all.copy(workspaces = all.workspaces.mapValues { (_, ws) -> ws.copy(conversations = emptyMap(), threads = emptyList(), nextThreads = null) }) }
+            dao.clearConversations(); dao.clearConversationChunks(); dao.clearThreads()
+            runtimes.values.forEach { it.persistedThreads.clear() }
+        }
         message(tr(R.string.ui_local_session_cache_cleared_drafts_are_preserved))
     }
     fun exportDiagnostics(uri: Uri) = viewModelScope.launch {

@@ -37,6 +37,7 @@ import dev.remotegpt.client.*
         state.conversation?.let { Timeline.normalized(it).items }.orEmpty()
     }
     val approvals = ws.approvals.filter { it.request.threadId == thread }
+    val questions = ws.pendingQuestions.filter { it.request.threadId == thread }
     val turns = remember(timeline) { timeline.groupBy { it.turnId }.entries.toList() }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     val turnStatus = ws.results[thread]?.status?.takeIf { it.isNotBlank() } ?: state.conversation?.status
@@ -192,7 +193,11 @@ import dev.remotegpt.client.*
                     )
                 }
                 items(approvals, key = { "approval:${it.request.key}" }) { pending -> ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) } }
-                val task = taskStatus(turnStatus, active = state.conversation?.activeTurn != null, approval = approvals.isNotEmpty())
+                items(questions, key = { "question:${it.request.key}" }) { pending ->
+                    UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
+                }
+                val task = taskStatus(turnStatus, active = state.conversation?.activeTurn != null, approval = approvals.isNotEmpty(),
+                    question = questions.any { it.request.isBlocking })
                 if (problem == null && task != null && (task != TaskStatus.COMPLETED || timeline.none { it.kind == "agentMessage" && it.complete && it.turnId == ws.results[thread]?.turnId })) item(key = "control:task-status") {
                     TaskStatusLabel(task, text = when (task) {
                         TaskStatus.FAILED -> tr(R.string.ui_this_turn_failed_check_the_execution_details)

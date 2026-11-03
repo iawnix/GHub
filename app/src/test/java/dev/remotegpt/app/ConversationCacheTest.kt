@@ -7,6 +7,47 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ConversationCacheTest {
+    @Test fun truncatedCacheRebuildsPaginationAndCanReachEveryEarlierTurn() {
+        fun items(start: Int, end: Int) = (start..end).map { TimelineItem("i$it", "t$it", "agentMessage", "body$it", true) }
+        val original = Conversation("thread", items(1, 100), nextCursor = "before-t1")
+        val cached = decodeConversationCache(encodeConversationCache(original))!!
+        assertEquals("t37", cached.items.first().turnId)
+        assertTrue(cached.historyTruncated)
+        assertNull(cached.nextCursor)
+        val latest = Conversation("thread", items(81, 100), nextCursor = "before-t81")
+        var restored = Timeline.refresh(cached, cached, latest)
+        assertFalse(restored.historyTruncated)
+        assertEquals("before-t81", restored.nextCursor)
+        assertEquals(latest.items, restored.items)
+        for (start in listOf(61, 41, 21, 1, 0)) {
+            val end = if (start == 0) 0 else start + 19
+            restored = Timeline.older(restored, Conversation("thread", items(start, end), nextCursor = if (start == 0) null else "before-t$start"))
+        }
+        assertEquals(items(0, 100), restored.items)
+        assertNull(restored.nextCursor)
+    }
+
+    @Test fun oldChunkedCacheCannotReuseCursorEvenWhenOriginalTruncationWasNotRecorded() {
+        val original = Conversation("thread", listOf(TimelineItem("i", "t", "agentMessage", "old", true)), nextCursor = "unsafe")
+        val old = listOf("remote-gpt-cache-v2\n" + wireJson.encodeToString(original))
+        val restored = decodeConversationCache(old)!!
+        assertEquals(original.items, restored.items)
+        assertTrue(restored.historyTruncated)
+        assertNull(restored.nextCursor)
+        val savedAgain = decodeConversationCache(encodeConversationCache(restored))!!
+        assertTrue(savedAgain.historyTruncated)
+        assertNull(savedAgain.nextCursor)
+    }
+
+    @Test fun completeWindowKeepsItsCursorAndTruncatedWindowCannotBePagedDirectly() {
+        val original = Conversation("thread", listOf(TimelineItem("i", "t", "agentMessage", "body", true)), nextCursor = "valid")
+        assertEquals(original, decodeConversationCache(encodeConversationCache(original)))
+        try {
+            Timeline.older(original.copy(historyTruncated = true), original)
+            fail("A truncated window must fetch a new first page before loading older pages")
+        } catch (_: IllegalArgumentException) { }
+    }
+
     @Test fun commandCacheKeepsExactCommandAndMarksShortenedOutput() {
         val command = "printf '%s' \"\$HOME\"\n\t" + "中文".repeat(5_000)
         val output = "line\n".repeat(5_000)

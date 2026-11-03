@@ -37,12 +37,16 @@ import dev.remotegpt.client.*
     val answer = items.lastOrNull { it.kind == "agentMessage" }
     val files = items.filter { it.kind == "fileChange" }
     val images = items.filter { it.kind == "imageView" }
-    val steps = items.filter { it.kind != "userMessage" && it.kind != "fileChange" && it.kind != "imageView" && it !== answer }
+    val questions = items.filter { it.questions.isNotEmpty() && it !== answer }
+    val steps = items.filter { it.kind != "userMessage" && it.kind != "fileChange" && it.kind != "imageView" && it.questions.isEmpty() && it !== answer }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items.filter { it.kind == "userMessage" }.forEach { item ->
             key(item.identityKey) {
                 TimelineCard(item, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
             }
+        }
+        questions.forEach { question ->
+            key(question.identityKey) { TimelineCard(question, preview) }
         }
         if (steps.isNotEmpty() || active) ExecutionSummary(steps, active, files.size, images.size, syncing, connected, preview, turnStatus,
             imagePreviews, imageLoading, onLoadImage)

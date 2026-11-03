@@ -51,7 +51,7 @@
     <string name="ui_this_session_still_has_local_content_its" formatted="false">此会话仍有本地内容，已保留记录。</string>
     <string name="ui_empty_local_record_removed" formatted="false">已移除本地空记录。</string>
     <string name="ui_upload_interrupted_select_the_file_again" formatted="false">上传已中断，请重新选择文件</string>
-    <string name="ui_this_session_is_running_or_waiting_for" formatted="false">会话正在运行或等待审批，请结束后再归档。</string>
+    <string name="ui_this_session_is_running_or_waiting_for" formatted="false">会话正在运行或有待处理的请求，请结束后再归档。</string>
     <string name="ui_the_original_server_is_disconnected_reconnect_and" formatted="false">原服务器未连接，请连接后在已归档列表中恢复会话。</string>
     <string name="ui_restore_this_session_before_sending_your_draft" formatted="false">请先恢复会话后再发送，草稿已保留。</string>
     <string name="ui_attachment">附件：%1$s</string>
@@ -501,4 +501,12 @@
     <string name="terminal_lock_modifier">锁定 %1$s</string>
     <string name="terminal_unlock_modifier">解除 %1$s 锁定</string>
     <string name="terminal_modifier_hint">点按修饰键用于下一次输入，长按可锁定。</string>
+    <string name="ui_question_required" formatted="false">需要你的回答</string>
+    <string name="ui_question_blocking" formatted="false">任务正在等待你的回答。</string>
+    <string name="ui_question_nonblocking" formatted="false">任务会继续进行，你可以随时回答。</string>
+    <string name="ui_question_waiting" formatted="false">等待回答</string>
+    <string name="ui_question_answer" formatted="false">你的回答</string>
+    <string name="ui_question_empty_answer" formatted="false">未提供回答</string>
+    <string name="ui_question_other" formatted="false">填写其他答案</string>
+    <string name="ui_question_submit" formatted="false">提交回答</string>
 </resources>

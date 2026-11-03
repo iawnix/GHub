@@ -13,10 +13,11 @@ import dev.remotegpt.app.R
 import dev.remotegpt.app.tr
 import dev.remotegpt.client.TimelineItem
 
-internal enum class TaskStatus { RUNNING, COMPLETED, FAILED, INTERRUPTED, APPROVAL, UNKNOWN }
+internal enum class TaskStatus { RUNNING, COMPLETED, FAILED, INTERRUPTED, APPROVAL, QUESTION, UNKNOWN }
 
-internal fun taskStatus(status: String?, active: Boolean = false, approval: Boolean = false): TaskStatus? = when {
+internal fun taskStatus(status: String?, active: Boolean = false, approval: Boolean = false, question: Boolean = false): TaskStatus? = when {
     approval -> TaskStatus.APPROVAL
+    question -> TaskStatus.QUESTION
     active || status in setOf("inProgress", "active") -> TaskStatus.RUNNING
     status == "completed" -> TaskStatus.COMPLETED
     status in setOf("failed", "declined") -> TaskStatus.FAILED
@@ -39,6 +40,7 @@ internal fun taskStatusLabel(status: TaskStatus): String = tr(when (status) {
     TaskStatus.FAILED -> R.string.task_failed
     TaskStatus.INTERRUPTED -> R.string.task_interrupted
     TaskStatus.APPROVAL -> R.string.ui_waiting_for_approval
+    TaskStatus.QUESTION -> R.string.ui_question_waiting
     TaskStatus.UNKNOWN -> R.string.task_unknown
 })
 
@@ -80,7 +82,7 @@ internal fun taskStatusLabel(status: TaskStatus): String = tr(when (status) {
 @Composable internal fun taskStatusColor(status: TaskStatus): Color = when (status) {
     TaskStatus.COMPLETED -> accentColor(WorkbenchAccent.TEAL)
     TaskStatus.FAILED -> MaterialTheme.colorScheme.error
-    TaskStatus.APPROVAL -> accentColor(WorkbenchAccent.AMBER)
+    TaskStatus.APPROVAL, TaskStatus.QUESTION -> accentColor(WorkbenchAccent.AMBER)
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
@@ -97,6 +99,7 @@ internal fun taskStatusLabel(status: TaskStatus): String = tr(when (status) {
             TaskStatus.FAILED -> WorkbenchIcons.TaskError
             TaskStatus.INTERRUPTED -> WorkbenchIcons.StopCircle
             TaskStatus.APPROVAL -> WorkbenchIcons.FrontHand
+            TaskStatus.QUESTION -> WorkbenchIcons.ChatBubbleOutline
         }, null, Modifier.size(16.dp), tint = tint)
     }
 }

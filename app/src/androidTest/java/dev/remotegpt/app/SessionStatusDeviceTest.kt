@@ -4,6 +4,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.remotegpt.client.*
+import dev.remotegpt.app.data.decodeConversationCache
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import org.junit.*
@@ -131,6 +132,67 @@ class SessionStatusDeviceTest {
                     assertEquals(items.size, items.map { it.identityKey }.distinct().size)
                     assertEquals(2, items.count { it.kind == "userMessage" })
                     assertEquals(2, items.count { it.kind == "agentMessage" })
+
+                    // Evict a subscribed body, then receive a new turn. Its deltas
+                    // must hydrate the two durable turns before any checkpoint.
+                    withContext(Dispatchers.Main) { vm.backToThreads(); vm.trimMemory() }
+                    compose.waitUntil(10_000) { vm.state.value.workspace.conversations[thread] == null }
+                    val streaming = rpc.request("turn/start", buildJsonObject {
+                        put("threadId", thread)
+                        putJsonArray("input") { add(buildJsonObject { put("type", "text"); put("text", "Stream sync fixture") }) }
+                    }).obj("turn").string("id")!!
+                    turn = streaming
+                    fun partial() = vm.state.value.workspace.conversations[thread]?.items
+                        ?.firstOrNull { it.turnId == streaming && it.kind == "agentMessage" }?.text
+                    compose.waitUntil(10_000) { (partial()?.length ?: 0) >= 18 }
+                    assertEquals(2, vm.state.value.workspace.conversations.getValue(thread).items.count { it.kind == "agentMessage" && it.complete })
+                    withContext(Dispatchers.Main) { vm.openThread(thread) }
+                    compose.waitUntil(10_000) { !vm.state.value.workspace.loadingHistory }
+                    val prefixLength = partial()!!.length
+                    val historyReads = vm.syncTimings.count("history_latest")
+                    withContext(Dispatchers.Main) { vm.refreshConversation() }
+                    compose.waitUntil(10_000) { vm.syncTimings.count("history_latest") > historyReads && !vm.state.value.workspace.loadingHistory }
+                    assertTrue("Active history must keep the stream prefix", partial()!!.startsWith("SYNC_000\n"))
+                    assertTrue(partial()!!.length >= prefixLength)
+
+                    // No 350ms quiet period exists during this stream. Its body
+                    // must nevertheless reach Room before the turn completes.
+                    withTimeout(8_000) {
+                        while (true) {
+                            val saved = decodeConversationCache(app.database.workbench().conversationChunks(profile.id, thread).map { it.json })
+                            val checkpoint = saved?.items?.firstOrNull { it.turnId == streaming && it.kind == "agentMessage" }
+                            if (checkpoint != null && checkpoint.text.length >= prefixLength) {
+                                assertTrue(checkpoint.text.startsWith("SYNC_000\n"))
+                                assertFalse(checkpoint.complete)
+                                break
+                            }
+                            delay(100)
+                        }
+                    }
+                    withContext(Dispatchers.Main) { vm.setBackgroundKeepAlive(true); vm.onBackground() }
+                    delay(500)
+                    withContext(Dispatchers.Main) { vm.onForeground(); vm.setBackgroundKeepAlive(false) }
+                    compose.waitUntil(30_000) { vm.state.value.workspace.results[thread]?.status == "completed" }
+                    val expected = (0 until 80).joinToString("") { "SYNC_${it.toString().padStart(3, '0')}\n" }
+                    assertEquals(expected, partial())
+                    withContext(Dispatchers.Main) { vm.flush() }.join()
+                    val cached = decodeConversationCache(app.database.workbench().conversationChunks(profile.id, thread).map { it.json })!!
+                    assertEquals(expected, cached.items.first { it.turnId == streaming && it.kind == "agentMessage" }.text)
+                    assertEquals(3, cached.items.count { it.kind == "agentMessage" })
+
+                    // Clearing local history must remove pending checkpoints too;
+                    // reconnect then reconstructs the same complete conversation.
+                    withContext(Dispatchers.Main) { vm.disconnect(profile.id) }
+                    withContext(Dispatchers.Main) { vm.clearCache() }.join()
+                    assertNull(vm.state.value.workspace.conversations[thread])
+                    assertTrue(app.database.workbench().conversationChunks(profile.id, thread).isEmpty())
+                    val restoredAfterClear = vm.syncTimings.count("connection_restore")
+                    withContext(Dispatchers.Main) { vm.connect(profile.id) }
+                    compose.waitUntil(60_000) { vm.state.value.workspace.connection == ConnectionStatus.ONLINE &&
+                        vm.syncTimings.count("connection_restore") > restoredAfterClear }
+                    val restoredItems = vm.state.value.workspace.conversations.getValue(thread).items
+                    assertEquals(3, restoredItems.count { it.kind == "agentMessage" })
+                    assertEquals(expected, restoredItems.first { it.turnId == streaming && it.kind == "agentMessage" }.text)
                     println("Sync timing aggregates:\n${vm.syncTimings.report()}")
                 } finally {
                     turn?.let { runCatching { CodexApi(rpc).interrupt(thread, it) } }

@@ -93,3 +93,4 @@ if __name__ == "__main__":
             subprocess.run([os.environ.get("GRADLE_COMMAND", "./gradlew"), ":codex-client:test", "--tests", "*SshIntegrationTest", "--rerun-tasks"], env=env, check=True)
         else:
             subprocess.run([sys.executable, "scripts/probe.py", "--ssh-config", fixture["config"], "--codex", fixture["codex"], "--exercise"], check=True)
+            subprocess.run([sys.executable, "scripts/question_probe.py", "--ssh-config", fixture["config"], "--codex", fixture["codex"]], check=True)

@@ -81,6 +81,7 @@ import dev.remotegpt.app.*
                 val unread = threads.count { ws.results[it.id]?.unread == true }
                 val running = threads.count { ws.results[it.id]?.status == "inProgress" || it.status == "active" }
                 val failures = threads.count { ws.results[it.id]?.status == "failed" }
+                val blockingQuestions = ws.pendingQuestions.count { it.request.isBlocking && it.request.threadId in threads.map { thread -> thread.id } }
                 val approvals = ws.approvals.count { pending -> pending.request.threadId in threads.map { it.id } || pending.request.workingDirectory?.let(::projectPath) == project.path }
                 item(key = "project:${project.path}") {
                     val visibility = remember { MutableTransitionState(open) }
@@ -116,6 +117,7 @@ import dev.remotegpt.app.*
                                 Text(project.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 val projectStatus = when {
                                     approvals > 0 -> TaskStatus.APPROVAL
+                                    blockingQuestions > 0 -> TaskStatus.QUESTION
                                     running > 0 -> TaskStatus.RUNNING
                                     failures > 0 -> TaskStatus.FAILED
                                     unread > 0 -> TaskStatus.COMPLETED
@@ -180,13 +182,14 @@ import dev.remotegpt.app.*
 @Composable private fun ProjectThreadRow(ws: HostWorkspace, thread: ThreadSummary, onContinue: (String) -> Unit,
     onArchive: (String) -> Unit, modifier: Modifier = Modifier) {
     val unreadResult = ws.results[thread.id]?.unread == true
+    val questions = ws.pendingQuestions.filter { it.request.threadId == thread.id }
     val waiting = ws.approvals.any { it.request.threadId == thread.id }
     val active = ws.results[thread.id]?.status == "inProgress" || thread.status == "active"
     val archiving = thread.id in ws.archivingThreads
     val unavailable = ws.threadProblems[thread.id]?.unavailable == true
-    val status = if (unavailable) null else taskStatus(ws.results[thread.id]?.status, active, waiting)
+    val status = if (unavailable) null else taskStatus(ws.results[thread.id]?.status, active, waiting, questions.any { it.request.isBlocking })
     SwipeArchiveRow(enabled = ws.connection == ConnectionStatus.ONLINE && !ws.archived &&
-        !thread.archived && !active && !waiting && !archiving && !unavailable,
+        !thread.archived && !active && !waiting && questions.isEmpty() && !archiving && !unavailable,
         onArchive = { onArchive(thread.id) }) {
         Row(Modifier.fillMaxWidth().clickable(enabled = !archiving) { onContinue(thread.id) }.then(modifier).heightIn(min = 48.dp)
             .padding(start = 68.dp, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

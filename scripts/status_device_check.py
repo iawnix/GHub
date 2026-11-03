@@ -16,7 +16,15 @@ from ssh_fixture import servers
 
 class DelayedAnswer(ModelFixture):
     def do_POST(self):
-        self.rfile.read(int(self.headers.get('Content-Length', '0')))
+        raw = self.rfile.read(int(self.headers.get('Content-Length', '0')))
+        if self.headers.get('Content-Encoding') == 'zstd':
+            import zstandard
+            raw = zstandard.ZstdDecompressor().decompress(raw)
+        body = json.loads(raw)
+        user = next((i for i in reversed(body.get('input', [])) if i.get('role') == 'user'), {})
+        if any('Stream sync fixture' in part.get('text', '') for part in user.get('content', []) if isinstance(part, dict)):
+            self.stream_answer()
+            return
         time.sleep(20)
         rid = 'resp_status_' + secrets.token_hex(4)
         item = {'id': 'msg_' + rid, 'type': 'message', 'role': 'assistant', 'status': 'completed',
@@ -34,6 +42,34 @@ class DelayedAnswer(ModelFixture):
         self.send_header('Content-Length', str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def stream_answer(self):
+        rid = 'resp_stream_' + secrets.token_hex(4)
+        item = {'id': 'msg_' + rid, 'type': 'message', 'role': 'assistant', 'status': 'in_progress', 'content': []}
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/event-stream')
+        self.send_header('Connection', 'close')
+        self.end_headers()
+        self.close_connection = True
+
+        def emit(event):
+            self.wfile.write(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode())
+            self.wfile.flush()
+
+        emit({'type': 'response.created', 'response': {'id': rid, 'status': 'in_progress'}})
+        emit({'type': 'response.output_item.added', 'output_index': 0, 'item': item})
+        emit({'type': 'response.content_part.added', 'output_index': 0, 'item_id': item['id'], 'content_index': 0,
+              'part': {'type': 'output_text', 'text': '', 'annotations': []}})
+        text = ''
+        for i in range(80):
+            delta = f'SYNC_{i:03d}\n'
+            text += delta
+            emit({'type': 'response.output_text.delta', 'output_index': 0, 'item_id': item['id'], 'content_index': 0, 'delta': delta})
+            time.sleep(.2)
+        item.update(status='completed', content=[{'type': 'output_text', 'text': text, 'annotations': []}])
+        emit({'type': 'response.output_item.done', 'output_index': 0, 'item': item})
+        emit({'type': 'response.completed', 'response': {'id': rid, 'status': 'completed', 'output': [item],
+              'usage': {'input_tokens': 1, 'output_tokens': 80, 'total_tokens': 81}}})
 
 
 def main():

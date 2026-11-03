@@ -74,6 +74,35 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         // Keep pending until serverRequest/resolved: send() is not an acknowledgement.
     }
 
+    fun questionsSubmitted(request: ServerRequest): Boolean = request.epoch == epoch && request.id.toString() in submittedApprovals
+
+    fun answerQuestions(request: ServerRequest, answers: Map<String, List<String>>) {
+        check(!closed.get()) { "连接已关闭，问题已失效。" }
+        require(request.epoch == epoch && approvals[request.id.toString()] == request) { "问题已过期，请刷新会话。" }
+        val questions = requireNotNull(request.userQuestions) { "此提问类型尚不支持。" }
+        require(answers.keys == questions.map { it.id }.toSet()) { "请回答每个问题。" }
+        questions.forEach { question ->
+            val answer = answers.getValue(question.id)
+            require(answer.size == 1 && answer.single().isNotBlank()) { "请回答每个问题。" }
+            require(question.options.isEmpty() || question.isOther || question.options.any { it.label == answer.single() }) {
+                "请选择提供的选项。"
+            }
+        }
+        check(submittedApprovals.add(request.id.toString())) { "回答已提交，正在等待服务端确认，请勿重复操作。" }
+        // A send failure can have uncertain delivery. Keep the submission fenced
+        // until resolution or reconnect, just like permission responses.
+        transport.send(buildJsonObject {
+            put("id", request.id)
+            putJsonObject("result") {
+                putJsonObject("answers") {
+                    answers.forEach { (id, values) -> putJsonObject(id) {
+                        put("answers", JsonArray(values.map(::JsonPrimitive)))
+                    } }
+                }
+            }
+        }.toString())
+    }
+
     fun rejectUnsupported(request: ServerRequest) {
         if (request.epoch != epoch || !approvals.containsKey(request.id.toString())) return
         transport.send(buildJsonObject {

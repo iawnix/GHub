@@ -51,7 +51,7 @@
     <string name="ui_this_session_still_has_local_content_its" formatted="false">This session still has local content. Its record has been kept.</string>
     <string name="ui_empty_local_record_removed" formatted="false">Empty local record removed.</string>
     <string name="ui_upload_interrupted_select_the_file_again" formatted="false">Upload interrupted. Select the file again.</string>
-    <string name="ui_this_session_is_running_or_waiting_for" formatted="false">This session is running or waiting for approval. Finish it before archiving.</string>
+    <string name="ui_this_session_is_running_or_waiting_for" formatted="false">This session is running or has a pending request. Finish it before archiving.</string>
     <string name="ui_the_original_server_is_disconnected_reconnect_and" formatted="false">The original server is disconnected. Reconnect and restore the session from Archived.</string>
     <string name="ui_restore_this_session_before_sending_your_draft" formatted="false">Restore this session before sending. Your draft is preserved.</string>
     <string name="ui_attachment">Attachment: %1$s</string>
@@ -508,4 +508,12 @@
     <string name="terminal_lock_modifier">Lock %1$s</string>
     <string name="terminal_unlock_modifier">Unlock %1$s</string>
     <string name="terminal_modifier_hint">Tap a modifier for the next key. Touch and hold to lock.</string>
+    <string name="ui_question_required" formatted="false">Your input is needed</string>
+    <string name="ui_question_blocking" formatted="false">Work is waiting for your answer.</string>
+    <string name="ui_question_nonblocking" formatted="false">You can answer while work continues.</string>
+    <string name="ui_question_waiting" formatted="false">Waiting for your answer</string>
+    <string name="ui_question_answer" formatted="false">Your answer</string>
+    <string name="ui_question_empty_answer" formatted="false">No answer provided</string>
+    <string name="ui_question_other" formatted="false">Write another answer</string>
+    <string name="ui_question_submit" formatted="false">Submit answers</string>
 </resources>

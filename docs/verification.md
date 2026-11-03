@@ -26,12 +26,15 @@ Linux 测试主机需要 Python 3、OpenSSH 客户端和服务端，以及兼容
 ```sh
 python3 scripts/probe.py                  # 检查当前 daemon 的握手
 python3 scripts/probe.py --exercise       # 独立 daemon：审批、接续和断线恢复
+python3 scripts/question_probe.py         # 独立 daemon：提问、回答、重连和多端同步
 python3 scripts/ssh_fixture.py            # 经两级 SSH 跳板运行协议流程
 python3 scripts/ssh_fixture.py --jvm      # Kotlin SSH、SFTP、PTY 集成测试
 python3 scripts/test_fixture_safety.py    # 测试环境与清理选择器检查
 ```
 
 集成脚本创建临时 SSH 密钥、高端口服务和独立 Codex 数据目录，并用本地 Responses fixture 提供确定性模型响应。测试结束后清理临时服务和目录。只读的 `probe.py` 使用当前 daemon，其余流程由脚本创建测试环境。
+
+`ssh_fixture.py` 同时运行审批与问答探针；问答探针仅在私有 fixture 中启用 `default_mode_request_user_input`，不改动用户配置。`UserQuestionsDeviceTest` 验证明确选择后提交、自由输入、页面恢复、秘密答案不保存和历史问答展示。
 
 ## Android 完整工作流
 
@@ -65,6 +68,10 @@ DEVICE_TEST_CLASS=dev.remotegpt.app.CommandHistoryDeviceTest \
 ```sh
 python3 scripts/status_device_check.py
 ```
+
+该专项还验证：会话正文淘汰后先从 Room 恢复再接收下一轮；连续 16 秒、每 200 毫秒一个增量的输出在手动刷新和后台恢复时不丢失前缀；流式输出尚未完成时已有周期性磁盘快照；完成后缓存保留旧轮次和完整新回答；清空缓存后重连能恢复全部消息。
+
+同步单元测试覆盖活动历史省略未完成条目、请求期间完成事件的合并、缓存截断后的连续分页、v2 游标迁移、正文恢复失败和旧连接事件丢弃，以及持续输出、慢写入和清理缓存时的保存调度。
 
 ## Release 运行测试
 

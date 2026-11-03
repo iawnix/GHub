@@ -21,6 +21,61 @@ private class FixtureTransport : MessageTransport {
 }
 
 class ProtocolTest {
+    private val questionParams = """{"threadId":"thread","turnId":"turn","itemId":"call-q","isBlocking":false,"questions":[{"id":"scope","header":"Scope","question":"How far?","isOther":true,"options":[{"label":"Structures","description":"Prepare structures"}]}]}"""
+
+    @Test fun `questions use response IDs and cannot be resubmitted after submission or remote resolution`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect()
+        t.incoming("""{"id":0,"method":"item/tool/requestUserInput","params":$questionParams}""")
+        val request = (rpc.events.receive() as RpcEvent.Request).request
+        assertFalse(request.supportedApproval)
+        assertFalse(request.isBlocking)
+        assertEquals("How far?", request.userQuestions?.single()?.question)
+        val before = t.sent.size
+        assertFailsWith<IllegalArgumentException> { rpc.answerQuestions(request, mapOf("wrong" to listOf("A"))) }
+        assertFailsWith<IllegalArgumentException> { rpc.answerQuestions(request, mapOf("scope" to listOf(""))) }
+        assertEquals(before, t.sent.size)
+        rpc.answerQuestions(request, mapOf("scope" to listOf("Custom answer")))
+        assertEquals(JsonPrimitive(0), t.sent.last()["id"])
+        assertEquals(wireJson.parseToJsonElement("""{"answers":{"scope":{"answers":["Custom answer"]}}}"""), t.sent.last()["result"])
+        assertFailsWith<IllegalStateException> { rpc.answerQuestions(request, mapOf("scope" to listOf("Structures"))) }
+        t.incoming("""{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":0}}""")
+        assertFailsWith<IllegalArgumentException> { rpc.answerQuestions(request, mapOf("scope" to listOf("Structures"))) }
+        rpc.close()
+    }
+
+    @Test fun `questions resolved elsewhere and old connection questions cannot be answered`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect()
+        t.incoming("""{"id":"q","method":"item/tool/requestUserInput","params":$questionParams}""")
+        val request = (rpc.events.receive() as RpcEvent.Request).request
+        assertFailsWith<IllegalArgumentException> { rpc.answerQuestions(request.copy(epoch = "old"), mapOf("scope" to listOf("A"))) }
+        t.incoming("""{"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":"q"}}""")
+        assertFailsWith<IllegalArgumentException> { rpc.answerQuestions(request, mapOf("scope" to listOf("A"))) }
+        rpc.close()
+    }
+
+    @Test fun `invalid question requests fail validation instead of exposing a partial form`() {
+        val params = wireJson.parseToJsonElement(questionParams).jsonObject
+        assertNotNull(UserQuestions.parseRequest(params))
+        val question = params.array("questions").single()
+        assertNull(UserQuestions.parseRequest(JsonObject(params + ("questions" to JsonArray(listOf(question, question))))))
+        assertNull(UserQuestions.parseRequest(JsonObject(params + ("questions" to JsonArray(listOf(JsonNull))))))
+        assertNull(UserQuestions.parseRequest(JsonObject(params + ("questions" to JsonArray(emptyList())))))
+        assertNull(UserQuestions.parseRequest(JsonObject(params - "threadId")))
+    }
+
+    @Test fun `question options are enforced unless the server permits free text`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect()
+        val params = questionParams.replace("\"isOther\":true", "\"isOther\":false").replace("\"isBlocking\":false,", "")
+        t.incoming("""{"id":5,"method":"item/tool/requestUserInput","params":$params}""")
+        val request = (rpc.events.receive() as RpcEvent.Request).request
+        assertTrue(request.isBlocking)
+        assertFailsWith<IllegalArgumentException> { rpc.answerQuestions(request, mapOf("scope" to listOf("invented"))) }
+        assertFalse(rpc.questionsSubmitted(request))
+        rpc.answerQuestions(request, mapOf("scope" to listOf("Structures")))
+        assertTrue(rpc.questionsSubmitted(request))
+        rpc.close()
+    }
+
     @Test fun `timing callback is optional and cannot change request delivery`() = runTest {
         val t = FixtureTransport()
         val timings = mutableListOf<Triple<String, Long, String>>()
