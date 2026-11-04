@@ -94,6 +94,19 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         { before, after -> publicationFor(before, after, foreground) },
         { syncTimings.increment("ui_publications") })
     val uiState = publication.state
+    /** Mirrors [foreground] so tray notifications react to app visibility as well as state. */
+    private val visible = MutableStateFlow(false)
+    private val taskTracker = TaskNotificationTracker()
+    private val taskNotifier = TaskNotifier(app)
+    init {
+        TaskNotifier.createChannels(app)
+        viewModelScope.launch(Dispatchers.Default) {
+            // Conflated: streaming text emits often, but only transitions matter here.
+            combine(state, visible) { s, v -> s to v }.conflate().collect { (s, v) ->
+                taskNotifier.apply(taskTracker.update(s, v))
+            }
+        }
+    }
     private val renderPending = mutableMapOf<String, Pair<Conversation, Long>>()
     private fun timing(operation: String, started: Long) = syncTimings.add(operation, SystemClock.elapsedRealtime() - started)
     fun conversationComposed(host: String, conversation: Conversation?) {
@@ -652,6 +665,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onForeground() {
         foreground = true
+        visible.value = true
         publication.flush()
         backgroundRelease.update(connectionActive)
         record("lifecycle", "foreground")
@@ -660,6 +674,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun onBackground() {
         foreground = false
+        visible.value = false
         backgroundRelease.update(connectionActive)
         runtimes.values.forEach { it.syncWake.trySend(Unit) }
         record("lifecycle", "background")
@@ -1539,6 +1554,24 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
     fun interrupt() = perform { host, rt -> ui(host).selectedThread?.let { thread -> ui(host).conversations[thread]?.activeTurn?.let { rt.api.interrupt(thread, it) } } }
+    /** Notification action: only for a still-pending request on a live connection. */
+    fun approveFromNotification(host: String, requestKey: String, decision: String): Boolean {
+        val pending = ui(host).approvals.firstOrNull { it.request.key == requestKey && !it.submitted } ?: return false
+        val rt = runtimes[host] ?: return false
+        if (ui(host).connection != ConnectionStatus.ONLINE || !rt.rpc.isConnected) return false
+        approve(pending.request, decision)
+        return ui(host).approvals.any { it.request.key == requestKey && it.submitted }
+    }
+
+    /** Opens the conversation a notification refers to, switching server if needed. */
+    fun openFromNotification(host: String, thread: String) = viewModelScope.launch {
+        // A cold start from the tray arrives before saved servers are loaded from disk.
+        withTimeoutOrNull(10_000) { state.first { s -> s.profiles.any { it.id == host } && host in s.workspaces } } ?: return@launch
+        if (state.value.activeHost != host) selectHost(host)
+        mutable.update { it.copy(tab = WorkspaceTab.SESSIONS) }
+        openThread(host, thread)
+    }
+
     fun approve(request: ServerRequest, decision: String) {
         val host = state.value.workspaces.entries.firstOrNull { (_, ws) -> ws.approvals.any { it.request.key == request.key } }?.key ?: return
         val rt = runtimes[host] ?: return
