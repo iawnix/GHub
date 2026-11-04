@@ -20,10 +20,11 @@ class TaskNotificationTrackerTest {
         questions: List<PendingQuestions> = emptyList(),
         connection: ConnectionStatus = ConnectionStatus.ONLINE,
         selected: String? = null,
+        syncing: Set<String> = emptySet(),
     ) = WorkbenchState(
         profiles = listOf(HostProfile(id = host, name = "dev box")), activeHost = host,
         workspaces = mapOf(host to HostWorkspace(connection = connection, threads = listOf(thread), results = results,
-            approvals = approvals, pendingQuestions = questions, selectedThread = selected)),
+            approvals = approvals, pendingQuestions = questions, selectedThread = selected, attentionSyncingThreads = syncing)),
     )
 
     private fun approval(epoch: String, id: Int = 7, item: String = "item-1", submitted: Boolean = false) = PendingApproval(
@@ -75,6 +76,9 @@ class TaskNotificationTrackerTest {
         // Disconnected: the request is still pending on the daemon, so the notification stays.
         assertEquals(emptyList<TaskNotice>(), tracker.update(state(connection = ConnectionStatus.RECONNECTING), foreground = false))
 
+        // Transport ready does not mean the selected (or any other) thread has replayed requests.
+        assertEquals(emptyList<TaskNotice>(), tracker.update(state(syncing = setOf("t1")), foreground = false))
+
         // Replayed on a new connection: same notification, silently retargeted to the new request key.
         val replay = tracker.update(state(approvals = listOf(approval("e2", id = 3))), foreground = false).single() as TaskNotice.Attention
         assertEquals(first.tag, replay.tag)
@@ -92,6 +96,39 @@ class TaskNotificationTrackerTest {
         assertEquals(emptyList<TaskNotice>(), tracker.update(state(approvals = listOf(approval("e1")), selected = "t1"), foreground = true))
         // Leaving the app afterwards does not re-alert a request the user has already seen.
         assertEquals(emptyList<TaskNotice>(), tracker.update(state(approvals = listOf(approval("e1")), selected = "t1"), foreground = false))
+    }
+
+    @Test fun newTurnDismissesPreviousCompletionWithoutClearingUnreadReceipt() {
+        val tracker = TaskNotificationTracker()
+        val first = observeResult(null, "turn-1", "inProgress", 1, liveEvent = true)
+        tracker.update(state(mapOf("t1" to first)), foreground = false)
+        val done = observeResult(first, "turn-1", "completed", 2, liveEvent = true)
+        assertTrue(tracker.update(state(mapOf("t1" to done)), foreground = false).single() is TaskNotice.Result)
+        val next = observeResult(done, "turn-2", "inProgress", 3, liveEvent = true)
+        assertTrue(next.unread)
+        assertEquals(listOf(TaskNotice.Dismiss(TaskNotice.resultTag(host, "t1"))),
+            tracker.update(state(mapOf("t1" to next)), foreground = false))
+        val nextDone = observeResult(next, "turn-2", "completed", 4, liveEvent = true)
+        assertTrue(tracker.update(state(mapOf("t1" to nextDone)), foreground = false).single() is TaskNotice.Result)
+    }
+
+    @Test fun requestsResolvedOfflineAreDismissedOnlyAfterTheirOwnThreadReconciles() {
+        val tracker = TaskNotificationTracker()
+        val first = approval("e1")
+        val other = first.copy(request = first.request.copy(params = buildJsonObject {
+            put("threadId", "t2"); put("itemId", "item-2")
+        }))
+        val posted = tracker.update(state(approvals = listOf(first, other)), foreground = false)
+        assertEquals(2, posted.size)
+        val waiting = setOf("t1", "t2")
+        assertTrue(tracker.update(state(connection = ConnectionStatus.RECONNECTING, syncing = waiting), false).isEmpty())
+        assertTrue(tracker.update(state(syncing = waiting), false).isEmpty())
+        assertEquals(listOf(TaskNotice.Dismiss(posted[0].tag)), tracker.update(state(syncing = setOf("t2")), false))
+        val replay = other.copy(request = other.request.copy(epoch = "e2"))
+        val refreshed = tracker.update(state(approvals = listOf(replay)), false).single() as TaskNotice.Attention
+        assertTrue(refreshed.silent)
+        assertEquals(posted[1].tag, refreshed.tag)
+        assertEquals(listOf(TaskNotice.Dismiss(posted[1].tag)), tracker.update(state(), false))
     }
 
     @Test fun nonBlockingQuestionsAreIgnoredAndSummaryCountsWork() {

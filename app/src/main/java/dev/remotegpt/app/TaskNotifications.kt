@@ -1,6 +1,7 @@
 package dev.remotegpt.app
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -62,7 +63,7 @@ internal class TaskNotificationTracker {
     /** host + thread -> "turn:status" of the last terminal result, "" when none. */
     private val results = mutableMapOf<String, String>()
     /** Attention tags already seen (posted, or shown in-app while foreground). */
-    private val knownAttention = mutableSetOf<String>()
+    private val knownAttention = mutableMapOf<String, String>() // tag -> thread
     /** Attention tags currently in the tray -> request key their actions target. */
     private val postedAttention = mutableMapOf<String, String>()
 
@@ -78,7 +79,7 @@ internal class TaskNotificationTracker {
                 val key = "$host\u0000$thread"
                 val terminal = when {
                     receipt.status == "failed" && receipt.turnId.isNotBlank() -> "${receipt.turnId}:failed"
-                    receipt.unread -> "${receipt.completedTurnId}:completed"
+                    receipt.status == "completed" && receipt.turnId == receipt.completedTurnId && receipt.unread -> "${receipt.completedTurnId}:completed"
                     else -> ""
                 }
                 val previous = results.put(key, terminal)
@@ -107,11 +108,11 @@ internal class TaskNotificationTracker {
                     question, requestDetail(request, question), silent = tag in knownAttention)
                 when {
                     inView -> {
-                        knownAttention += tag
+                        knownAttention[tag] = thread
                         if (postedAttention.remove(tag) != null) notices += TaskNotice.Dismiss(tag)
                     }
                     tag !in knownAttention -> {
-                        knownAttention += tag
+                        knownAttention[tag] = thread
                         if (!foreground) { postedAttention[tag] = request.key; notices += notice }
                     }
                     postedAttention[tag]?.let { it != request.key } == true -> {
@@ -120,11 +121,12 @@ internal class TaskNotificationTracker {
                     }
                 }
             }
-            // A request that vanished while connected was resolved (here, on another client, or by
-            // the turn ending). While disconnected it is still pending on the daemon: keep it.
+            // Absence is authoritative only after this thread has resubscribed and its
+            // replay/history events have been applied, not merely when the transport is online.
             if (ws.connection == ConnectionStatus.ONLINE) {
                 val prefix = TaskNotice.attentionTag(host, "")
-                knownAttention.filter { it.startsWith(prefix) && it !in currentTags }.forEach { tag ->
+                knownAttention.filter { (tag, thread) -> tag.startsWith(prefix) && tag !in currentTags &&
+                    thread !in ws.attentionSyncingThreads }.keys.toList().forEach { tag ->
                     knownAttention -= tag
                     if (postedAttention.remove(tag) != null) notices += TaskNotice.Dismiss(tag)
                 }
@@ -183,7 +185,7 @@ internal class TaskNotifier(private val context: Context) {
             .setCategory(if (notice.failed) NotificationCompat.CATEGORY_ERROR else NotificationCompat.CATEGORY_STATUS)
             .build()
 
-    private fun attention(notice: TaskNotice.Attention): android.app.Notification {
+    internal fun attention(notice: TaskNotice.Attention): android.app.Notification {
         val title = tr(if (notice.question) R.string.notify_question_title else R.string.notify_approval_title,
             notice.title.ifBlank { tr(R.string.notify_session_fallback) })
         val text = notice.detail?.takeIf { it.isNotBlank() }
@@ -199,8 +201,15 @@ internal class TaskNotifier(private val context: Context) {
             .apply {
                 // Questions need typed or multi-choice answers; they open the conversation instead.
                 if (!notice.question) {
-                    addAction(0, tr(R.string.ui_allow_once), approvalIntent(notice, "accept"))
-                    addAction(0, tr(R.string.ui_approval_decline_continue), approvalIntent(notice, "decline"))
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        addAction(NotificationCompat.Action.Builder(0, tr(R.string.ui_allow_once), approvalIntent(notice, "accept"))
+                            .setAuthenticationRequired(true).build())
+                        addAction(NotificationCompat.Action.Builder(0, tr(R.string.ui_approval_decline_continue), approvalIntent(notice, "decline"))
+                            .setAuthenticationRequired(true).build())
+                    } else {
+                        addAction(0, tr(R.string.notify_review_approval),
+                            openThreadIntent(context, notice.tag, notice.host, notice.thread))
+                    }
                 }
             }
             .build()
@@ -253,6 +262,9 @@ internal class TaskNotifier(private val context: Context) {
 class TaskNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != TaskNotifier.ACTION_APPROVE) return
+        // Defense in depth: direct background approval is supported only with authenticated actions.
+        if (Build.VERSION.SDK_INT < 31 || context.getSystemService(KeyguardManager::class.java).isDeviceLocked ||
+            context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) return
         val host = intent.getStringExtra(TaskNotifier.EXTRA_HOST) ?: return
         val key = intent.getStringExtra(TaskNotifier.EXTRA_REQUEST) ?: return
         val decision = intent.getStringExtra(TaskNotifier.EXTRA_DECISION)?.takeIf { it in setOf("accept", "decline") } ?: return

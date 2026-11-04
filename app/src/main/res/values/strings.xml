@@ -15,6 +15,7 @@
     <string name="notify_question_title">Waiting for your answer · %1$s</string>
     <string name="notify_approval_fallback">Codex is asking for permission to continue.</string>
     <string name="notify_question_fallback">Codex has a question for you.</string>
+    <string name="notify_review_approval">Review in GHub</string>
     <string name="notify_approval_unavailable">Could not submit: the connection is not active. Open GHub to respond.</string>
     <plurals name="notify_summary_running">
         <item quantity="one">%1$d task running</item>

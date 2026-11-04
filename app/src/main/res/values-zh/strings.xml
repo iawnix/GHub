@@ -15,6 +15,7 @@
     <string name="notify_question_title">等待回答 · %1$s</string>
     <string name="notify_approval_fallback">Codex 正在请求继续执行的权限。</string>
     <string name="notify_question_fallback">Codex 有问题需要你回答。</string>
+    <string name="notify_review_approval">打开 GHub 确认</string>
     <string name="notify_approval_unavailable">无法提交：连接未处于活动状态。请打开 GHub 处理。</string>
     <plurals name="notify_summary_running">
         <item quantity="other">%1$d 个任务运行中</item>
