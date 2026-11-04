@@ -38,6 +38,7 @@ data class HostWorkspace(
     /** Ephemeral history reads that reconcile push events with the daemon snapshot. */
     val historySyncingThreads: Set<String> = emptySet(),
     val creatingThreadCwd: String? = null,
+    val creatingProjectPath: String? = null, val projectCreationError: String? = null,
     val archivingThreads: Set<String> = emptySet(), val threadListRevision: Long = 0,
     val projects: List<ProjectProfile> = emptyList(), val selectedProject: String? = null,
     val hiddenProjects: Set<String> = emptySet(),

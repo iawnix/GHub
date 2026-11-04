@@ -10,9 +10,14 @@ private const val OLD_CHUNK_PREFIX = "remote-gpt-cache-v2\n"
 /** Split serialized data, not Markdown. Cutting the start of a reply can remove
  * fences/table headers and makes the cached answer render differently after reopening. */
 internal fun encodeConversationCache(conversation: Conversation): List<String> {
+    val compact = compactConversation(conversation)
+    return splitCacheText(wireJson.encodeToString(compact)).map { CHUNK_PREFIX + it }
+}
+
+internal fun compactConversation(conversation: Conversation): Conversation {
     require(conversation.baselineLoaded) { "Cannot persist a conversation without its body baseline" }
     val truncated = conversation.historyTruncated || conversation.items.size > 64
-    val compact = conversation.copy(items = conversation.items.takeLast(64).map { item ->
+    return conversation.copy(items = conversation.items.takeLast(64).map { item ->
         item.copy(
             text = if (item.kind in setOf("agentMessage", "userMessage")) item.text else item.text.takeLast(8_192),
             imagePaths = item.imagePaths.take(8),
@@ -22,14 +27,16 @@ internal fun encodeConversationCache(conversation: Conversation): List<String> {
             },
         )
     }, historyTruncated = truncated, nextCursor = conversation.nextCursor.takeUnless { truncated })
-    val json = wireJson.encodeToString(compact)
+}
+
+internal fun splitCacheText(json: String): List<String> {
     return buildList {
         var start = 0
         while (start < json.length) {
             var end = minOf(start + 32_768, json.length)
             // SQLite stores UTF-8: never split a UTF-16 surrogate pair between rows.
             if (end < json.length && json[end - 1].isHighSurrogate()) end--
-            add(CHUNK_PREFIX + json.substring(start, end))
+            add(json.substring(start, end))
             start = end
         }
     }

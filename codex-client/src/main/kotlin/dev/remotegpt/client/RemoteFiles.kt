@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.sftp.OpenMode
+import net.schmizz.sshj.sftp.FileMode
 import net.schmizz.sshj.sftp.RenameFlags
 import net.schmizz.sshj.sftp.SFTPClient
 import java.io.InputStream
@@ -21,6 +22,15 @@ class RemoteFiles(private val ssh: SshConnection) {
         }.sortedWith(compareByDescending<RemoteFile> { it.directory }.thenBy { it.name.lowercase() }) }
     }
     suspend fun home(): String = withContext(Dispatchers.IO) { ssh.client.newSFTPClient().use { it.canonicalize(".") } }
+
+    /** Idempotent directory creation over SFTP; paths are never interpreted by a shell. */
+    suspend fun ensureDirectory(path: String) = withContext(Dispatchers.IO) {
+        require(path.startsWith('/') && '\u0000' !in path && '\n' !in path) { "请选择有效的远端绝对路径" }
+        ssh.client.newSFTPClient().use { sftp ->
+            sftp.mkdirs(path)
+            require(sftp.stat(path).type == FileMode.Type.DIRECTORY) { "该路径已被文件占用，请选择目录路径。" }
+        }
+    }
 
     suspend fun readText(path: String): TextFile = withContext(Dispatchers.IO) {
         ssh.client.newSFTPClient().use { sftp ->

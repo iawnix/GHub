@@ -255,16 +255,23 @@ import dev.remotegpt.app.*
     }
 }
 
-@Composable fun ProjectEditor(initialPath: String, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+@Composable fun ProjectEditor(initialPath: String, onDismiss: () -> Unit, onSave: (String, String) -> Unit,
+    busy: Boolean = false, error: String? = null) {
     var path by rememberSaveable { mutableStateOf(initialPath) }
     var name by rememberSaveable { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    val saving by rememberUpdatedState(busy)
+    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() },
+        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !busy),
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true,
+            confirmValueChange = { it != SheetValue.Hidden || !saving })) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(tr(R.string.ui_add_project), style = MaterialTheme.typography.titleLarge)
-            OutlinedTextField(name, { name = it }, modifier = Modifier.fillMaxWidth(), label = { Text(tr(R.string.ui_project_name_optional)) }, leadingIcon = { Icon(WorkbenchIcons.Project, null) }, singleLine = true)
-            OutlinedTextField(path, { path = it }, modifier = Modifier.fillMaxWidth(), label = { Text(tr(R.string.ui_remote_working_directory)) }, leadingIcon = { Icon(WorkbenchIcons.FolderOpen, null) }, placeholder = { Text("/home/user/projects/app") }, singleLine = true)
-            Button(onClick = { onSave(name, path) }, enabled = path.trim().startsWith('/') && '\n' !in path && '\u0000' !in path,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(tr(R.string.ui_add_project)) }
+            Text(tr(R.string.ui_project_directory_hint), style = MaterialTheme.typography.bodyMedium)
+            OutlinedTextField(name, { name = it }, enabled = !busy, modifier = Modifier.fillMaxWidth(), label = { Text(tr(R.string.ui_project_name_optional)) }, leadingIcon = { Icon(WorkbenchIcons.Project, null) }, singleLine = true)
+            OutlinedTextField(path, { path = it }, enabled = !busy, isError = error != null, modifier = Modifier.fillMaxWidth(), label = { Text(tr(R.string.ui_remote_working_directory)) }, leadingIcon = { Icon(WorkbenchIcons.FolderOpen, null) }, placeholder = { Text("/home/user/projects/app") }, singleLine = true,
+                supportingText = error?.let { { Text(it) } })
+            Button(onClick = { onSave(name, path) }, enabled = !busy && path.trim().startsWith('/') && '\n' !in path && '\u0000' !in path,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(tr(if (busy) R.string.ui_creating else R.string.ui_add_project)) }
             Spacer(Modifier.height(8.dp))
         }
     }

@@ -54,7 +54,7 @@ class ReleaseRuntimeDeviceTest {
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
             SQLiteDatabase.openDatabase(context.getDatabasePath("workbench.db").path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-                for (table in listOf("threads", "conversations", "conversation_chunks", "drafts")) db.delete(table, "hostId = ?", arrayOf("release-code-fixture"))
+                for (table in listOf("threads", "conversations", "conversation_chunks", "conversation_items", "drafts")) db.delete(table, "hostId = ?", arrayOf("release-code-fixture"))
                 db.delete("hosts", "id = ?", arrayOf("release-code-fixture"))
             }
         }

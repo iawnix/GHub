@@ -298,6 +298,8 @@
     <string name="ui_refresh" formatted="false">Refresh</string>
     <string name="ui_selected" formatted="false">Selected</string>
     <string name="ui_project_name_optional" formatted="false">Project name (optional)</string>
+    <string name="ui_project_directory_hint">Missing directories will be created on the server. Existing directories will be reused.</string>
+    <string name="ui_project_directory_failed">Could not prepare the remote directory: %1$s</string>
     <string name="ui_remote_working_directory" formatted="false">Remote working directory</string>
     <string name="ui_session_not_found_on_server" formatted="false">Session not found on server</string>
     <string name="ui_could_not_restore_session" formatted="false">Could not restore session</string>

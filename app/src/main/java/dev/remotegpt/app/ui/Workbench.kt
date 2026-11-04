@@ -240,7 +240,8 @@ import java.util.UUID
         onDismiss = { renameProject = null }, onConfirm = { vm.saveProject(it, path); renameProject = null }) }
 
     if (showProjectEditor) ProjectEditor(state.profile?.defaultCwd.orEmpty(), onDismiss = { showProjectEditor = false },
-        onSave = { name, path -> vm.saveProject(name, path); showProjectEditor = false })
+        busy = state.workspace.creatingProjectPath != null, error = state.workspace.projectCreationError,
+        onSave = { name, path -> vm.createProject(name, path) { saved -> if (saved) showProjectEditor = false } })
     if (showWorkspace) ModalBottomSheet(onDismissRequest = { showWorkspace = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         ProjectWorkspaceMenu(state.project, state.tab, state.workspace.selectedThread != null,
             onSelect = { if (it == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(it); showWorkspace = false },

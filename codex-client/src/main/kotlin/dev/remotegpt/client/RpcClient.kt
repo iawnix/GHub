@@ -16,6 +16,7 @@ interface MessageTransport : Closeable {
 /** One instance per connection. IDs and approvals never survive a reconnect. */
 class RpcClient(private val transport: MessageTransport, private val timeoutMs: Long = 30_000,
     private val onTiming: (String, Long, String) -> Unit = { _, _, _ -> },
+    private val onTraffic: ((String, Long) -> Unit)? = null,
 ) : Closeable {
     val epoch = UUID.randomUUID().toString()
     private val eventBuffer = OrderedRpcEvents { disconnected(EventBacklog()); transport.close() }
@@ -36,7 +37,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
             putJsonObject("clientInfo") { put("name", "remote_gpt_android"); put("title", "GHub"); put("version", "0.1.0") }
             putJsonObject("capabilities") { put("experimentalApi", false) }
         })
-        transport.send(buildJsonObject { put("method", "initialized"); putJsonObject("params") {} }.toString())
+        send(buildJsonObject { put("method", "initialized"); putJsonObject("params") {} }.toString())
         return initialized
     }
 
@@ -49,7 +50,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         pending[id.toString()] = deferred
         try {
             check(!closed.get()) { "连接已关闭" }
-            transport.send(buildJsonObject { put("id", id); put("method", method); put("params", params) }.toString())
+            send(buildJsonObject { put("id", id); put("method", method); put("params", params) }.toString())
             return withTimeout(timeoutMs) { deferred.await() }.also { outcome = "ok" }
         } catch (e: RpcException) { throw RpcException(e.code, e.message.orEmpty(), method)
         } catch (e: Throwable) {
@@ -68,7 +69,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         require(request.supportedApproval) { "此审批类型尚不支持。" }
         require(decision in setOf("accept", "acceptForSession", "decline", "cancel"))
         check(submittedApprovals.add(request.id.toString())) { "审批已提交，正在等待服务端确认，请勿重复操作。" }
-        transport.send(buildJsonObject {
+        send(buildJsonObject {
             put("id", request.id); putJsonObject("result") { put("decision", decision) }
         }.toString())
         // Keep pending until serverRequest/resolved: send() is not an acknowledgement.
@@ -91,7 +92,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         check(submittedApprovals.add(request.id.toString())) { "回答已提交，正在等待服务端确认，请勿重复操作。" }
         // A send failure can have uncertain delivery. Keep the submission fenced
         // until resolution or reconnect, just like permission responses.
-        transport.send(buildJsonObject {
+        send(buildJsonObject {
             put("id", request.id)
             putJsonObject("result") {
                 putJsonObject("answers") {
@@ -105,7 +106,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
 
     fun rejectUnsupported(request: ServerRequest) {
         if (request.epoch != epoch || !approvals.containsKey(request.id.toString())) return
-        transport.send(buildJsonObject {
+        send(buildJsonObject {
             put("id", request.id)
             putJsonObject("error") { put("code", -32601); put("message", "This client cannot handle ${request.method}; no permission was granted.") }
         }.toString())
@@ -123,8 +124,14 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         } finally { barriers -= applied }
     }
 
+    private fun send(text: String) {
+        transport.send(text)
+        onTraffic?.let { observer -> runCatching { observer("tx", utf8Size(text)) } }
+    }
+
     private fun receive(text: String) {
         if (closed.get()) return
+        onTraffic?.let { observer -> runCatching { observer("rx", utf8Size(text)) } }
         try {
             val msg = wireJson.parseToJsonElement(text).jsonObject
             val method = msg.string("method")
@@ -168,4 +175,21 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
     /** Invalidate requests immediately; callers may dispose blocking SSH resources on IO. */
     fun invalidate() = disconnected(null)
     override fun close() { invalidate(); transport.close() }
+}
+
+/** Count wire UTF-8 bytes without allocating a second copy of large history replies. */
+internal fun utf8Size(text: String): Long {
+    var bytes = 0L
+    var index = 0
+    while (index < text.length) {
+        val c = text[index++]
+        bytes += when {
+            c.code < 0x80 -> 1
+            c.code < 0x800 -> 2
+            c.isHighSurrogate() && index < text.length && text[index].isLowSurrogate() -> { index++; 4 }
+            c.isSurrogate() -> 1
+            else -> 3
+        }
+    }
+    return bytes
 }

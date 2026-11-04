@@ -21,8 +21,8 @@ android {
     testBuildType = providers.gradleProperty("testBuildType").orElse("debug").get()
     if (testBuildType == "release") {
         sourceSets["androidTest"].java.setSrcDirs(listOf("src/releaseTest/java"))
-        sourceSets["androidTest"].assets.srcDir("schemas")
     }
+    sourceSets["androidTest"].assets.srcDir("schemas")
     sourceSets["main"].assets.srcDir(rootProject.file("licenses"))
     bundle { language { enableSplit = false } }
     buildFeatures { compose = true; buildConfig = true }

@@ -19,7 +19,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val state by vm.state.collectAsStateWithLifecycle()
+            val state by vm.uiState.collectAsStateWithLifecycle()
             val dark = state.theme == "dark" || (state.theme == "system" && isSystemInDarkTheme())
             DisposableEffect(dark) {
                 val bars = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)

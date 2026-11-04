@@ -21,6 +21,21 @@ private class FixtureTransport : MessageTransport {
 }
 
 class ProtocolTest {
+    @Test fun `traffic sizes match UTF8 without exposing message contents`() = runTest {
+        val texts = listOf("plain", "中文😀", "\uD800", "\uDC00", "a\uD800b")
+        texts.forEach { assertEquals(it.toByteArray(Charsets.UTF_8).size.toLong(), utf8Size(it)) }
+        val t = FixtureTransport()
+        val traffic = mutableListOf<Pair<String, Long>>()
+        val rpc = RpcClient(t, onTraffic = { direction, bytes -> traffic += direction to bytes })
+        rpc.connect()
+        assertTrue(traffic.any { it.first == "rx" && it.second > 0 })
+        assertEquals(t.sent.sumOf { it.toString().toByteArray().size.toLong() }, traffic.filter { it.first == "tx" }.sumOf { it.second })
+        rpc.close()
+        val safe = RpcClient(FixtureTransport(), onTraffic = { _, _ -> error("diagnostics failed") })
+        safe.connect()
+        safe.close()
+    }
+
     private val questionParams = """{"threadId":"thread","turnId":"turn","itemId":"call-q","isBlocking":false,"questions":[{"id":"scope","header":"Scope","question":"How far?","isOther":true,"options":[{"label":"Structures","description":"Prepare structures"}]}]}"""
 
     @Test fun `questions use response IDs and cannot be resubmitted after submission or remote resolution`() = runTest {

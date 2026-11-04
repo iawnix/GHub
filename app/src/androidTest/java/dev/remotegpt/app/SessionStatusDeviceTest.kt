@@ -4,7 +4,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.remotegpt.client.*
-import dev.remotegpt.app.data.decodeConversationCache
+import dev.remotegpt.app.data.decodeStoredConversation
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import org.junit.*
@@ -60,7 +60,7 @@ class SessionStatusDeviceTest {
                     })
                     turn = response.obj("turn").string("id")
                     try {
-                        compose.waitUntil(15_000) { vm.state.value.workspace.results[thread]?.status == "inProgress" }
+                        compose.waitUntil(25_000) { vm.state.value.workspace.results[thread]?.status == "inProgress" }
                     } catch (error: Throwable) {
                         val file = File(app.cacheDir, "status-test-diagnostics.txt")
                         withContext(Dispatchers.Main) { vm.exportDiagnostics(android.net.Uri.fromFile(file)) }.join()
@@ -146,8 +146,13 @@ class SessionStatusDeviceTest {
                         ?.firstOrNull { it.turnId == streaming && it.kind == "agentMessage" }?.text
                     compose.waitUntil(10_000) { (partial()?.length ?: 0) >= 18 }
                     assertEquals(2, vm.state.value.workspace.conversations.getValue(thread).items.count { it.kind == "agentMessage" && it.complete })
+                    val hiddenPublications = vm.syncTimings.total("ui_publications")
+                    delay(600)
+                    assertTrue("Hidden deltas should not publish the whole UI", vm.syncTimings.total("ui_publications") - hiddenPublications <= 2)
                     withContext(Dispatchers.Main) { vm.openThread(thread) }
                     compose.waitUntil(10_000) { !vm.state.value.workspace.loadingHistory }
+                    val streamEvents = vm.syncTimings.count("event_apply")
+                    val streamPublications = vm.syncTimings.total("ui_publications")
                     val prefixLength = partial()!!.length
                     val historyReads = vm.syncTimings.count("history_latest")
                     withContext(Dispatchers.Main) { vm.refreshConversation() }
@@ -159,7 +164,7 @@ class SessionStatusDeviceTest {
                     // must nevertheless reach Room before the turn completes.
                     withTimeout(8_000) {
                         while (true) {
-                            val saved = decodeConversationCache(app.database.workbench().conversationChunks(profile.id, thread).map { it.json })
+                            val saved = decodeStoredConversation(app.database.workbench().conversationSnapshot(profile.id, thread))
                             val checkpoint = saved?.items?.firstOrNull { it.turnId == streaming && it.kind == "agentMessage" }
                             if (checkpoint != null && checkpoint.text.length >= prefixLength) {
                                 assertTrue(checkpoint.text.startsWith("SYNC_000\n"))
@@ -173,10 +178,14 @@ class SessionStatusDeviceTest {
                     delay(500)
                     withContext(Dispatchers.Main) { vm.onForeground(); vm.setBackgroundKeepAlive(false) }
                     compose.waitUntil(30_000) { vm.state.value.workspace.results[thread]?.status == "completed" }
-                    val expected = (0 until 80).joinToString("") { "SYNC_${it.toString().padStart(3, '0')}\n" }
+                    val eventCount = vm.syncTimings.count("event_apply") - streamEvents
+                    val publicationCount = vm.syncTimings.total("ui_publications") - streamPublications
+                    println("Efficiency stream events=$eventCount publications=$publicationCount")
+                    assertTrue("Visual updates should be fewer than applied stream events", publicationCount < eventCount)
+                    val expected = (0 until 640).joinToString("") { "SYNC_${it.toString().padStart(3, '0')}\n" }
                     assertEquals(expected, partial())
                     withContext(Dispatchers.Main) { vm.flush() }.join()
-                    val cached = decodeConversationCache(app.database.workbench().conversationChunks(profile.id, thread).map { it.json })!!
+                    val cached = decodeStoredConversation(app.database.workbench().conversationSnapshot(profile.id, thread))!!
                     assertEquals(expected, cached.items.first { it.turnId == streaming && it.kind == "agentMessage" }.text)
                     assertEquals(3, cached.items.count { it.kind == "agentMessage" })
 
@@ -193,6 +202,25 @@ class SessionStatusDeviceTest {
                     val restoredItems = vm.state.value.workspace.conversations.getValue(thread).items
                     assertEquals(3, restoredItems.count { it.kind == "agentMessage" })
                     assertEquals(expected, restoredItems.first { it.turnId == streaming && it.kind == "agentMessage" }.text)
+                    // Cancel and restart monitoring on the same live connection.
+                    // Old worker cleanup must not leave permanently occupied slots.
+                    val healthChecks = vm.syncTimings.count("rpc.thread/loaded/list.ok")
+                    withContext(Dispatchers.Main) { repeat(3) { vm.onBackground(); vm.onForeground() } }
+                    compose.waitUntil(15_000) { vm.syncTimings.count("rpc.thread/loaded/list.ok") > healthChecks }
+                    delay(1_500) // Let initial discovery / reconciliation finish.
+                    val statusReads = vm.syncTimings.count("rpc.thread/turns/list.ok")
+                    val loadedReads = vm.syncTimings.count("rpc.thread/loaded/list.ok")
+                    val idleBytes = vm.syncTimings.total("rpc_rx_bytes") + vm.syncTimings.total("rpc_tx_bytes")
+                    val idleCpu = android.os.Process.getElapsedCpuTime()
+                    delay(20_000)
+                    val cpuDelta = android.os.Process.getElapsedCpuTime() - idleCpu
+                    val statusDelta = vm.syncTimings.count("rpc.thread/turns/list.ok") - statusReads
+                    val loadedDelta = vm.syncTimings.count("rpc.thread/loaded/list.ok") - loadedReads
+                    val bytesDelta = vm.syncTimings.total("rpc_rx_bytes") + vm.syncTimings.total("rpc_tx_bytes") - idleBytes
+                    println("Efficiency idle20s status=$statusDelta loaded=$loadedDelta bytes=$bytesDelta cpu_ms=$cpuDelta")
+                    assertTrue("Idle selected session must not be polled every 3 seconds", statusDelta <= 2)
+                    assertTrue("Loaded discovery must not be polled every 3 seconds", loadedDelta in 1..2)
+                    assertTrue(vm.syncTimings.total("cache_items_written") > 0)
                     println("Sync timing aggregates:\n${vm.syncTimings.report()}")
                 } finally {
                     turn?.let { runCatching { CodexApi(rpc).interrupt(thread, it) } }

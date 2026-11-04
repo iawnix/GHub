@@ -21,7 +21,9 @@ package = json.loads(Path("app/build/outputs/apk/debug/output-metadata.json").re
 subprocess.run(base + ["install", "-r", "app/build/outputs/apk/debug/app-debug.apk"], check=True)
 subprocess.run(base + ["install", "-r", "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"], check=True)
 subprocess.run(base + ["shell", "pm", "clear", package], check=True)
-subprocess.run(base + ["shell", "cmd", "locale", "set-app-locales", package, "--user", "0", "--locales", "zh"], check=True)
+api = int(subprocess.check_output(base + ["shell", "getprop", "ro.build.version.sdk"], text=True).strip())
+if api >= 33:
+    subprocess.run(base + ["shell", "cmd", "locale", "set-app-locales", package, "--user", "0", "--locales", "zh"], check=True)
 with servers() as fixture:
     for port in fixture["ports"]:
         subprocess.run(base + ["reverse", f"tcp:{port}", f"tcp:{port}"], check=True)

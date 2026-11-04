@@ -50,6 +50,30 @@ class SshIntegrationTest {
         }
     }
 
+    @Test fun `SFTP creates workspace parents literally and preserves existing contents`() = runBlocking {
+        val (profile, prompts) = fixture()
+        val root = File(System.getenv("SSH_FIXTURE_ROOT"), "workspace-check")
+        val directory = root.resolve("project ' 中文 \$(literal)/nested")
+        SshConnection.connect(profile, prompts).use { ssh ->
+            val fs = RemoteFiles(ssh)
+            fs.ensureDirectory(directory.path)
+            assertTrue(directory.isDirectory)
+            val sentinel = directory.resolve("keep.txt").apply { writeText("keep") }
+            fs.ensureDirectory(directory.path)
+            assertEquals("keep", sentinel.readText())
+            assertFails { fs.ensureDirectory(sentinel.path) }
+            assertFails { fs.ensureDirectory(sentinel.resolve("child").path) }
+            assertEquals("keep", sentinel.readText())
+            val locked = root.resolve("locked").apply { mkdirs(); setWritable(false, false) }
+            try {
+                assertFails { fs.ensureDirectory(locked.resolve("child").path) }
+                assertFalse(locked.resolve("child").exists())
+            } finally { locked.setWritable(true, true) }
+            assertFailsWith<IllegalArgumentException> { fs.ensureDirectory("relative/path") }
+        }
+        Unit
+    }
+
     @Test fun `PTY can run commands and resize without affecting proxy`() = runBlocking {
         val (profile, prompts) = fixture()
         SshConnection.connect(profile, prompts).use { ssh ->

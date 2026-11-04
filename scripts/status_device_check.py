@@ -61,15 +61,15 @@ class DelayedAnswer(ModelFixture):
         emit({'type': 'response.content_part.added', 'output_index': 0, 'item_id': item['id'], 'content_index': 0,
               'part': {'type': 'output_text', 'text': '', 'annotations': []}})
         text = ''
-        for i in range(80):
+        for i in range(640):
             delta = f'SYNC_{i:03d}\n'
             text += delta
             emit({'type': 'response.output_text.delta', 'output_index': 0, 'item_id': item['id'], 'content_index': 0, 'delta': delta})
-            time.sleep(.2)
+            time.sleep(.025)
         item.update(status='completed', content=[{'type': 'output_text', 'text': text, 'annotations': []}])
         emit({'type': 'response.output_item.done', 'output_index': 0, 'item': item})
         emit({'type': 'response.completed', 'response': {'id': rid, 'status': 'completed', 'output': [item],
-              'usage': {'input_tokens': 1, 'output_tokens': 80, 'total_tokens': 81}}})
+              'usage': {'input_tokens': 1, 'output_tokens': 640, 'total_tokens': 641}}})
 
 
 def main():

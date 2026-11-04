@@ -298,6 +298,8 @@
     <string name="ui_refresh" formatted="false">刷新</string>
     <string name="ui_selected" formatted="false">已选择</string>
     <string name="ui_project_name_optional" formatted="false">项目名称（可选）</string>
+    <string name="ui_project_directory_hint">目录不存在时会在服务器上创建，已有目录将直接使用。</string>
+    <string name="ui_project_directory_failed">无法准备远端目录：%1$s</string>
     <string name="ui_remote_working_directory" formatted="false">远端工作目录</string>
     <string name="ui_session_not_found_on_server" formatted="false">远端未找到此会话</string>
     <string name="ui_could_not_restore_session" formatted="false">会话恢复失败</string>
