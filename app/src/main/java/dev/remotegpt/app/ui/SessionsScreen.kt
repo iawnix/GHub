@@ -26,6 +26,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.launch
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
 
@@ -61,6 +62,7 @@ import dev.remotegpt.client.*
     val completedTurn = ws.results[thread]?.completedTurnId
     val completedContentLoaded = timeline.any { it.turnId == completedTurn && it.complete }
     val haptic = rememberHaptic()
+    val scope = rememberCoroutineScope()
     var seenCompletion by rememberSaveable(thread) { mutableStateOf(completedTurn) }
     val latestVersion = timeline.lastOrNull()?.let { "${it.identityKey}:${it.text.hashCode()}:${it.complete}" }
     var seenVersion by rememberSaveable(thread) { mutableStateOf(latestVersion) }
@@ -136,94 +138,122 @@ import dev.remotegpt.client.*
             }
         }
     }
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (problem != null || ws.loadingHistory) Spacer(Modifier.height(LocalWorkbenchTopInset.current))
-        if (ws.loadingHistory) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (problem != null) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (problem.unavailable) tr(R.string.ui_session_not_found_on_server) else tr(R.string.ui_could_not_restore_session), style = MaterialTheme.typography.titleMedium)
-                Text(problem.detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { vm.refreshConversation() }, enabled = ws.connection == ConnectionStatus.ONLINE && !ws.loadingHistory) {
-                        Icon(WorkbenchIcons.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr(R.string.ui_check_again))
+    // Approvals and blocking questions follow the turns in the list (see items below).
+    val showEmpty = problem == null && timeline.isEmpty() && !ws.loadingHistory && ws.connection == ConnectionStatus.ONLINE
+    val firstPendingIndex = (if (state.conversation?.nextCursor != null) 1 else 0) + (if (showEmpty) 1 else 0) + turns.size
+    val blockingQuestions = questions.count { it.request.isBlocking }
+    val pendingInView by remember(listState) {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            // Content behind the composer dock is laid out but not readable.
+            val readableEnd = layout.viewportEndOffset - layout.afterContentPadding
+            layout.visibleItemsInfo.any { item ->
+                val key = item.key as? String ?: return@any false
+                (key.startsWith("approval:") || key.startsWith("question:")) && item.offset < readableEnd
+            }
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (problem != null) Spacer(Modifier.height(LocalWorkbenchTopInset.current))
+            if (problem != null) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(if (problem.unavailable) tr(R.string.ui_session_not_found_on_server) else tr(R.string.ui_could_not_restore_session), style = MaterialTheme.typography.titleMedium)
+                    Text(problem.detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { vm.refreshConversation() }, enabled = ws.connection == ConnectionStatus.ONLINE && !ws.loadingHistory) {
+                            Icon(WorkbenchIcons.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(tr(R.string.ui_check_again))
+                        }
+                        TextButton(onClick = { vm.backToProjects() }) { Text(tr(R.string.ui_back_to_project)) }
+                        if (canRemoveEmptyRecord(ws, thread)) TextButton(onClick = { vm.removeEmptyRecord(thread) }) { Text(tr(R.string.ui_remove_empty_local_record)) }
                     }
-                    TextButton(onClick = { vm.backToProjects() }) { Text(tr(R.string.ui_back_to_project)) }
-                    if (canRemoveEmptyRecord(ws, thread)) TextButton(onClick = { vm.removeEmptyRecord(thread) }) { Text(tr(R.string.ui_remove_empty_local_record)) }
                 }
             }
-        }
-        // The list must not control the IME. Dragging the conversation should
-        // only scroll messages; the keyboard is opened by input focus and
-        // dismissed by the system back gesture/key.
-        ConversationViewport(modifier = Modifier.weight(1f), onBottomControls = onBottomControls,
-            topInset = if (problem != null || ws.loadingHistory) 0.dp else LocalWorkbenchTopInset.current,
-            dock = {
-                if (archived) InfoCard(tr(R.string.ui_this_session_is_archived_restore_it_to), tr(R.string.ui_restore_session)) { vm.archive(thread, false) }
-                if (draft.delivery == "uncertain") {
-                    InfoCard(tr(R.string.ui_your_last_message_has_an_unconfirmed_delivery), tr(R.string.ui_history_checked_unlock_draft)) { confirmRetry = true }
-                }
-                MessageComposer(
-                    draft = draft, models = ws.models, model = draft.model ?: state.thread?.model,
-                    modelOptions = ws.modelOptions, effort = draft.effort ?: if (draft.model != null) ws.modelOptions.firstOrNull { it.id == draft.model }?.defaultEffort else state.thread?.reasoningEffort,
-                    onEffort = vm::selectEffort, onReloadModels = { vm.reloadModels() },
-                    online = ws.connection == ConnectionStatus.ONLINE && problem == null && !ws.loadingHistory, archived = archived, listening = listening,
-                    onText = vm::draftText, onRemoveAttachment = vm::removeAttachment, onModel = vm::selectModel,
-                    onImage = onImage, onFile = onFile, onCamera = onCamera, onVoice = onVoice, onSend = { userScrolling = false; followingLatest = true; vm.send() },
-                    running = state.conversation?.activeTurn != null, onStop = { vm.interrupt() }, modifier = Modifier,
-                )
-            }) { listPadding, dockHeight ->
-            LazyColumn(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().workbenchBackdropSource().nestedScroll(scrollIntent), state = listState, contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                if (state.conversation?.nextCursor != null) item(key = "control:older") { TextButton(onClick = { followingLatest = false; vm.loadOlder() }, modifier = Modifier.fillMaxWidth()) { Text(tr(R.string.ui_load_earlier_messages)) } }
-                if (problem == null && timeline.isEmpty() && !ws.loadingHistory && ws.connection == ConnectionStatus.ONLINE) item(key = "control:empty") { Column(Modifier.padding(vertical = 38.dp)) {
-                    Icon(WorkbenchIcons.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(12.dp)); Text(tr(R.string.ui_ready_to_start), style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.height(8.dp)); Text(tr(R.string.ui_describe_your_task_or_attach_relevant_files), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } }
-                items(turns, key = { "turn:${it.key}" }) { turn ->
-                    TurnContent(
-                        turn.value,
-                        state.conversation?.activeTurn == turn.key,
-                        vm::previewImage,
-                        turnStatus = turnStatus.takeIf { ws.results[thread]?.turnId == turn.key },
-                        syncing = outputSyncing,
-                        connected = outputConnected,
-                        imagePreviews = ws.imagePreviews,
-                        imageLoading = ws.imageLoading,
-                        onLoadImage = vm::loadImagePreview,
+            // The list must not control the IME. Dragging the conversation should
+            // only scroll messages; the keyboard is opened by input focus and
+            // dismissed by the system back gesture/key.
+            ConversationViewport(modifier = Modifier.weight(1f), onBottomControls = onBottomControls,
+                topInset = if (problem != null) 0.dp else LocalWorkbenchTopInset.current,
+                dock = {
+                    if (archived) InfoCard(tr(R.string.ui_this_session_is_archived_restore_it_to), tr(R.string.ui_restore_session)) { vm.archive(thread, false) }
+                    if ((approvals.isNotEmpty() || blockingQuestions > 0) && !pendingInView) {
+                        PendingActionBanner(
+                            if (approvals.isNotEmpty()) trq(R.plurals.ui_approval_pending_banner, approvals.size)
+                            else trq(R.plurals.ui_question_pending_banner, blockingQuestions),
+                        ) {
+                            userScrolling = false
+                            followingLatest = false
+                            scope.launch { listState.animateScrollToItem(firstPendingIndex) }
+                        }
+                    }
+                    if (draft.delivery == "uncertain") {
+                        InfoCard(tr(R.string.ui_your_last_message_has_an_unconfirmed_delivery), tr(R.string.ui_history_checked_unlock_draft)) { confirmRetry = true }
+                    }
+                    MessageComposer(
+                        draft = draft, models = ws.models, model = draft.model ?: state.thread?.model,
+                        modelOptions = ws.modelOptions, effort = draft.effort ?: if (draft.model != null) ws.modelOptions.firstOrNull { it.id == draft.model }?.defaultEffort else state.thread?.reasoningEffort,
+                        onEffort = vm::selectEffort, onReloadModels = { vm.reloadModels() },
+                        online = ws.connection == ConnectionStatus.ONLINE && problem == null && !ws.loadingHistory, archived = archived, listening = listening,
+                        onText = vm::draftText, onRemoveAttachment = vm::removeAttachment, onModel = vm::selectModel,
+                        onImage = onImage, onFile = onFile, onCamera = onCamera, onVoice = onVoice, onSend = { userScrolling = false; followingLatest = true; vm.send() },
+                        running = state.conversation?.activeTurn != null, onStop = { vm.interrupt() }, modifier = Modifier,
                     )
+                }) { listPadding, dockHeight ->
+                LazyColumn(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().workbenchBackdropSource().nestedScroll(scrollIntent), state = listState, contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    if (state.conversation?.nextCursor != null) item(key = "control:older") { TextButton(onClick = { followingLatest = false; vm.loadOlder() }, modifier = Modifier.fillMaxWidth()) { Text(tr(R.string.ui_load_earlier_messages)) } }
+                    if (showEmpty) item(key = "control:empty") { Column(Modifier.padding(vertical = 38.dp)) {
+                        Icon(WorkbenchIcons.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(12.dp)); Text(tr(R.string.ui_ready_to_start), style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.height(8.dp)); Text(tr(R.string.ui_describe_your_task_or_attach_relevant_files), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } }
+                    items(turns, key = { "turn:${it.key}" }) { turn ->
+                        TurnContent(
+                            turn.value,
+                            state.conversation?.activeTurn == turn.key,
+                            vm::previewImage,
+                            turnStatus = turnStatus.takeIf { ws.results[thread]?.turnId == turn.key },
+                            syncing = outputSyncing,
+                            connected = outputConnected,
+                            imagePreviews = ws.imagePreviews,
+                            imageLoading = ws.imageLoading,
+                            onLoadImage = vm::loadImagePreview,
+                        )
+                    }
+                    items(approvals, key = { "approval:${it.request.key}" }) { pending -> ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) } }
+                    items(questions, key = { "question:${it.request.key}" }) { pending ->
+                        UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
+                    }
+                    val task = taskStatus(turnStatus, active = state.conversation?.activeTurn != null, approval = approvals.isNotEmpty(),
+                        question = questions.any { it.request.isBlocking })
+                    if (problem == null && task != null && (task != TaskStatus.COMPLETED || timeline.none { it.kind == "agentMessage" && it.complete && it.turnId == ws.results[thread]?.turnId })) item(key = "control:task-status") {
+                        TaskStatusLabel(task, text = when (task) {
+                            TaskStatus.FAILED -> tr(R.string.ui_this_turn_failed_check_the_execution_details)
+                            TaskStatus.INTERRUPTED -> tr(R.string.ui_this_turn_was_interrupted)
+                            else -> taskStatusLabel(task)
+                        })
+                    }
+                    item(key = CHAT_END_KEY, contentType = "end") { Spacer(Modifier.height(1.dp)) }
                 }
-                items(approvals, key = { "approval:${it.request.key}" }) { pending -> ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) } }
-                items(questions, key = { "question:${it.request.key}" }) { pending ->
-                    UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
+                if (!followingLatest && !nearBottom && timeline.isNotEmpty()) {
+                    FilledTonalButton(
+                        onClick = { haptic(false); userScrolling = false; followingLatest = true },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = dockHeight).padding(12.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        Icon(WorkbenchIcons.ExpandMore, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(when {
+                            completedTurn != null && completedTurn != seenCompletion -> tr(R.string.ui_task_completed_view_latest)
+                            newContent -> tr(R.string.ui_new_messages_view_latest)
+                            else -> tr(R.string.ui_latest)
+                        }, style = MaterialTheme.typography.labelMedium)
+                    }
                 }
-                val task = taskStatus(turnStatus, active = state.conversation?.activeTurn != null, approval = approvals.isNotEmpty(),
-                    question = questions.any { it.request.isBlocking })
-                if (problem == null && task != null && (task != TaskStatus.COMPLETED || timeline.none { it.kind == "agentMessage" && it.complete && it.turnId == ws.results[thread]?.turnId })) item(key = "control:task-status") {
-                    TaskStatusLabel(task, text = when (task) {
-                        TaskStatus.FAILED -> tr(R.string.ui_this_turn_failed_check_the_execution_details)
-                        TaskStatus.INTERRUPTED -> tr(R.string.ui_this_turn_was_interrupted)
-                        else -> taskStatusLabel(task)
-                    })
-                }
-                item(key = CHAT_END_KEY, contentType = "end") { Spacer(Modifier.height(1.dp)) }
             }
-            if (!followingLatest && !nearBottom && timeline.isNotEmpty()) {
-                FilledTonalButton(
-                    onClick = { haptic(false); userScrolling = false; followingLatest = true },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = dockHeight).padding(12.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                ) {
-                    Icon(WorkbenchIcons.ExpandMore, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(when {
-                        completedTurn != null && completedTurn != seenCompletion -> tr(R.string.ui_task_completed_view_latest)
-                        newContent -> tr(R.string.ui_new_messages_view_latest)
-                        else -> tr(R.string.ui_latest)
-                    }, style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
 
+        }
+        // Overlaid under the app bar so loading history never shifts the conversation.
+        if (ws.loadingHistory) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = LocalWorkbenchTopInset.current))
     }
     if (optionsOpen) ModalBottomSheet(onDismissRequest = { onOptionsChange(false) }) {
         ConversationActions(

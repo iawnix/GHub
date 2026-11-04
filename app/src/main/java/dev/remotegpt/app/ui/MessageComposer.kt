@@ -105,7 +105,8 @@ import dev.remotegpt.client.ModelOption
                     }
                 },
             )
-            BoxWithConstraints(Modifier.fillMaxWidth().workbenchGlass().padding(horizontal = 4.dp, vertical = 2.dp)) {
+            // Same solid surface as the text area: one capsule, no seam while content scrolls behind it.
+            BoxWithConstraints(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp, vertical = 2.dp)) {
                 val compact = maxWidth < 344.dp || LocalDensity.current.fontScale > 1.3f
                 val modelLabel = currentModel?.name ?: model ?: tr(R.string.ui_choose_model)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -143,8 +144,18 @@ import dev.remotegpt.client.ModelOption
                     }
                     val enabled = if (running) online else editable && online && draft.attachments.all { it.state == "ready" } && hasContent
                     IconButton(onClick = { haptic(running); if (running) onStop() else onSend() }, enabled = enabled, modifier = Modifier.size(48.dp)) {
-                        Box(Modifier.size(34.dp).background(if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = .10f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
-                            val tint = if (enabled) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurfaceVariant
+                        // Stop is destructive for the running turn, so it must not look like Send.
+                        val container = when {
+                            !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)
+                            running -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+                        Box(Modifier.size(34.dp).background(container, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                            val tint = when {
+                                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                                running -> MaterialTheme.colorScheme.onError
+                                else -> MaterialTheme.colorScheme.surface
+                            }
                             if (draft.delivery == "sending" && !running) CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
                             else Icon(if (running) WorkbenchIcons.Stop else WorkbenchIcons.ArrowUpward,
                                 tr(if (running) R.string.ui_stop_task else R.string.ui_send_message), Modifier.size(20.dp), tint = tint)

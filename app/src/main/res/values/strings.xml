@@ -103,7 +103,6 @@
     <string name="ui_permission_applies_to_this_operation_only_no" formatted="false">Permission applies to this operation only. No permanent rule is saved.</string>
     <string name="ui_submitted_waiting_for_server_confirmation" formatted="false">Submitted. Waiting for server confirmation…</string>
     <string name="ui_allow_once" formatted="false">Allow once</string>
-    <string name="ui_reject" formatted="false">Reject</string>
     <string name="ui_cancel" formatted="false">Cancel</string>
     <string name="ui_check_connection_recovery_and_avoid_duplicate_messages" formatted="false">Check connection recovery and avoid duplicate messages.</string>
     <string name="ui_found_the_connection_recovery_logic_n_ni" formatted="false">Found the connection recovery logic.\n\nI will check the server before restoring the session.</string>
@@ -436,7 +435,6 @@
     <string name="ui_output_plan_short" formatted="false">Plan</string>
     <string name="ui_output_reply_short" formatted="false">Reply</string>
     <string name="ui_output_event_short" formatted="false">Event</string>
-    <string name="ui_output_assistant" formatted="false">Codex</string>
 
     <plurals name="chat_turn_files">
         <item quantity="one">This turn · %1$d file</item>
@@ -483,6 +481,8 @@
     <string name="ui_wrap_disabled">Line wrapping disabled; scroll horizontally</string>
     <string name="ui_exit_code">Exit code %1$d</string>
     <string name="ui_duration_ms">%1$d ms</string>
+    <string name="ui_duration_seconds">%1$s s</string>
+    <string name="ui_duration_minutes">%1$d min %2$d s</string>
     <string name="ui_cached_output_tail">Showing the end of cached output. Reconnect to load the full record.</string>
     <string name="ui_no_command_output">No output</string>
     <string name="ui_waiting_command_output">Waiting for output…</string>
@@ -518,4 +518,15 @@
     <string name="ui_question_empty_answer" formatted="false">No answer provided</string>
     <string name="ui_question_other" formatted="false">Write another answer</string>
     <string name="ui_question_submit" formatted="false">Submit answers</string>
+    <string name="ui_approval_decline_continue">Decline, keep going</string>
+    <string name="ui_approval_cancel_turn">Stop task</string>
+    <string name="ui_approval_view">View</string>
+    <plurals name="ui_approval_pending_banner">
+        <item quantity="one">%1$d action waiting for approval</item>
+        <item quantity="other">%1$d actions waiting for approval</item>
+    </plurals>
+    <plurals name="ui_question_pending_banner">
+        <item quantity="one">%1$d question waiting for your answer</item>
+        <item quantity="other">%1$d questions waiting for your answer</item>
+    </plurals>
 </resources>

@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.client.*
@@ -110,6 +111,9 @@ import dev.remotegpt.client.*
         if (fileCount > 0) add(trq(R.plurals.ui_output_files, fileCount))
         if (imageCount > 0) add(trq(R.plurals.ui_output_images, imageCount))
     }.joinToString(" · ")
+    // While a turn runs, the command in flight says more than event counts do.
+    val runningCommand = if (!active) null else steps.lastOrNull { it.kind == "commandExecution" && !it.complete }
+        ?.commandExecution?.command?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = MaterialTheme.shapes.medium,
@@ -128,9 +132,14 @@ import dev.remotegpt.client.*
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(summary, style = MaterialTheme.typography.bodySmall,
                         color = if (failures.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                    runningCommand?.let {
+                        Text("\$ $it", style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                    }
                     if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                OutputSyncBadge(active = active, syncing = syncing, connected = connected)
+                // "Synced" is the quiet default and needs no badge.
+                if (active || syncing || !connected) OutputSyncBadge(active = active, syncing = syncing, connected = connected)
                 Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ChevronRight,
                     if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }

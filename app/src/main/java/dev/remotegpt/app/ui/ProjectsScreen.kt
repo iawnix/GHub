@@ -112,8 +112,8 @@ import dev.remotegpt.app.*
                                     expanded = if (open) expanded - project.path else expanded + project.path
                                 }.heightIn(min = 56.dp).padding(horizontal = 8.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                // The chevron already marks the hierarchy; a folder glyph only cost width.
                                 Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(16.dp).rotate(angle), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Icon(WorkbenchIcons.Project, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(project.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 val projectStatus = when {
                                     approvals > 0 -> TaskStatus.APPROVAL
@@ -142,7 +142,7 @@ import dev.remotegpt.app.*
                                         if (index == 0) Modifier.onSizeChanged { firstHeight = it.height } else Modifier)
                                 } }
                                 if (threads.isEmpty()) Text(tr(if (ws.nextThreads != null) R.string.ui_you_can_load_earlier_sessions else R.string.ui_no_sessions_yet),
-                                    Modifier.onSizeChanged { firstHeight = it.height }.padding(start = 68.dp, top = 12.dp, bottom = 12.dp),
+                                    Modifier.onSizeChanged { firstHeight = it.height }.padding(start = ThreadIndent, top = 12.dp, bottom = 12.dp),
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -157,7 +157,7 @@ import dev.remotegpt.app.*
                     AnimatedVisibility(visibility,
                         enter = expandVertically(tween(180), expandFrom = Alignment.Top) + fadeIn(tween(120)),
                         exit = shrinkVertically(tween(120), shrinkTowards = Alignment.Top) + fadeOut(tween(90))) {
-                        Row(Modifier.fillMaxWidth().padding(start = 36.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().padding(start = ThreadIndent - 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { haptic(false); onCreate(project.path) }, enabled = ws.creatingThreadCwd == null && project.path.startsWith('/')) {
                                 if (ws.creatingThreadCwd == project.path) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 else Icon(WorkbenchIcons.Add, null, Modifier.size(16.dp))
@@ -192,8 +192,13 @@ import dev.remotegpt.app.*
         !thread.archived && !active && !waiting && questions.isEmpty() && !archiving && !unavailable,
         onArchive = { onArchive(thread.id) }) {
         Row(Modifier.fillMaxWidth().clickable(enabled = !archiving) { onContinue(thread.id) }.then(modifier).heightIn(min = 48.dp)
-            .padding(start = 68.dp, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(thread.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            .padding(start = ThreadIndent, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(thread.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                relativeUpdateTime(thread.updatedAt)?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+            }
             // Status owns one trailing slot. The icon is
             // beside its label so a running spinner never
             // competes with a second status on the left.
@@ -287,4 +292,21 @@ import dev.remotegpt.app.*
             Icon(WorkbenchIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(tr(R.string.ui_add_project))
         }
     })
+}
+
+/** Session titles line up with the project name: 8dp padding + 16dp chevron + 10dp gap. */
+private val ThreadIndent = 34.dp
+
+/** Codex reports thread times in Unix seconds; millisecond values are accepted defensively. */
+internal fun threadUpdatedMillis(updatedAt: Long): Long? = when {
+    updatedAt <= 0 -> null
+    updatedAt < 100_000_000_000L -> updatedAt * 1_000
+    else -> updatedAt
+}
+
+@Composable private fun relativeUpdateTime(updatedAt: Long): String? {
+    val millis = threadUpdatedMillis(updatedAt) ?: return null
+    // Recomputed on recomposition; list refreshes keep it fresh enough for a hint.
+    return android.text.format.DateUtils.getRelativeTimeSpanString(millis, System.currentTimeMillis(),
+        android.text.format.DateUtils.MINUTE_IN_MILLIS, android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE).toString()
 }

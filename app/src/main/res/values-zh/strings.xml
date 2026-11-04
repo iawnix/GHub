@@ -103,7 +103,6 @@
     <string name="ui_permission_applies_to_this_operation_only_no" formatted="false">仅授权当前操作；不会保存永久规则。</string>
     <string name="ui_submitted_waiting_for_server_confirmation" formatted="false">已提交，等待服务端确认…</string>
     <string name="ui_allow_once" formatted="false">允许一次</string>
-    <string name="ui_reject" formatted="false">拒绝</string>
     <string name="ui_cancel" formatted="false">取消</string>
     <string name="ui_check_connection_recovery_and_avoid_duplicate_messages" formatted="false">检查连接恢复逻辑，避免重复发送消息。</string>
     <string name="ui_found_the_connection_recovery_logic_n_ni" formatted="false">已找到连接中断后的状态处理。\n\n我会先核对服务端，再恢复会话。</string>
@@ -436,7 +435,6 @@
     <string name="ui_output_plan_short" formatted="false">计划</string>
     <string name="ui_output_reply_short" formatted="false">回复</string>
     <string name="ui_output_event_short" formatted="false">记录</string>
-    <string name="ui_output_assistant" formatted="false">Codex</string>
 
     <plurals name="chat_turn_files">
         <item quantity="other">本轮更改 %1$d 个文件</item>
@@ -476,6 +474,8 @@
     <string name="ui_wrap_disabled">已关闭自动换行，可横向滚动</string>
     <string name="ui_exit_code">退出码 %1$d</string>
     <string name="ui_duration_ms">%1$d 毫秒</string>
+    <string name="ui_duration_seconds">%1$s 秒</string>
+    <string name="ui_duration_minutes">%1$d 分 %2$d 秒</string>
     <string name="ui_cached_output_tail">当前仅显示缓存的末尾输出，重新连接后加载完整记录。</string>
     <string name="ui_no_command_output">无输出</string>
     <string name="ui_waiting_command_output">等待输出…</string>
@@ -511,4 +511,13 @@
     <string name="ui_question_empty_answer" formatted="false">未提供回答</string>
     <string name="ui_question_other" formatted="false">填写其他答案</string>
     <string name="ui_question_submit" formatted="false">提交回答</string>
+    <string name="ui_approval_decline_continue">拒绝并继续</string>
+    <string name="ui_approval_cancel_turn">中止任务</string>
+    <string name="ui_approval_view">查看</string>
+    <plurals name="ui_approval_pending_banner">
+        <item quantity="other">%1$d 个操作等待确认</item>
+    </plurals>
+    <plurals name="ui_question_pending_banner">
+        <item quantity="other">%1$d 个问题等待回答</item>
+    </plurals>
 </resources>

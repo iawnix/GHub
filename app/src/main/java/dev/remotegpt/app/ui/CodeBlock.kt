@@ -66,17 +66,30 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
     copyLabel: String = tr(R.string.ui_copy_code),
     framed: Boolean = true,
     initiallyWrapped: Boolean = language in setOf("sh", "bash", "zsh", "shell", "shellscript", "output", "text"),
+    /** Short, always-wrapped snippets (a single command) keep copy beside the text instead of a header row. */
+    inlineControls: Boolean = false,
 ) {
-    var wrap by rememberSaveable { mutableStateOf(initiallyWrapped) }
+    var wrap by rememberSaveable { mutableStateOf(initiallyWrapped || inlineControls) }
     var full by rememberSaveable { mutableStateOf(false) }
     var overflow by remember { mutableStateOf(false) }
     val document = rememberCodeDocument(source, language, full = false)
     val content: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth()) {
-            CodeToolbar(title, source, copyLabel, wrap) { wrap = !wrap }
-            SelectionContainer {
-                CodeText(document?.code ?: HighlightedCode("", emptyList()), wrap, language !in setOf("output", "text", "diff", "patch"),
-                    maxLines = 12, onOverflow = { overflow = it })
+            val code: @Composable (Modifier) -> Unit = { modifier ->
+                Box(modifier) {
+                    SelectionContainer {
+                        CodeText(document?.code ?: HighlightedCode("", emptyList()), wrap, language !in setOf("output", "text", "diff", "patch"),
+                            maxLines = 12, onOverflow = { overflow = it })
+                    }
+                }
+            }
+            if (inlineControls) Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.Top) {
+                // 6dp + the text's 8dp inset centers the first 20sp line on the 48dp button.
+                code(Modifier.weight(1f).padding(top = 6.dp, bottom = 6.dp))
+                CodeCopyControl(source, copyLabel)
+            } else {
+                CodeToolbar(title, source, copyLabel, wrap) { wrap = !wrap }
+                code(Modifier.fillMaxWidth())
             }
             if (document?.shortened == true || overflow) TextButton(onClick = { full = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(tr(R.string.ui_view_full_content))
@@ -91,18 +104,26 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
 
 @Composable private fun CodeToolbar(title: String, source: String, copyLabel: String, wrap: Boolean, onWrap: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
         WrapControl(wrap, onWrap)
         CodeCopyControl(source, copyLabel)
     }
 }
 
+/** An icon toggle reads as a state at a glance; the tinted container marks "on". */
 @Composable private fun WrapControl(wrap: Boolean, onWrap: () -> Unit) {
-    FilterChip(selected = wrap, onClick = onWrap,
-        modifier = Modifier.padding(vertical = 8.dp).semantics {
+    IconToggleButton(checked = wrap, onCheckedChange = { onWrap() },
+        modifier = Modifier.semantics {
             stateDescription = if (wrap) tr(R.string.ui_wrap_enabled) else tr(R.string.ui_wrap_disabled)
         },
-        label = { Text(tr(R.string.ui_wrap_lines), style = MaterialTheme.typography.labelMedium) })
+        colors = IconButtonDefaults.iconToggleButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+        )) {
+        Icon(WorkbenchIcons.WrapText, tr(R.string.ui_wrap_lines), Modifier.size(18.dp))
+    }
 }
 
 @Composable private fun CodeCopyControl(source: String, label: String) {
@@ -193,8 +214,14 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             TaskStatusLabel(itemTaskStatus(item))
-            details.exitCode?.let { Text(tr(R.string.ui_exit_code, it), style = MaterialTheme.typography.bodySmall) }
-            details.durationMs?.let { Text(tr(R.string.ui_duration_ms, it), style = MaterialTheme.typography.bodySmall) }
+            // Exit code 0 restates "completed"; only a non-zero code adds information.
+            details.exitCode?.takeIf { it != 0 }?.let { Text(tr(R.string.ui_exit_code, it), style = MaterialTheme.typography.bodySmall) }
+            details.durationMs?.let { ms ->
+                val duration = durationText(ms)
+                Text(tr(duration.id, *duration.args.toTypedArray()),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         details.workingDirectory?.takeIf { it.isNotBlank() }?.let {
             SelectionContainer { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -203,7 +230,8 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))) {
             Column {
                 details.command?.let { command ->
-                    CodeBlock(command, "sh", tr(R.string.ui_output_command_short), tr(R.string.ui_copy_command), framed = false)
+                    CodeBlock(command, "sh", tr(R.string.ui_output_command_short), tr(R.string.ui_copy_command), framed = false,
+                        inlineControls = true)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
                 }
                 if (details.outputTruncated) Text(tr(R.string.ui_cached_output_tail), Modifier.padding(12.dp),
@@ -213,5 +241,18 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
                     Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+internal data class DurationText(@androidx.annotation.StringRes val id: Int, val args: List<Any>)
+
+/** 850 ms · 2.1 s · 1 min 12 s; tenths are truncated so 59 999 ms never reads as 60.0 s. */
+internal fun durationText(ms: Long): DurationText {
+    val value = ms.coerceAtLeast(0)
+    return when {
+        value < 1_000 -> DurationText(R.string.ui_duration_ms, listOf(value))
+        value < 60_000 -> DurationText(R.string.ui_duration_seconds,
+            listOf("${value / 1_000}.${value % 1_000 / 100}"))
+        else -> DurationText(R.string.ui_duration_minutes, listOf(value / 60_000, value % 60_000 / 1_000))
     }
 }

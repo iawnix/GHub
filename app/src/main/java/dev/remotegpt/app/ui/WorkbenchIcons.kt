@@ -299,6 +299,12 @@ object WorkbenchIcons {
         "M5 12h14",
         "m12 5 7 7-7 7"
     ) }
+    val WrapText: ImageVector by lazy { vector("wrap-text", false,
+        "M3 6L21 6",
+        "M3 12h15a3 3 0 1 1 0 6h-4",
+        "M16 16 14 18 16 20",
+        "M3 18L10 18"
+    ) }
 
     private fun vector(name: String, mirrored: Boolean, vararg paths: String): ImageVector =
         ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp,
