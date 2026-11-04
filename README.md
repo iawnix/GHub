@@ -4,18 +4,18 @@
 
 在 Android 手机上继续你的 Codex 工作。
 
-GHub 通过 SSH 连接 Linux 开发机，让你在手机上查看会话、发送任务、处理审批、编辑文件和操作终端。电脑与手机共享远端 Codex App Server 中的会话。
+GHub 通过 SSH 连接 Linux 开发机，让你在手机上查看会话、发送任务、回答提问、处理审批、编辑文件和操作终端。电脑与手机共享远端 Codex App Server 中的会话。
 
 [![Release](https://img.shields.io/github/v/release/iawnix/GHub)](https://github.com/iawnix/GHub/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-10%2B-green)](docs/getting-started.md)
 
-[下载 APK](https://github.com/iawnix/GHub/releases/latest) · [快速开始](docs/getting-started.md) · [文档](docs/README.md) · [参与贡献](CONTRIBUTING.md)
+[下载 APK](https://github.com/iawnix/GHub/releases/latest) · [版本更新](https://github.com/iawnix/GHub/releases) · [快速开始](docs/getting-started.md) · [文档](docs/README.md) · [参与贡献](CONTRIBUTING.md)
 
 ## 功能
 
 - **会话工作台**：按服务器和项目组织会话，支持新建、归档、历史记录、模型与思考级别选择。
-- **任务与审批**：接收流式回复，查看执行过程、命令输出和文件改动，在手机上处理命令与文件审批。
+- **任务与审批**：接收流式回复，查看执行过程、命令输出和文件改动，在手机上回答交互提问、处理命令与文件审批；待处理请求滚出视野时提供查看入口。
 - **代码阅读**：Markdown、语法高亮、Diff、自动换行和全屏阅读，命令与输出可分别复制。
 - **远程文件**：通过 SFTP 浏览、上传、下载、预览图片和编辑文本，保存时检查远端修改。
 - **交互终端**：支持 Vim、tmux、多个终端、组合键、双指缩放和横屏输入。
@@ -25,11 +25,11 @@ GHub 通过 SSH 连接 Linux 开发机，让你在手机上查看会话、发送
 ## 界面预览
 
 <p>
-  <img src="docs/images/code.png" alt="浅色主题下的命令、输出与代码高亮" width="280" />
-  <img src="docs/images/terminal.png" alt="深色主题下的交互终端与快捷键" width="280" />
+  <img src="docs/images/code.png" alt="浅色主题下的紧凑命令块、输出与代码换行开关" width="280" />
+  <img src="docs/images/terminal.png" alt="深色主题下的交互终端与 ← ↑ ↓ → 方向键" width="280" />
 </p>
 
-截图来自应用的离线组件预览，使用示例内容。
+截图来自 v0.1.42 的离线组件预览，使用示例内容。
 
 ## 快速开始
 
