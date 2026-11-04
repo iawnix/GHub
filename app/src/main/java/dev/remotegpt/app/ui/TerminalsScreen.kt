@@ -247,8 +247,9 @@ import kotlin.math.roundToInt
             ModifierKey("Ctrl", modifiers.ctrl, enabled, Modifier.weight(1f), { modifiers.ctrl = modifiers.ctrl.tap() }, { modifiers.ctrl = modifiers.ctrl.lock() })
         }
         val arrows: @Composable RowScope.() -> Unit = {
+            // Conventional ← ↑ ↓ → order; vim users still get the same keys one slot apart.
             for ((label, code, description) in listOf(Triple("←", KeyEvent.KEYCODE_DPAD_LEFT, R.string.terminal_left),
-                Triple("↓", KeyEvent.KEYCODE_DPAD_DOWN, R.string.terminal_down), Triple("↑", KeyEvent.KEYCODE_DPAD_UP, R.string.terminal_up),
+                Triple("↑", KeyEvent.KEYCODE_DPAD_UP, R.string.terminal_up), Triple("↓", KeyEvent.KEYCODE_DPAD_DOWN, R.string.terminal_down),
                 Triple("→", KeyEvent.KEYCODE_DPAD_RIGHT, R.string.terminal_right))) {
                 TerminalKey(label, tr(description), enabled, Modifier.weight(1f)) { send(code) }
             }

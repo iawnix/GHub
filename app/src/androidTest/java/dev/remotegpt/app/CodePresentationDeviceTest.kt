@@ -42,12 +42,13 @@ class CodePresentationDeviceTest {
         compose.setContent { WorkbenchTheme { Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) { CommandExecutionContent(item) } } }
         awaitText(command)
         compose.waitUntil(5000) { compose.onNodeWithText(command).fetchSemanticsNode().config[SemanticsProperties.Text].first().spanStyles.isNotEmpty() }
-        compose.onAllNodesWithText(label(R.string.ui_wrap_lines))[0].performClick()
+        compose.onAllNodesWithContentDescription(label(R.string.ui_wrap_lines))[0].performClick()
         compose.onNodeWithContentDescription(label(R.string.ui_copy_command)).performClick()
         compose.runOnIdle { assertEquals(command, clipboard()); item = item.copy(text = "first\n\tsecond 中文\n", complete = true,
             executionStatus = "completed", commandExecution = item.commandExecution!!.copy(exitCode = 0)) }
         awaitText("first\n\tsecond 中文\n")
-        compose.onNodeWithText(context.getString(R.string.ui_exit_code, 0)).assertIsDisplayed()
+        // A zero exit code restates the completed status, so only non-zero codes are shown.
+        compose.onNodeWithText(context.getString(R.string.ui_exit_code, 0)).assertDoesNotExist()
         compose.onNodeWithContentDescription(label(R.string.ui_copy_output)).performScrollTo().performClick()
         compose.runOnIdle { assertEquals("first\n\tsecond 中文\n", clipboard()) }
     }
@@ -79,7 +80,7 @@ class CodePresentationDeviceTest {
         compose.waitUntil(5000) { compose.onAllNodesWithText(label(R.string.ui_view_full_content)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(label(R.string.ui_view_full_content)).performScrollTo().performClick()
         compose.waitUntil(5000) { compose.onAllNodes(hasScrollToIndexAction()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText(label(R.string.ui_wrap_lines)) and hasAnyAncestor(isDialog())).performClick()
+        compose.onNode(hasContentDescription(label(R.string.ui_wrap_lines)) and hasAnyAncestor(isDialog())).performClick()
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(codePages(source).lastIndex)
         compose.onNodeWithText("END_OF_OUTPUT", substring = true).assertExists()
         compose.onNode(hasContentDescription(label(R.string.ui_copy_output)) and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()

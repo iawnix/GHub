@@ -27,7 +27,7 @@ ICONS = {
     'Project': 'folder-code', 'Running': 'circle-play', 'NewSession': 'square-pen',
     'Download': 'download', 'Save': 'save', 'FileCode': 'file-code-2',
     'FileConfig': 'file-cog', 'FileArchive': 'file-archive',
-    'ArrowBack': 'arrow-left', 'ArrowForward': 'arrow-right',
+    'ArrowBack': 'arrow-left', 'ArrowForward': 'arrow-right', 'WrapText': 'wrap-text',
 }
 
 def fetch(name):

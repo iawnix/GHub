@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
@@ -44,14 +46,17 @@ import java.io.File
     }
 }
 
+/** One mapping for every connection indicator: pill, header dot and server rows. */
+@Composable internal fun connectionColor(status: ConnectionStatus): androidx.compose.ui.graphics.Color = when (status) {
+    ConnectionStatus.ONLINE -> accentColor(WorkbenchAccent.TEAL)
+    ConnectionStatus.CONNECTING, ConnectionStatus.CHECKING, ConnectionStatus.WAITING_NETWORK, ConnectionStatus.RECONNECTING, ConnectionStatus.SYNCING -> accentColor(WorkbenchAccent.BLUE)
+    ConnectionStatus.ERROR -> MaterialTheme.colorScheme.error
+    ConnectionStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
 @Composable fun StatusPill(status: ConnectionStatus) {
     val label = connectionLabel(status)
-    val tint = when (status) {
-        ConnectionStatus.ONLINE -> accentColor(WorkbenchAccent.TEAL)
-        ConnectionStatus.CONNECTING, ConnectionStatus.CHECKING, ConnectionStatus.WAITING_NETWORK, ConnectionStatus.RECONNECTING, ConnectionStatus.SYNCING -> accentColor(WorkbenchAccent.BLUE)
-        ConnectionStatus.ERROR -> MaterialTheme.colorScheme.error
-        ConnectionStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val tint = connectionColor(status)
     Surface(color = tint.copy(alpha = 0.09f), contentColor = tint, shape = RoundedCornerShape(50)) {
         Row(Modifier.padding(horizontal = 9.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Icon(if (status == ConnectionStatus.ONLINE) WorkbenchIcons.CloudDone else WorkbenchIcons.CloudOff, null, Modifier.size(14.dp))
@@ -89,20 +94,15 @@ import java.io.File
     Column(Modifier.fillMaxWidth().padding(start = if (user) 32.dp else 0.dp), horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
         val content: @Composable () -> Unit = {
             Column(Modifier.padding(horizontal = if (user) 14.dp else 0.dp, vertical = if (user) 12.dp else 0.dp)) {
-                if (assistantOutput) Row(
-                    Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                ) {
-                    Icon(WorkbenchIcons.AutoAwesome, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text(tr(R.string.ui_output_assistant), style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.weight(1f))
-                    TaskStatusIcon(itemTaskStatus(item))
-                    if (assistantShowSync) OutputSyncBadge(
+                // The answer needs no author label in a single-agent workspace.
+                // Transport state appears only when it is not the quiet, synced default;
+                // completion is shown once, beside the reply actions.
+                if (assistantOutput && assistantShowSync && (assistantSyncing || !assistantConnected || !item.complete)) {
+                    OutputSyncBadge(
                         active = !item.complete,
                         syncing = assistantSyncing,
                         connected = assistantConnected,
+                        modifier = Modifier.padding(bottom = 6.dp),
                     )
                 }
                 if (tool) Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) tr(R.string.ui_collapse_details) else tr(R.string.ui_expand_details)) { expanded = !expanded }.heightIn(min = 48.dp).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -242,25 +242,51 @@ import java.io.File
 }
 
 
+/** A blocking request: amber edge and tint so it never reads like ordinary output. */
 @Composable fun ApprovalCard(pending: PendingApproval, enabled: Boolean = true, onDecision: (String) -> Unit) {
     val req = pending.request
     val haptic = rememberHaptic()
-    WorkbenchSurface(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) { Icon(WorkbenchIcons.FrontHand, null, Modifier.size(20.dp), tint = accentColor(WorkbenchAccent.AMBER)); Spacer(Modifier.width(8.dp)); Text(tr(R.string.ui_approval_required), style = MaterialTheme.typography.titleMedium) }
-            if (req.command != null) CodeBlock(req.command!!, "sh", tr(R.string.ui_output_command_short), tr(R.string.ui_copy_command))
+    val amber = accentColor(WorkbenchAccent.AMBER)
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, amber.copy(alpha = .45f))) {
+        Column(Modifier.fillMaxWidth()
+            .drawBehind {
+                drawRect(amber.copy(alpha = .06f))
+                drawRect(amber, size = Size(4.dp.toPx(), size.height))
+            }
+            .padding(start = 20.dp, top = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) { Icon(WorkbenchIcons.FrontHand, null, Modifier.size(20.dp), tint = amber); Spacer(Modifier.width(8.dp)); Text(tr(R.string.ui_approval_required), style = MaterialTheme.typography.titleMedium) }
+            if (req.command != null) CodeBlock(req.command!!, "sh", tr(R.string.ui_output_command_short), tr(R.string.ui_copy_command), inlineControls = true)
             else SelectionContainer { Text(req.reason ?: tr(R.string.ui_codex_is_requesting_permission_to_modify_files), style = MaterialTheme.typography.bodyMedium) }
-            req.workingDirectory?.let { Text(tr(R.string.ui_working_directory , it), style = MaterialTheme.typography.bodySmall) }
+            req.workingDirectory?.let { Text(tr(R.string.ui_working_directory , it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             req.reason?.takeIf { req.command != null }?.let { Text(it) }
             req.writeRoot?.let { Text(tr(R.string.ui_requested_write_scope , it)) }
             req.networkHost?.let { Text(tr(R.string.ui_network_access , it)) }
-            Text(tr(R.string.ui_permission_applies_to_this_operation_only_no), style = MaterialTheme.typography.bodySmall)
+            Text(tr(R.string.ui_permission_applies_to_this_operation_only_no), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (pending.submitted) Text(tr(R.string.ui_submitted_waiting_for_server_confirmation), style = MaterialTheme.typography.bodySmall)
-            else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // "decline" lets the turn continue without this action; "cancel" also interrupts the turn.
+            else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(onClick = { haptic(true); onDecision("accept") }, enabled = enabled) { Text(tr(R.string.ui_allow_once)) }
-                OutlinedButton(onClick = { haptic(true); onDecision("decline") }, enabled = enabled) { Text(tr(R.string.ui_reject)) }
-                TextButton(onClick = { haptic(false); onDecision("cancel") }, enabled = enabled) { Text(tr(R.string.ui_cancel)) }
+                OutlinedButton(onClick = { haptic(true); onDecision("decline") }, enabled = enabled) { Text(tr(R.string.ui_approval_decline_continue)) }
+                TextButton(onClick = { haptic(false); onDecision("cancel") }, enabled = enabled,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(tr(R.string.ui_approval_cancel_turn)) }
             }
+        }
+    }
+}
+
+/** Pinned above the composer while a blocking request is scrolled out of view. */
+@Composable internal fun PendingActionBanner(text: String, onView: () -> Unit) {
+    val amber = accentColor(WorkbenchAccent.AMBER)
+    val haptic = rememberHaptic()
+    Surface(onClick = { haptic(false); onView() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp),
+        shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, amber.copy(alpha = .45f))) {
+        Row(Modifier.fillMaxWidth().background(amber.copy(alpha = .08f)).heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(WorkbenchIcons.FrontHand, null, Modifier.size(18.dp), tint = amber)
+            Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(tr(R.string.ui_approval_view), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

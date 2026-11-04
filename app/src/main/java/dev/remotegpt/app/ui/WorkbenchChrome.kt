@@ -32,7 +32,7 @@ import dev.remotegpt.app.ConnectionStatus
             Text(title, Modifier.semantics { contentDescription = title }, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val hostLabel = host?.let { if (status == ConnectionStatus.ONLINE || it == connectionLabel(status)) it else "$it · ${connectionLabel(status)}" } ?: tr(R.string.app_name)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(6.dp).background(if (status == ConnectionStatus.ONLINE) accentColor(WorkbenchAccent.TEAL) else MaterialTheme.colorScheme.onSurfaceVariant, CircleShape))
+                Box(Modifier.size(6.dp).background(connectionColor(status), CircleShape))
                 Text(hostLabel, Modifier.semantics { contentDescription = hostLabel },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
