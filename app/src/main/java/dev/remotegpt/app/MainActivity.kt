@@ -1,5 +1,6 @@
 package dev.remotegpt.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.SystemBarStyle
@@ -29,6 +30,21 @@ class MainActivity : AppCompatActivity() {
             }
             WorkbenchTheme(state.theme) { Workbench(vm, state) }
         }
+        // Recreation (rotation, theme) must not reopen a conversation the user has since left.
+        if (savedInstanceState == null) openFromNotification(intent)
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openFromNotification(intent)
+    }
+    private fun openFromNotification(intent: Intent?) {
+        if (intent == null) return
+        val host = intent.getStringExtra(TaskNotifier.EXTRA_HOST) ?: return
+        val thread = intent.getStringExtra(TaskNotifier.EXTRA_THREAD) ?: return
+        vm.openFromNotification(host, thread)
+        // Consume once so a later recreation from history does not repeat the navigation.
+        intent.removeExtra(TaskNotifier.EXTRA_HOST)
     }
     override fun onStart() { super.onStart(); vm.onForeground() }
     override fun onStop() { vm.onBackground(); super.onStop() }

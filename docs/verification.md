@@ -97,3 +97,5 @@ ANDROID_SERIAL=emulator-5556 python3 scripts/release_device_check.py
 [Actions](https://github.com/iawnix/GHub/actions) 提供每次提交的结果和测试报告；[v0.1.40 的完整发布记录](https://github.com/iawnix/GHub/actions/runs/41294841435)包含上述全部任务。
 
 真机体验检查主要关注厂商输入法、TalkBack、相机与语音服务、Wi-Fi / 蜂窝切换、长时间后台和内存表现。提交这类结果时，请记录设备、系统版本、操作步骤与观察时长，便于复现和比较。
+
+`TaskNotificationTrackerTest` 覆盖重连已在线但请求尚未重放、多个会话独立同步、离线处理请求的撤回，以及新轮次清理旧结果通知。`TaskNotificationDeviceTest` 在 API 29/35/36 检查审批动作的解锁要求或打开应用确认、设置页跳转及同一会话重复通知跳转。

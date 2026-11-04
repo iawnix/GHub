@@ -4,6 +4,31 @@
     <string name="ui_stop_keeping_alive" formatted="false">Stop keeping alive</string>
     <string name="ui_background_connection" formatted="false">Background connection</string>
     <string name="ui_keep_ssh_and_codex_sessions_connected" formatted="false">Keep SSH and Codex sessions connected</string>
+    <string name="notify_channel_results">Task results</string>
+    <string name="notify_channel_results_description">When a task finishes or fails while GHub is in the background</string>
+    <string name="notify_channel_attention">Approvals and questions</string>
+    <string name="notify_channel_attention_description">When Codex is waiting for your approval or answer</string>
+    <string name="notify_session_fallback">Session</string>
+    <string name="notify_task_completed">Task completed</string>
+    <string name="notify_task_failed">Task failed. Open to see the details.</string>
+    <string name="notify_approval_title">Approval needed · %1$s</string>
+    <string name="notify_question_title">Waiting for your answer · %1$s</string>
+    <string name="notify_approval_fallback">Codex is asking for permission to continue.</string>
+    <string name="notify_question_fallback">Codex has a question for you.</string>
+    <string name="notify_review_approval">Review in GHub</string>
+    <string name="notify_approval_unavailable">Could not submit: the connection is not active. Open GHub to respond.</string>
+    <plurals name="notify_summary_running">
+        <item quantity="one">%1$d task running</item>
+        <item quantity="other">%1$d tasks running</item>
+    </plurals>
+    <plurals name="notify_summary_approvals">
+        <item quantity="one">%1$d approval waiting</item>
+        <item quantity="other">%1$d approvals waiting</item>
+    </plurals>
+    <plurals name="notify_summary_questions">
+        <item quantity="one">%1$d question waiting</item>
+        <item quantity="other">%1$d questions waiting</item>
+    </plurals>
     <string name="ui_speech_recognition_is_unavailable_you_can_use" formatted="false">Speech recognition is unavailable. You can use voice typing on your keyboard.</string>
     <string name="ui_no_speech_detected_please_try_again" formatted="false">No speech detected. Please try again.</string>
     <string name="ui_microphone_permission_is_required_for_voice_input" formatted="false">Microphone permission is required for voice input.</string>

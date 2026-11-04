@@ -150,7 +150,9 @@ class WorkbenchDeviceTest {
             compose.waitUntil(30_000) { vm.state.value.workspace.approvals.any { it.request.threadId == thread } }
             android.util.Log.i("WorkbenchCheck", "approval received")
             val first = vm.state.value.workspace.approvals.single { it.request.threadId == thread }.request
-            compose.runOnIdle { vm.disconnect(profile.id) }
+            // Reconnect while no conversation is selected: pending requests still need restoring.
+            compose.runOnIdle { vm.backToThreads(); vm.disconnect(profile.id) }
+            assertTrue(thread in vm.state.value.workspace.attentionSyncingThreads)
             compose.waitUntil { vm.state.value.workspace.approvals.isEmpty() }
             compose.runOnIdle { vm.connect(profile.id) }
             compose.waitUntil(60_000) { vm.state.value.workspace.approvals.any { it.request.threadId == thread } }
@@ -158,6 +160,10 @@ class WorkbenchDeviceTest {
             val replay = vm.state.value.workspace.approvals.single { it.request.threadId == thread }.request
             assertEquals(first.id, replay.id)
             assertNotEquals(first.epoch, replay.epoch)
+            compose.waitUntil(30_000) { thread !in vm.state.value.workspace.attentionSyncingThreads }
+            assertNull(vm.state.value.workspace.selectedThread)
+            compose.runOnIdle { vm.openFromNotification(profile.id, thread) }
+            compose.waitUntil(10_000) { vm.state.value.workspace.selectedThread == thread }
             android.util.Log.i("WorkbenchCheck", "approving via UI")
             compose.onNodeWithText(tr(R.string.ui_allow_once)).performScrollTo().performClick()
             compose.waitUntil(60_000) { vm.state.value.conversation?.items?.any { it.text.contains("Remote GPT approval probe completed.") } == true }

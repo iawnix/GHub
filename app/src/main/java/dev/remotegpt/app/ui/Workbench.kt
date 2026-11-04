@@ -55,6 +55,24 @@ import java.util.UUID
     var showProjectEditor by rememberSaveable { mutableStateOf(false) }
     var showWorkspace by rememberSaveable { mutableStateOf(false) }
     var bootstrapHost by rememberSaveable { mutableStateOf<String?>(null) }
+    var handledNotification by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.notificationNavigationId) {
+        if (state.notificationNavigationId != null && state.notificationNavigationId != handledNotification) {
+            showConversationOptions = false
+            menuProject = null
+            renameProject = null
+            showHosts = false
+            showHostSwitcher = false
+            hostEditor.close()
+            showSettings = false
+            settingsHostId = null
+            showLegal = false
+            showProjectEditor = false
+            showWorkspace = false
+            bootstrapHost = null
+            handledNotification = state.notificationNavigationId
+        }
+    }
     var pendingDownload by rememberSaveable { mutableStateOf("") }
     var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current

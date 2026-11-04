@@ -94,6 +94,19 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         { before, after -> publicationFor(before, after, foreground) },
         { syncTimings.increment("ui_publications") })
     val uiState = publication.state
+    /** Mirrors [foreground] so tray notifications react to app visibility as well as state. */
+    private val visible = MutableStateFlow(false)
+    private val taskTracker = TaskNotificationTracker()
+    private val taskNotifier = TaskNotifier(app)
+    init {
+        TaskNotifier.createChannels(app)
+        viewModelScope.launch(Dispatchers.Default) {
+            // Conflated: streaming text emits often, but only transitions matter here.
+            combine(state, visible) { s, v -> s to v }.conflate().collect { (s, v) ->
+                taskNotifier.apply(taskTracker.update(s, v))
+            }
+        }
+    }
     private val renderPending = mutableMapOf<String, Pair<Conversation, Long>>()
     private fun timing(operation: String, started: Long) = syncTimings.add(operation, SystemClock.elapsedRealtime() - started)
     fun conversationComposed(host: String, conversation: Conversation?) {
@@ -174,7 +187,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             current.historySyncingThreads != previous.historySyncingThreads || current.approvals != previous.approvals || current.pendingQuestions != previous.pendingQuestions) scheduleTrim(host)
     }
     private fun pinned(ws: HostWorkspace) = setOfNotNull(ws.selectedThread) +
-        ws.approvals.map { it.request.threadId } + ws.pendingQuestions.map { it.request.threadId } + ws.historySyncingThreads
+        ws.approvals.map { it.request.threadId } + ws.pendingQuestions.map { it.request.threadId } + ws.historySyncingThreads + ws.attentionSyncingThreads
 
     private fun scheduleTrim(host: String, aggressive: Boolean = false) {
         if (trims[host]?.isActive == true) return
@@ -410,7 +423,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         connectionEpochs[host] = epoch
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             update(host) { it.copy(connection = if (recovering) ConnectionStatus.RECONNECTING else ConnectionStatus.CONNECTING,
-                error = null, needsBootstrap = false, approvals = emptyList(), pendingQuestions = emptyList()) }
+                error = null, needsBootstrap = false, attentionSyncingThreads = attentionThreads(it),
+                approvals = emptyList(), pendingQuestions = emptyList()) }
             var ssh: SshConnection? = null
             var rpc: RpcClient? = null
             var stage = "ssh"
@@ -458,6 +472,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                     startAncillarySync(host, rt)
                     monitorResults(host, rt)
                     restore.await()
+                    restorePendingAttention(host, rt)
                 }
                 ensureActive()
                 if (runtimes[host] !== rt || connectionEpochs[host] != epoch) return@launch
@@ -514,7 +529,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         renderPending.remove(host)
         resultMonitors.remove(host)?.cancel()
         rt.rpc.invalidate()
-        update(host) { it.copy(approvals = emptyList(), pendingQuestions = emptyList(), loadingHistory = false, loadingThreads = false) }
+        update(host) { it.copy(attentionSyncingThreads = attentionThreads(it),
+            approvals = emptyList(), pendingQuestions = emptyList(), loadingHistory = false, loadingThreads = false) }
         // Keep the SSH transport for SFTP/terminal while only the Codex proxy
         // is being rebuilt. Full disconnect closes it below.
         viewModelScope.launch(Dispatchers.IO) { rt.rpc.close() }
@@ -616,6 +632,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         if (ui(host).conversations[thread]?.activeTurn != null) rt.sessions.dirty(thread)
                     }
                     restoreSelectedThread(host, rt)
+                    restorePendingAttention(host, rt)
                 } while (host in checkAgain && connectionActive)
                 if (runtimes[host] === rt) {
                     update(host) { it.copy(connection = ConnectionStatus.ONLINE, error = null) }
@@ -652,6 +669,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onForeground() {
         foreground = true
+        visible.value = true
         publication.flush()
         backgroundRelease.update(connectionActive)
         record("lifecycle", "foreground")
@@ -660,6 +678,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun onBackground() {
         foreground = false
+        visible.value = false
         backgroundRelease.update(connectionActive)
         runtimes.values.forEach { it.syncWake.trySend(Unit) }
         record("lifecycle", "background")
@@ -1239,6 +1258,23 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun backToThreads() { state.value.activeHost?.let { id -> update(id) { it.copy(selectedThread = null, selectedSummary = null) }; launchStorage { app.settings.lastThread(id, null) } } }
 
+    private fun attentionThreads(ws: HostWorkspace) = ws.attentionSyncingThreads +
+        ws.approvals.map { it.request.threadId } + ws.pendingQuestions.map { it.request.threadId }
+
+    private suspend fun restorePendingAttention(host: String, rt: Runtime) {
+        // Requests may belong to conversations other than the one currently selected.
+        for (thread in ui(host).attentionSyncingThreads) {
+            if (runtimes[host] !== rt) return
+            resumeThread(host, thread, rt)
+        }
+    }
+
+    private suspend fun attentionRestored(host: String, thread: String, rt: Runtime) {
+        if (thread !in ui(host).attentionSyncingThreads) return
+        rt.rpc.awaitEventsApplied()
+        if (runtimes[host] === rt) update(host) { it.copy(attentionSyncingThreads = it.attentionSyncingThreads - thread) }
+    }
+
     private suspend fun restoreSelectedThread(host: String, rt: Runtime) {
         do {
             val thread = ui(host).selectedThread ?: return
@@ -1285,12 +1321,15 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 if (runtimes[host] !== rt) return
                 if (summary(host, thread)?.awaitingFirstMessage == true) {
                     update(host) { it.copy(threadProblems = it.threadProblems - thread) }
+                    attentionRestored(host, thread, rt)
                     return
                 }
             } else rt.sessions.dirty(thread) // Archived threads have no live subscription.
             synchronizeHistory(host, thread, rt)
+            attentionRestored(host, thread, rt)
             if (runtimes[host] === rt) update(host) { it.copy(threadProblems = it.threadProblems - thread) }
         } catch (e: ThreadUnavailable) {
+            attentionRestored(host, thread, rt)
             if (runtimes[host] === rt) threadProblem(host, thread, e)
         } catch (e: RpcException) {
             // A rejected thread lookup does not invalidate the healthy server
@@ -1539,6 +1578,25 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
     fun interrupt() = perform { host, rt -> ui(host).selectedThread?.let { thread -> ui(host).conversations[thread]?.activeTurn?.let { rt.api.interrupt(thread, it) } } }
+    /** Notification action: only for a still-pending request on a live connection. */
+    fun approveFromNotification(host: String, requestKey: String, decision: String): Boolean {
+        val pending = ui(host).approvals.firstOrNull { it.request.key == requestKey && !it.submitted } ?: return false
+        val rt = runtimes[host] ?: return false
+        if (ui(host).connection != ConnectionStatus.ONLINE || !rt.rpc.isConnected) return false
+        approve(pending.request, decision)
+        return ui(host).approvals.any { it.request.key == requestKey && it.submitted }
+    }
+
+    /** Opens the conversation a notification refers to, switching server if needed. */
+    fun openFromNotification(host: String, thread: String) = viewModelScope.launch {
+        // A cold start from the tray arrives before saved servers are loaded from disk.
+        withTimeoutOrNull(10_000) { state.first { s -> s.profiles.any { it.id == host } && host in s.workspaces } } ?: return@launch
+        if (state.value.activeHost != host) selectHost(host)
+        mutable.update { it.copy(tab = WorkspaceTab.SESSIONS, previewImage = null,
+            notificationNavigationId = UUID.randomUUID().toString()) }
+        openThread(host, thread)
+    }
+
     fun approve(request: ServerRequest, decision: String) {
         val host = state.value.workspaces.entries.firstOrNull { (_, ws) -> ws.approvals.any { it.request.key == request.key } }?.key ?: return
         val rt = runtimes[host] ?: return

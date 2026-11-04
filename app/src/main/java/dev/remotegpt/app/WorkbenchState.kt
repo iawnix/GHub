@@ -37,6 +37,8 @@ data class HostWorkspace(
     val threadProblems: Map<String, ThreadProblem> = emptyMap(),
     /** Ephemeral history reads that reconcile push events with the daemon snapshot. */
     val historySyncingThreads: Set<String> = emptySet(),
+    /** Previously pending requests whose thread replay has not yet been reconciled. */
+    val attentionSyncingThreads: Set<String> = emptySet(),
     val creatingThreadCwd: String? = null,
     val creatingProjectPath: String? = null, val projectCreationError: String? = null,
     val archivingThreads: Set<String> = emptySet(), val threadListRevision: Long = 0,
@@ -84,6 +86,8 @@ data class WorkbenchState(
     val theme: String = "system", val backgroundKeepAlive: Boolean = false, val prompt: ConnectionPrompt? = null, val message: String? = null,
     val previewImage: String? = null, val clipboardRequest: ClipboardRequest? = null,
     val archiveUndo: ArchiveUndo? = null,
+    /** Every tray navigation, including repeated opens of the same thread. */
+    val notificationNavigationId: String? = null,
     val terminalPreferences: TerminalPreferences = TerminalPreferences(),
 ) {
     val profile get() = profiles.firstOrNull { it.id == activeHost }

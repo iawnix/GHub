@@ -4,6 +4,28 @@
     <string name="ui_stop_keeping_alive" formatted="false">停止保持</string>
     <string name="ui_background_connection" formatted="false">后台连接</string>
     <string name="ui_keep_ssh_and_codex_sessions_connected" formatted="false">保持远程 SSH 与 Codex 会话连接</string>
+    <string name="notify_channel_results">任务结果</string>
+    <string name="notify_channel_results_description">GHub 在后台时，任务完成或失败的提醒</string>
+    <string name="notify_channel_attention">审批与提问</string>
+    <string name="notify_channel_attention_description">Codex 等待你确认或回答时的提醒</string>
+    <string name="notify_session_fallback">会话</string>
+    <string name="notify_task_completed">任务已完成</string>
+    <string name="notify_task_failed">任务失败，打开查看详情</string>
+    <string name="notify_approval_title">需要确认 · %1$s</string>
+    <string name="notify_question_title">等待回答 · %1$s</string>
+    <string name="notify_approval_fallback">Codex 正在请求继续执行的权限。</string>
+    <string name="notify_question_fallback">Codex 有问题需要你回答。</string>
+    <string name="notify_review_approval">打开 GHub 确认</string>
+    <string name="notify_approval_unavailable">无法提交：连接未处于活动状态。请打开 GHub 处理。</string>
+    <plurals name="notify_summary_running">
+        <item quantity="other">%1$d 个任务运行中</item>
+    </plurals>
+    <plurals name="notify_summary_approvals">
+        <item quantity="other">%1$d 个待确认</item>
+    </plurals>
+    <plurals name="notify_summary_questions">
+        <item quantity="other">%1$d 个待回答</item>
+    </plurals>
     <string name="ui_speech_recognition_is_unavailable_you_can_use" formatted="false">设备没有可用的语音识别服务，可使用键盘的语音输入。 </string>
     <string name="ui_no_speech_detected_please_try_again" formatted="false">没有识别到内容，请重试。</string>
     <string name="ui_microphone_permission_is_required_for_voice_input" formatted="false">需要麦克风权限才能使用语音输入。</string>
