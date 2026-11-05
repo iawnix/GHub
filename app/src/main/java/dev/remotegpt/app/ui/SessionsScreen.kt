@@ -26,6 +26,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
@@ -40,8 +42,35 @@ import dev.remotegpt.client.*
     val approvals = ws.approvals.filter { it.request.threadId == thread }
     val questions = ws.pendingQuestions.filter { it.request.threadId == thread }
     val turns = remember(timeline) { timeline.groupBy { it.turnId }.entries.toList() }
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     val turnStatus = ws.results[thread]?.status?.takeIf { it.isNotBlank() } ?: state.conversation?.status
+    val completedTurn = ws.results[thread]?.completedTurnId
+    val markdownParsers = remember { mutableMapOf<String, ChatMarkdownParser>() }
+    var markdownBlocks by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
+    LaunchedEffect(timeline) {
+        val assistantItems = timeline.filter { it.kind == "agentMessage" && it.questions.isEmpty() }
+        val parsers = assistantItems.associate { item ->
+            item.identityKey to markdownParsers.getOrPut(item.identityKey) { ChatMarkdownParser() }
+        }
+        val parsed: Map<String, List<String>> = withContext(Dispatchers.Default) {
+            buildMap<String, List<String>> {
+                for (item in assistantItems) {
+                    val blocks = try {
+                        val result = parsers.getValue(item.identityKey).parse(item.text)
+                        (result.node as ChatMarkdownRoot).blocks.map { block -> block.source }
+                    } catch (_: Exception) {
+                        emptyList<String>()
+                    }
+                    put(item.identityKey, blocks)
+                }
+            }
+        }
+        markdownBlocks = parsed
+    }
+    val rows = remember(timeline, markdownBlocks, state.conversation?.activeTurn, completedTurn, turnStatus) {
+        buildConversationRows(turns, markdownBlocks, state.conversation?.activeTurn,
+            completedTurn, turnStatus)
+    }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     // A live event is immediately useful, but a completed turn is only shown
     // as authoritative after its history has been reconciled with the daemon.
     val outputSyncing = thread in ws.historySyncingThreads || ws.loadingHistory || ws.connection in setOf(
@@ -60,7 +89,6 @@ import dev.remotegpt.client.*
     var followingLatest by rememberSaveable(thread) { mutableStateOf(true) }
     var userScrolling by remember(thread) { mutableStateOf(false) }
     var newContent by rememberSaveable(thread) { mutableStateOf(false) }
-    val completedTurn = ws.results[thread]?.completedTurnId
     val completedContentLoaded = timeline.any { it.turnId == completedTurn && it.complete }
     val haptic = rememberHaptic()
     val scope = rememberCoroutineScope()
@@ -72,8 +100,8 @@ import dev.remotegpt.client.*
         derivedStateOf {
             val layout = listState.layoutInfo
             val last = layout.visibleItemsInfo.lastOrNull()
-            last != null && last.key == CHAT_END_KEY &&
-                last.offset + last.size + layout.afterContentPadding - layout.viewportEndOffset <= bottomTolerance
+            last != null && (!listState.canScrollForward ||
+                last.offset + last.size + layout.afterContentPadding - layout.viewportEndOffset <= bottomTolerance)
         }
     }
     val scrollIntent = remember(listState) {
@@ -100,8 +128,8 @@ import dev.remotegpt.client.*
     }
     LaunchedEffect(listState) {
         // Observe measured geometry instead of tokens. A conflated collector
-        // keeps up with continuous output without debounce starvation. The tiny
-        // end item makes long turns land at their bottom, not their beginning.
+        // keeps up with continuous output without debounce starvation. Rows are
+        // already flattened, so the last real row is a reliable scroll target.
         snapshotFlow {
             val layout = listState.layoutInfo
             if (followingLatest && !userScrolling && !listState.isScrollInProgress && listState.canScrollForward) {
@@ -152,7 +180,7 @@ import dev.remotegpt.client.*
         onRefresh = { vm.refreshConversation() }, onResolveUncertain = { confirmRetry = true },
     )
     val showEmpty = problem == null && timeline.isEmpty() && !ws.loadingHistory && ws.connection == ConnectionStatus.ONLINE
-    val firstPendingIndex = (if (state.conversation?.nextCursor != null) 1 else 0) + (if (showEmpty) 1 else 0) + turns.size
+    val firstPendingIndex = (if (state.conversation?.nextCursor != null) 1 else 0) + (if (showEmpty) 1 else 0) + rows.size
     val blockingQuestions = questions.count { it.request.isBlocking }
     val pendingInView by remember(listState) {
         derivedStateOf {
@@ -218,25 +246,24 @@ import dev.remotegpt.client.*
                         running = state.conversation?.activeTurn != null, stopping = thread in ws.stoppingTurns, onStop = { vm.interrupt() }, modifier = Modifier,
                     )
                 }) { listPadding, dockHeight ->
-                LazyColumn(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().workbenchBackdropSource().nestedScroll(scrollIntent), state = listState, contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                LazyColumn(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().workbenchBackdropSource().nestedScroll(scrollIntent), state = listState, contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (state.conversation?.nextCursor != null) item(key = "control:older") { TextButton(onClick = { followingLatest = false; vm.loadOlder() }, modifier = Modifier.fillMaxWidth()) { Text(tr(R.string.ui_load_earlier_messages)) } }
                     if (showEmpty) item(key = "control:empty") { Column(Modifier.padding(vertical = 38.dp)) {
                         Icon(WorkbenchIcons.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(12.dp)); Text(tr(R.string.ui_ready_to_start), style = MaterialTheme.typography.titleLarge)
                         Spacer(Modifier.height(8.dp)); Text(tr(R.string.ui_describe_your_task_or_attach_relevant_files), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } }
-                    items(turns, key = { "turn:${it.key}" }) { turn ->
-                        TurnContent(
-                            turn.value,
-                            state.conversation?.activeTurn == turn.key,
-                            vm::previewImage,
-                            turnStatus = turnStatus.takeIf { ws.results[thread]?.turnId == turn.key },
+                    items(rows, key = { it.key }, contentType = { it.contentType }) { row ->
+                        ConversationRowContent(
+                            row = row,
+                            preview = vm::previewImage,
+                            turnStatus = turnStatus.takeIf { ws.results[thread]?.turnId == row.turnId },
                             syncing = outputSyncing,
                             connected = outputConnected,
                             imagePreviews = ws.imagePreviews,
                             imageLoading = ws.imageLoading,
                             onLoadImage = vm::loadImagePreview,
-                            revision = revision.takeIf { turn.key == editableMessage?.turnId || turn.key == draft.edit?.turnId },
+                            revision = revision.takeIf { row.turnId == editableMessage?.turnId || row.turnId == draft.edit?.turnId },
                         )
                     }
                     items(approvals, key = { "approval:${it.request.key}" }) { pending -> ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) } }
@@ -252,7 +279,6 @@ import dev.remotegpt.client.*
                             else -> taskStatusLabel(task)
                         })
                     }
-                    item(key = CHAT_END_KEY, contentType = "end") { Spacer(Modifier.height(1.dp)) }
                 }
                 if (!followingLatest && !nearBottom && timeline.isNotEmpty()) {
                     FilledTonalButton(
@@ -308,5 +334,3 @@ import dev.remotegpt.client.*
         SheetAction(if (archived) tr(R.string.ui_restore_session) else tr(R.string.ui_archive_session), WorkbenchIcons.Archive, onClick = onArchive)
     }
 }
-
-private const val CHAT_END_KEY = "control:conversation-end"
