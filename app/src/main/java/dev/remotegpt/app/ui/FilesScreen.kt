@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,8 +31,9 @@ import dev.remotegpt.client.*
     var options by remember { mutableStateOf<RemoteFile?>(null) }
     var discard by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
+        // One line; the middle of a deep path matters least.
         Text(ws.filePath.ifBlank { tr(R.string.ui_project_directory) }, Modifier.padding(horizontal = 24.dp, vertical = 12.dp), style = MaterialTheme.typography.bodySmall,
-            fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         if (ws.loadingFiles) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (ws.files.isEmpty() && ws.loadingFiles) Box(Modifier.weight(1f)) {
             EmptyPanel(WorkbenchIcons.CloudDone, tr(R.string.ui_connecting_to_remote_files), tr(R.string.ui_this_directory_will_load_automatically_when_the))
@@ -39,14 +41,18 @@ import dev.remotegpt.client.*
         if (ws.files.isEmpty() && !ws.loadingFiles) Box(Modifier.weight(1f)) { EmptyPanel(WorkbenchIcons.FolderOpen, tr(R.string.ui_this_directory_is_empty), tr(R.string.ui_connect_to_browse_files_edit_text_or)) }
         else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             items(ws.files, key = { it.path }) { file ->
-                ListItem(headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) }, supportingContent = { Text(if (file.directory) tr(R.string.ui_folder) else formatSize(file.size)) },
+                // The icon already says "folder"; the second line carries what it cannot: size and age.
+                val details = fileDetails(file)
+                ListItem(headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = if (details != null) @Composable { Text(details, maxLines = 1) } else null,
                     leadingContent = {
                         Icon(if (file.directory) WorkbenchIcons.Folder else if (imageName(file.name)) WorkbenchIcons.Image else fileTypeIcon(file.name),
                             null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     },
                     trailingContent = { IconButton(onClick = { options = file }) { Icon(WorkbenchIcons.MoreVert, tr(R.string.ui_actions_for , file.name)) } },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-                    modifier = Modifier.fillMaxWidth().then(Modifier.clickableFile {
+                    // Hidden entries stay reachable but recede behind the project's own files.
+                    modifier = Modifier.fillMaxWidth().alpha(if (file.name.startsWith('.')) .6f else 1f).then(Modifier.clickableFile {
                         if (file.directory) vm.listFiles(file.path)
                         else if (imageName(file.name)) vm.previewImage(file.path)
                         else if (textFileName(file.name)) vm.editFile(file.path)
@@ -102,6 +108,14 @@ import dev.remotegpt.client.*
 }
 
 private fun Modifier.clickableFile(onClick: () -> Unit) = this.then(Modifier.clickable(onClick = onClick))
+@Composable private fun fileDetails(file: RemoteFile): String? {
+    val age = threadUpdatedMillis(file.modified)?.let {
+        android.text.format.DateUtils.getRelativeTimeSpanString(it, System.currentTimeMillis(),
+            android.text.format.DateUtils.MINUTE_IN_MILLIS, android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE).toString()
+    }
+    return if (file.directory) age else listOfNotNull(formatSize(file.size), age).joinToString(" · ")
+}
+
 private fun formatSize(size: Long) = when { size >= 1_048_576 -> "%.1f MiB".format(size / 1_048_576.0); size >= 1024 -> "%.1f KiB".format(size / 1024.0); else -> "${size} B" }
 
 private fun textFileName(name: String): Boolean = when (name.substringAfterLast('.', "").lowercase()) {

@@ -305,6 +305,34 @@ object WorkbenchIcons {
         "M16 16 14 18 16 20",
         "M3 18L10 18"
     ) }
+    val SunMoon: ImageVector by lazy { vector("sun-moon", false,
+        "M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4",
+        "M12 2v2",
+        "M12 20v2",
+        "m4.9 4.9 1.4 1.4",
+        "m17.7 17.7 1.4 1.4",
+        "M2 12h2",
+        "M20 12h2",
+        "m6.3 17.7-1.4 1.4",
+        "m19.1 4.9-1.4 1.4"
+    ) }
+    val Database: ImageVector by lazy { vector("database", false,
+        "M3.0 5.0a9.0 3.0 0 1 0 18.0 0a9.0 3.0 0 1 0 -18.0 0",
+        "M3 5V19A9 3 0 0 0 21 19V5",
+        "M3 12A9 3 0 0 0 21 12"
+    ) }
+    val Trash: ImageVector by lazy { vector("trash-2", false,
+        "M3 6h18",
+        "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6",
+        "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2",
+        "M10 11L10 17",
+        "M14 11L14 17"
+    ) }
+    val Route: ImageVector by lazy { vector("route", false,
+        "M3.0 19.0a3.0 3.0 0 1 0 6.0 0a3.0 3.0 0 1 0 -6.0 0",
+        "M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15",
+        "M15.0 5.0a3.0 3.0 0 1 0 6.0 0a3.0 3.0 0 1 0 -6.0 0"
+    ) }
 
     private fun vector(name: String, mirrored: Boolean, vararg paths: String): ImageVector =
         ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp,

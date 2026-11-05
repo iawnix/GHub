@@ -240,6 +240,10 @@ import kotlin.math.roundToInt
     keyboardToggle: Boolean = false, onKeyboard: () -> Unit = {}) {
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
         val keyWidth = (48.dp * LocalDensity.current.fontScale).coerceAtLeast(48.dp)
+        // The modifier hint teaches a gesture once; after the first modifier use it only costs a row.
+        var hintDone by rememberSaveable { mutableStateOf(false) }
+        val modifierUsed = modifiers.ctrl.active || modifiers.alt.active || modifiers.shift.active
+        LaunchedEffect(modifierUsed) { if (modifierUsed) hintDone = true }
         val singleRow = maxWidth >= keyWidth * if (keyboardToggle) 8 else 7
         val primary: @Composable RowScope.() -> Unit = {
             TerminalKey("Esc", tr(R.string.terminal_escape), enabled, Modifier.weight(1f)) { send(KeyEvent.KEYCODE_ESCAPE) }
@@ -269,7 +273,7 @@ import kotlin.math.roundToInt
                     TerminalKey(tr(R.string.ui_paste), tr(R.string.ui_paste), enabled, onClick = paste)
                 }
             }
-            if (expanded) Text(tr(R.string.terminal_modifier_hint), Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            if (expanded && !hintDone) Text(tr(R.string.terminal_modifier_hint), Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

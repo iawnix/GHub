@@ -61,6 +61,13 @@ data class HostWorkspace(
     val loadingHistory: Boolean = false,
 )
 
+/** Codex reports the login kind as an identifier ("apiKey", "chatgpt"); show it as people say it. */
+fun accountTypeLabel(type: String): String = when (type.lowercase()) {
+    "apikey", "api_key" -> tr(R.string.ui_account_api_key)
+    "chatgpt" -> "ChatGPT"
+    else -> type
+}
+
 fun canRemoveEmptyRecord(ws: HostWorkspace, thread: String): Boolean {
     val draft = ws.drafts[thread] ?: return false
     val conversation = ws.conversations[thread]
