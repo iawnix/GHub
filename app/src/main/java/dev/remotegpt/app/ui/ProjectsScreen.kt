@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
@@ -114,7 +115,12 @@ import dev.remotegpt.app.*
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 // The chevron already marks the hierarchy; a folder glyph only cost width.
                                 Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(16.dp).rotate(angle), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(project.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(project.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    // Collapsed rows otherwise look identical; size and recency tell them apart.
+                                    Text(projectSummary(threads.size, ws.nextThreads != null, threads.maxOfOrNull { it.updatedAt } ?: 0),
+                                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
                                 val projectStatus = when {
                                     approvals > 0 -> TaskStatus.APPROVAL
                                     blockingQuestions > 0 -> TaskStatus.QUESTION
@@ -187,7 +193,9 @@ import dev.remotegpt.app.*
     val active = ws.results[thread.id]?.status == "inProgress" || thread.status == "active"
     val archiving = thread.id in ws.archivingThreads
     val unavailable = ws.threadProblems[thread.id]?.unavailable == true
+    // A completed result that has been read is the normal resting state: it needs no label.
     val status = if (unavailable) null else taskStatus(ws.results[thread.id]?.status, active, waiting, questions.any { it.request.isBlocking })
+        ?.takeUnless { it == TaskStatus.COMPLETED && !unreadResult }
     SwipeArchiveRow(enabled = ws.connection == ConnectionStatus.ONLINE && !ws.archived &&
         !thread.archived && !active && !waiting && questions.isEmpty() && !archiving && !unavailable,
         onArchive = { onArchive(thread.id) }) {
@@ -208,9 +216,14 @@ import dev.remotegpt.app.*
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
                 unavailable -> Text(tr(R.string.ui_unavailable), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                status == TaskStatus.COMPLETED -> Row(Modifier.semantics(mergeDescendants = true) {},
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // An unread result is news, not an outcome: a dot reads lighter than a check.
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(taskStatusColor(status)))
+                    Text(tr(R.string.ui_new_result), style = MaterialTheme.typography.labelSmall, color = taskStatusColor(status), maxLines = 1)
+                }
                 status != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(if (status == TaskStatus.COMPLETED && unreadResult) tr(R.string.ui_new_result) else taskStatusLabel(status),
-                        style = MaterialTheme.typography.labelSmall, color = taskStatusColor(status), maxLines = 1)
+                    Text(taskStatusLabel(status), style = MaterialTheme.typography.labelSmall, color = taskStatusColor(status), maxLines = 1)
                     TaskStatusIcon(status, label = null)
                 }
             }
@@ -309,4 +322,11 @@ internal fun threadUpdatedMillis(updatedAt: Long): Long? = when {
     // Recomputed on recomposition; list refreshes keep it fresh enough for a hint.
     return android.text.format.DateUtils.getRelativeTimeSpanString(millis, System.currentTimeMillis(),
         android.text.format.DateUtils.MINUTE_IN_MILLIS, android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE).toString()
+}
+
+/** "3 sessions · 22 min ago"; a "+" marks a count that more pages could still raise. */
+@Composable private fun projectSummary(count: Int, more: Boolean, latest: Long): String {
+    if (count == 0) return tr(if (more) R.string.ui_you_can_load_earlier_sessions else R.string.ui_no_sessions_yet)
+    val sessions = AppStrings.quantity(R.plurals.ui_project_sessions, count, if (more) "$count+" else "$count")
+    return relativeUpdateTime(latest)?.let { "$sessions · $it" } ?: sessions
 }

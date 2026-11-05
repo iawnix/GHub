@@ -38,15 +38,19 @@ import dev.remotegpt.client.HostProfile
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
-@Composable fun PreferenceRow(title: String, icon: ImageVector, value: String? = null, description: String? = null, accent: WorkbenchAccent? = null, onClick: (() -> Unit)? = null, trailing: (@Composable () -> Unit)? = null) {
+@Composable fun PreferenceRow(title: String, icon: ImageVector, value: String? = null, description: String? = null, accent: WorkbenchAccent? = null, onClick: (() -> Unit)? = null,
+    tint: androidx.compose.ui.graphics.Color? = null, descriptionColor: androidx.compose.ui.graphics.Color? = null,
+    descriptionMonospace: Boolean = false, trailing: (@Composable () -> Unit)? = null) {
     val haptic = rememberHaptic()
     Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = { haptic(false); onClick() }) else Modifier)
         .heightIn(min = 60.dp).padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, Modifier.size(20.dp), tint = accent?.let { accentColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, null, Modifier.size(20.dp), tint = tint ?: accent?.let { accentColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            description?.let { Text(it, style = MaterialTheme.typography.bodySmall,
+                fontFamily = if (descriptionMonospace) androidx.compose.ui.text.font.FontFamily.Monospace else null,
+                color = descriptionColor ?: MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         value?.let {
             Spacer(Modifier.width(12.dp))
@@ -80,11 +84,11 @@ import dev.remotegpt.client.HostProfile
                 item { SectionLabel(tr(R.string.ui_application)) }
                 item {
                     WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
-                        PreferenceRow(tr(R.string.ui_appearance), WorkbenchIcons.Settings, when(theme) { "light" -> tr(R.string.ui_light); "dark" -> tr(R.string.ui_dark); else -> tr(R.string.ui_system_default) }, onClick = { section = "appearance" })
+                        PreferenceRow(tr(R.string.ui_appearance), WorkbenchIcons.SunMoon, when(theme) { "light" -> tr(R.string.ui_light); "dark" -> tr(R.string.ui_dark); else -> tr(R.string.ui_system_default) }, onClick = { section = "appearance" })
                         GroupDivider()
                         PreferenceRow(tr(R.string.ui_language), WorkbenchIcons.Language, languageLabel(), onClick = { section = "language" })
                         GroupDivider()
-                        PreferenceRow(tr(R.string.ui_data_and_diagnostics), WorkbenchIcons.Archive, description = tr(R.string.ui_cache_diagnostic_logs_and_licenses), onClick = { section = "data" })
+                        PreferenceRow(tr(R.string.ui_data_and_diagnostics), WorkbenchIcons.Database, description = tr(R.string.ui_cache_diagnostic_logs_and_licenses), onClick = { section = "data" })
                     }
                 }
                 item {
@@ -150,7 +154,7 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
             item { SectionLabel(tr(R.string.ui_local_data)) }
             item {
                 WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
-                    PreferenceRow(tr(R.string.ui_clear_session_cache), WorkbenchIcons.Archive, description = tr(R.string.ui_keep_drafts_server_connections_and_remote_sessions), onClick = { clear = true })
+                    PreferenceRow(tr(R.string.ui_clear_session_cache), WorkbenchIcons.Trash, description = tr(R.string.ui_keep_drafts_server_connections_and_remote_sessions), onClick = { clear = true })
                 }
             }
             item { SectionLabel(tr(R.string.ui_help_and_diagnostics)) }
@@ -183,7 +187,14 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                     Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(WorkbenchIcons.Dns, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(10.dp))
-                        Text(profile.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(profile.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            hostSummary(profile)?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
                         StatusPill(workspaces[profile.id]?.connection ?: ConnectionStatus.OFFLINE)
                     }
                 }
@@ -218,24 +229,28 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
             item { SectionLabel(tr(R.string.ui_connection)) }
             item {
                 WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
-                    PreferenceRow(tr(R.string.ui_status), WorkbenchIcons.Lan, connectionLabel(workspace.connection), accent = if (workspace.connection == ConnectionStatus.ONLINE) WorkbenchAccent.TEAL else null)
+                    val statusColor = connectionColor(workspace.connection)
+                    // Stopping is a secondary action beside the state; connecting stays the full-width primary action.
+                    PreferenceRow(tr(R.string.ui_status), if (connected || workspace.connection.busy) WorkbenchIcons.CloudDone else WorkbenchIcons.CloudOff,
+                        description = connectionLabel(workspace.connection), tint = statusColor, descriptionColor = statusColor,
+                        trailing = if (canStop) stopAction(actionLabel, onDisconnect) else null)
                     workspace.error?.let { error ->
                         Text(error, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     }
-                    Box(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp)) {
-                        if (canStop) OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(actionLabel) }
-                        else Button(onClick = onConnect, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(actionLabel) }
+                    if (!canStop) Box(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp)) {
+                        Button(onClick = onConnect, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(actionLabel) }
                     }
                 }
             }
             item { SectionLabel(tr(R.string.ui_server_configuration)) }
             item {
                 WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
-                    PreferenceRow(tr(R.string.ui_address), WorkbenchIcons.Dns, description = "${profile.endpoint.username}@${profile.endpoint.host}:${profile.endpoint.port}")
+                    PreferenceRow(tr(R.string.ui_address), WorkbenchIcons.Dns, description = "${profile.endpoint.username}@${profile.endpoint.host}:${profile.endpoint.port}",
+                        descriptionMonospace = true)
                     GroupDivider()
-                    PreferenceRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.FolderCopy, if (profile.jumps.isEmpty()) tr(R.string.ui_direct_connection) else tr(R.string.ui_hops , profile.jumps.size))
+                    PreferenceRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.Route, if (profile.jumps.isEmpty()) tr(R.string.ui_direct_connection) else tr(R.string.ui_hops , profile.jumps.size))
                     GroupDivider()
-                    PreferenceRow(tr(R.string.ui_edit_connection), WorkbenchIcons.Settings, onClick = onEdit)
+                    PreferenceRow(tr(R.string.ui_edit_connection), WorkbenchIcons.Edit, onClick = onEdit)
                 }
             }
             if (connected) {
@@ -249,5 +264,20 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                 }
             }
         }
+    }
+}
+
+/** "user@host · via 1 jump host", the detail that tells similar servers apart. */
+private fun hostSummary(profile: HostProfile): String? {
+    val endpoint = profile.endpoint
+    if (endpoint.host.isBlank()) return null
+    val address = listOfNotNull(endpoint.username.takeIf { it.isNotBlank() }, endpoint.host).joinToString("@")
+    return if (profile.jumps.isEmpty()) address
+    else "$address · ${AppStrings.quantity(R.plurals.ui_via_jump_hosts, profile.jumps.size, profile.jumps.size)}"
+}
+
+private fun stopAction(label: String, onClick: () -> Unit): @Composable () -> Unit = {
+    OutlinedButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+        Text(label, maxLines = 1)
     }
 }

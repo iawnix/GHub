@@ -136,7 +136,6 @@
     <string name="ui_this_directory_will_load_automatically_when_the" formatted="false">This directory will load automatically when the connection is restored.</string>
     <string name="ui_this_directory_is_empty" formatted="false">This directory is empty</string>
     <string name="ui_connect_to_browse_files_edit_text_or" formatted="false">Connect to browse files, edit text, or attach files to a session.</string>
-    <string name="ui_folder" formatted="false">Folder</string>
     <string name="ui_actions_for">Actions for %1$s</string>
     <string name="ui_directory" formatted="false">Directory</string>
     <string name="ui_parent_directory" formatted="false">Parent directory</string>
@@ -218,7 +217,7 @@
     <string name="ui_servers_189">%1$s servers</string>
     <string name="ui_ssh_connections_keys_and_jump_hosts" formatted="false">SSH connections, keys, and jump hosts</string>
     <string name="ui_keep_connected_in_background" formatted="false">Keep connected in background</string>
-    <string name="ui_show_an_ongoing_notification_and_keep_ssh" formatted="false">Show an ongoing notification and keep SSH and Codex events connected</string>
+    <string name="ui_show_an_ongoing_notification_and_keep_ssh" formatted="false">Show an ongoing notification, keep SSH and Codex events connected, and alert when tasks finish or need approval</string>
     <string name="ui_reconnect_when_needed_to_save_battery" formatted="false">Reconnect when needed to save battery</string>
     <string name="ui_application" formatted="false">Application</string>
     <string name="ui_appearance" formatted="false">Appearance</string>
@@ -578,4 +577,13 @@
     <string name="ui_edit_attachment_unavailable">Cannot read attachment %1$s. Check the connection or remove it and attach the file again.</string>
     <string name="ui_refresh_edit_history">Refresh conversation</string>
     <string name="ui_edit_wait_for_sync">Resending requires a connection and this task to remain the latest stopped turn. Your edits are kept.</string>
+    <string name="ui_account_api_key">API key</string>
+    <plurals name="ui_via_jump_hosts">
+        <item quantity="one">via %1$d jump host</item>
+        <item quantity="other">via %1$d jump hosts</item>
+    </plurals>
+    <plurals name="ui_project_sessions">
+        <item quantity="one">%1$s session</item>
+        <item quantity="other">%1$s sessions</item>
+    </plurals>
 </resources>

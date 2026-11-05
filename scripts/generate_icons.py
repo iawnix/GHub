@@ -28,6 +28,7 @@ ICONS = {
     'Download': 'download', 'Save': 'save', 'FileCode': 'file-code-2',
     'FileConfig': 'file-cog', 'FileArchive': 'file-archive',
     'ArrowBack': 'arrow-left', 'ArrowForward': 'arrow-right', 'WrapText': 'wrap-text',
+    'SunMoon': 'sun-moon', 'Database': 'database', 'Trash': 'trash-2', 'Route': 'route',
 }
 
 def fetch(name):
@@ -54,6 +55,9 @@ def path(el):
     if kind == 'circle':
         x,y,r = (float(a[k]) for k in ('cx','cy','r'))
         return f'M{x-r} {y}a{r} {r} 0 1 0 {2*r} 0a{r} {r} 0 1 0 {-2*r} 0'
+    if kind == 'ellipse':
+        x,y,rx,ry = (float(a[k]) for k in ('cx','cy','rx','ry'))
+        return f'M{x-rx} {y}a{rx} {ry} 0 1 0 {2*rx} 0a{rx} {ry} 0 1 0 {-2*rx} 0'
     if kind == 'rect':
         x,y,w,h = (float(a.get(k,0)) for k in ('x','y','width','height'))
         r = min(float(a.get('rx',0)),w/2,h/2)

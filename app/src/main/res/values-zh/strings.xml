@@ -133,7 +133,6 @@
     <string name="ui_this_directory_will_load_automatically_when_the" formatted="false">连接恢复后会自动加载当前目录，请稍候。</string>
     <string name="ui_this_directory_is_empty" formatted="false">目录中没有文件</string>
     <string name="ui_connect_to_browse_files_edit_text_or" formatted="false">连接主机后可以浏览目录、编辑文本或把文件附加到会话。</string>
-    <string name="ui_folder" formatted="false">文件夹</string>
     <string name="ui_actions_for">%1$s 的操作</string>
     <string name="ui_directory" formatted="false">目录</string>
     <string name="ui_parent_directory" formatted="false">上级目录</string>
@@ -215,7 +214,7 @@
     <string name="ui_servers_189">%1$s 台</string>
     <string name="ui_ssh_connections_keys_and_jump_hosts" formatted="false">SSH 连接、密钥与跳板机</string>
     <string name="ui_keep_connected_in_background" formatted="false">后台保持连接</string>
-    <string name="ui_show_an_ongoing_notification_and_keep_ssh" formatted="false">显示常驻通知，保持 SSH 与 Codex 事件连接</string>
+    <string name="ui_show_an_ongoing_notification_and_keep_ssh" formatted="false">显示常驻通知，保持 SSH 与 Codex 事件连接；任务完成和待确认时提醒</string>
     <string name="ui_reconnect_when_needed_to_save_battery" formatted="false">切到后台后按需恢复，省电</string>
     <string name="ui_application" formatted="false">应用</string>
     <string name="ui_appearance" formatted="false">外观</string>
@@ -566,4 +565,11 @@
     <string name="ui_edit_attachment_unavailable">无法读取附件 %1$s，请检查连接，或移除后重新添加。</string>
     <string name="ui_refresh_edit_history">刷新会话</string>
     <string name="ui_edit_wait_for_sync">连接并确认该任务仍是最近一次已停止的任务后才能重发，修改内容会保留。</string>
+    <string name="ui_account_api_key">API Key</string>
+    <plurals name="ui_via_jump_hosts">
+        <item quantity="other">经 %1$d 级跳板</item>
+    </plurals>
+    <plurals name="ui_project_sessions">
+        <item quantity="other">%1$s 个会话</item>
+    </plurals>
 </resources>

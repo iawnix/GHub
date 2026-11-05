@@ -19,7 +19,7 @@ class RemoteFiles(private val ssh: SshConnection) {
     suspend fun list(path: String): List<RemoteFile> = withContext(Dispatchers.IO) {
         ssh.client.newSFTPClient().use { sftp -> sftp.ls(path).filter { it.name !in setOf(".", "..") }.map {
             RemoteFile(it.name, it.path, it.isDirectory, it.attributes.size, it.attributes.mtime.toLong())
-        }.sortedWith(compareByDescending<RemoteFile> { it.directory }.thenBy { it.name.lowercase() }) }
+        }.sortedWith(remoteFileOrder) }
     }
     /** Verify retained attachments without changing or downloading them. */
     suspend fun readableFile(path: String): Boolean = withContext(Dispatchers.IO) {
@@ -116,3 +116,7 @@ class RemoteFiles(private val ssh: SshConnection) {
 
     private fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 }
+
+/** Folders first, then files; within each, hidden (dot) entries after visible ones, by name. */
+val remoteFileOrder: Comparator<RemoteFile> = compareByDescending<RemoteFile> { it.directory }
+    .thenBy { it.name.startsWith('.') }.thenBy { it.name.lowercase() }

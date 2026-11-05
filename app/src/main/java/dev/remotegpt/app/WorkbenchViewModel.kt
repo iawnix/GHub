@@ -953,7 +953,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 launch { optional("account_sync_failed") {
                     val account = rt.api.account()
-                    val label = account.obj("account").string("email") ?: account.obj("account").string("type")
+                    val label = account.obj("account").string("email") ?: account.obj("account").string("type")?.let(::accountTypeLabel)
                         ?: if (account["requiresOpenaiAuth"]?.jsonPrimitive?.booleanOrNull == false) tr(R.string.ui_custom_model_provider)
                         else tr(R.string.ui_run_codex_login_on_the_server_first)
                     if (runtimes[host] === rt) update(host) { it.copy(account = label) }
