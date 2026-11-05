@@ -17,16 +17,18 @@ class SpeechInput(private val context: Context, private val onText: (String) -> 
             SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else SpeechRecognizer.createSpeechRecognizer(context)
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { listening.value = true }
+            override fun onReadyForSpeech(params: Bundle?) { if (recognizer === r) listening.value = true }
             override fun onBeginningOfSpeech() = Unit
             override fun onRmsChanged(rmsdB: Float) = Unit
             override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() { listening.value = false }
+            override fun onEndOfSpeech() { if (recognizer === r) listening.value = false }
             override fun onError(error: Int) {
+                if (recognizer !== r) return
                 listening.value = false
                 onError(when (error) { SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> tr(R.string.ui_no_speech_detected_please_try_again); SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> tr(R.string.ui_microphone_permission_is_required_for_voice_input); else -> tr(R.string.ui_speech_recognition_is_unavailable_please_use_the) })
             }
             override fun onResults(results: Bundle?) {
+                if (recognizer !== r) return
                 listening.value = false
                 results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let(onText)
             }
@@ -40,5 +42,11 @@ class SpeechInput(private val context: Context, private val onText: (String) -> 
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         })
     }
-    fun cancel() { listening.value = false; recognizer?.cancel(); recognizer?.destroy(); recognizer = null }
+    fun cancel() {
+        val previous = recognizer
+        recognizer = null
+        listening.value = false
+        previous?.cancel()
+        previous?.destroy()
+    }
 }

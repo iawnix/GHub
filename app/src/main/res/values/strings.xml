@@ -554,4 +554,28 @@
         <item quantity="one">%1$d question waiting for your answer</item>
         <item quantity="other">%1$d questions waiting for your answer</item>
     </plurals>
+    <string name="ui_tool_call">Tool call</string>
+    <string name="ui_tool_arguments">Arguments</string>
+    <string name="ui_copy_tool_arguments">Copy arguments</string>
+    <string name="ui_tool_result">Result</string>
+    <string name="ui_tool_image_result">Image result address</string>
+    <string name="ui_tool_audio_result">Audio result address</string>
+    <string name="ui_tool_other_result">Other result content</string>
+    <string name="ui_tool_no_result">No result content</string>
+    <string name="ui_tool_waiting_result">Waiting for tool result…</string>
+    <string name="ui_tool_legacy_record">Tool details are missing from this older cache. Connect and refresh the conversation to load them.</string>
+    <string name="ui_context_compaction">Context compaction</string>
+    <string name="ui_context_compaction_running">Compacting context…</string>
+    <string name="ui_context_compaction_completed">Context compacted</string>
+    <string name="ui_copy_message">Copy message</string>
+    <string name="ui_edit_interrupted_input">Edit stopped task input</string>
+    <string name="ui_editing_interrupted_input">Editing stopped task input</string>
+    <string name="ui_edit_interrupted_text">Edit message</string>
+    <string name="ui_edit_and_resend">Edit and resend</string>
+    <string name="ui_resending_input">Sending…</string>
+    <string name="ui_stopping_task">Stopping task…</string>
+    <string name="ui_edit_task_changed">The conversation has moved on. Refresh to check the latest turn; your edits are kept.</string>
+    <string name="ui_edit_attachment_unavailable">Cannot read attachment %1$s. Check the connection or remove it and attach the file again.</string>
+    <string name="ui_refresh_edit_history">Refresh conversation</string>
+    <string name="ui_edit_wait_for_sync">Resending requires a connection and this task to remain the latest stopped turn. Your edits are kept.</string>
 </resources>

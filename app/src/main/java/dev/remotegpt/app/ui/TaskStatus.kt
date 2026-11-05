@@ -30,7 +30,7 @@ internal fun itemTaskStatus(item: TimelineItem): TaskStatus = when {
     item.complete && item.executionStatus == "inProgress" -> TaskStatus.UNKNOWN
     item.executionStatus != null -> taskStatus(item.executionStatus) ?: TaskStatus.UNKNOWN
     !item.complete -> TaskStatus.RUNNING
-    item.kind in setOf("agentMessage", "reasoning", "plan", "imageView") -> TaskStatus.COMPLETED
+    item.kind in setOf("agentMessage", "reasoning", "plan", "imageView", "contextCompaction") -> TaskStatus.COMPLETED
     else -> TaskStatus.UNKNOWN
 }
 

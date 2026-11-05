@@ -82,6 +82,18 @@ data class CommandExecutionDetails(
 )
 
 @Serializable
+data class DynamicToolCallDetails(
+    val tool: String,
+    val namespace: String? = null,
+    val arguments: JsonElement = JsonNull,
+    val contentItems: List<JsonObject>? = null,
+    val success: Boolean? = null,
+    val durationMs: Long? = null,
+) {
+    val displayName get() = listOfNotNull(namespace?.takeIf { it.isNotBlank() }, tool).joinToString(".")
+}
+
+@Serializable
 data class TimelineItem(
     val id: String, val turnId: String, val kind: String, val text: String,
     val complete: Boolean = false, val imagePaths: List<String> = emptyList(),
@@ -91,6 +103,7 @@ data class TimelineItem(
     // original combined text and must never be split by guessing at newlines.
     val commandExecution: CommandExecutionDetails? = null,
     val questions: List<AsyncUserQuestion> = emptyList(),
+    val dynamicToolCall: DynamicToolCallDetails? = null,
 ) {
     // Identity within a conversation. Length-prefixing avoids delimiter collisions.
     // Computed, so existing serialized caches remain compatible.

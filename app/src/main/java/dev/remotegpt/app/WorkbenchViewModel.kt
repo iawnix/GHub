@@ -75,6 +75,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     private val memoryBudgets = mutableMapOf<String, ConversationMemoryBudget>()
     private val trims = mutableMapOf<String, Job>()
     private val cacheWrites = Mutex()
+    private val draftWrites = Mutex()
     private var conversationCacheGeneration = 0L
     private val savedConversations = mutableMapOf<Pair<String, String>, Conversation>()
     private val conversationCheckpoints = ConversationCheckpoints<Pair<String, String>>(
@@ -172,7 +173,11 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         val previous = ui(host)
         mutable.update { all ->
             val before = all.workspaces[host]
-            val after = block(before ?: HostWorkspace())
+            val candidate = block(before ?: HostWorkspace())
+            val stops = candidate.stoppingTurns.filterNot { (thread, turn) ->
+                candidate.results[thread]?.let { it.turnId == turn && it.status in setOf("interrupted", "completed", "failed") } == true
+            }
+            val after = if (stops == candidate.stoppingTurns) candidate else candidate.copy(stoppingTurns = stops)
             if (after === before || after == before) all else all.copy(workspaces = all.workspaces + (host to after))
         }
         val current = ui(host)
@@ -529,7 +534,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         renderPending.remove(host)
         resultMonitors.remove(host)?.cancel()
         rt.rpc.invalidate()
-        update(host) { it.copy(attentionSyncingThreads = attentionThreads(it),
+        update(host) { it.copy(attentionSyncingThreads = attentionThreads(it), stoppingTurns = emptyMap(),
             approvals = emptyList(), pendingQuestions = emptyList(), loadingHistory = false, loadingThreads = false) }
         // Keep the SSH transport for SFTP/terminal while only the Codex proxy
         // is being rebuilt. Full disconnect closes it below.
@@ -1414,8 +1419,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         loadConversationCache(host, thread)
         if (ui(host).drafts[thread] == null) {
             val draft = dao.draft(host, thread)?.let { runCatching { wireJson.decodeFromString<Draft>(it.json) }.getOrNull() } ?: Draft()
-            val restored = draft.copy(attachments = draft.attachments.distinctBy { it.id }.map { if (it.state == "uploading") it.copy(state = "failed", error = tr(R.string.ui_upload_interrupted_select_the_file_again)) else it },
-                delivery = if (draft.delivery == "sending") "uncertain" else draft.delivery)
+            val restored = draft.restored()
             update(host) { it.copy(drafts = it.drafts + (thread to restored)) }
         }
     }
@@ -1510,15 +1514,16 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         val host = state.value.activeHost ?: return
         val thread = ui(host).selectedThread ?: return
         if (model != null && ui(host).modelOptions.none { it.id == model }) return
-        updateDraft(host, thread) { it.copy(model = model, effort = null) }
+        updateMessageInput(host, thread, ui(host).drafts[thread]?.edit?.id) { it.copy(model = model, effort = null) }
     }
     fun selectEffort(effort: String?) {
         val host = state.value.activeHost ?: return
         val thread = ui(host).selectedThread ?: return
         val draft = ui(host).drafts[thread] ?: Draft()
-        val model = draft.model ?: summary(host, thread)?.model ?: ui(host).modelOptions.firstOrNull { it.isDefault }?.id
+        val input = draft.edit?.input ?: draft.input()
+        val model = input.model ?: summary(host, thread)?.model ?: ui(host).modelOptions.firstOrNull { it.isDefault }?.id
         if (effort != null && ui(host).modelOptions.firstOrNull { it.id == model }?.efforts?.contains(effort) != true) return
-        updateDraft(host, thread) { it.copy(effort = effort) }
+        updateMessageInput(host, thread, draft.edit?.id) { it.copy(effort = effort) }
     }
     fun reloadModels() = perform { host, rt ->
         val models = rt.api.models()
@@ -1530,41 +1535,111 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         persistDraft(host, thread)
     }
     fun draftText(value: String) { val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: return
-        updateDraft(host, thread) { it.copy(text = value) }
+        updateMessageInput(host, thread, s.draft.edit?.id) { it.copy(text = value) }
     }
-    fun resolveUncertain() { val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: return
-        updateDraft(host, thread) { it.copy(delivery = "draft", pendingId = null) }
+    fun editInterruptedInput(itemId: String) {
+        val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: return
+        val item = editableInterruptedMessage(s.workspace, thread)?.takeIf { it.id == itemId } ?: return
+        val draft = s.workspace.drafts[thread] ?: Draft()
+        if (draft.delivery != "draft" || draft.edit != null) return
+        val input = inputForInterruptedMessage(s.workspace, thread, item)
+        updateDraft(host, thread) { it.copy(edit = InterruptedInputEdit(UUID.randomUUID().toString(), item.turnId, item.id, input)) }
     }
-    fun send() = perform { host, rt ->
-        val thread = ui(host).selectedThread ?: return@perform
-        if (thread in ui(host).threadProblems || ui(host).loadingHistory) {
-            message(tr(R.string.ui_restore_this_session_before_sending_your_draft))
-            return@perform
+
+    fun cancelInterruptedEdit() {
+        val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: return
+        val edit = s.draft.edit?.takeIf { it.delivery == "draft" } ?: return
+        edit.input.attachments.forEach { uploads.remove(it.id)?.cancel() }
+        updateDraft(host, thread) { if (it.edit?.id == edit.id) it.copy(edit = null) else it }
+    }
+
+    /** Capture the edit id before asynchronous uploads so late results cannot enter another draft. */
+    private fun updateMessageInput(host: String, thread: String, editId: String?, block: (MessageInput) -> MessageInput) {
+        updateDraft(host, thread) { draft ->
+            if (editId == null) {
+                if (draft.delivery == "draft") draft.withInput(block(draft.input())) else draft
+            } else draft.edit?.takeIf { it.id == editId && it.delivery == "draft" }?.let { edit ->
+                draft.copy(edit = edit.copy(input = block(edit.input), error = null))
+            } ?: draft
         }
-        if ((ui(host).threads.firstOrNull { it.id == thread } ?: ui(host).selectedSummary)?.archived == true) return@perform
-        val draft = ui(host).drafts[thread] ?: return@perform
-        if (draft.delivery != "draft" || draft.attachments.any { it.state != "ready" } || (draft.text.isBlank() && draft.attachments.isEmpty())) return@perform
+    }
+
+    fun resolveUncertain() {
+        val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: return
+        updateDraft(host, thread) { draft ->
+            if (draft.edit?.delivery == "uncertain") draft.copy(edit = draft.edit.copy(delivery = "draft", pendingId = null, error = null))
+            else if (draft.delivery == "uncertain") draft.copy(delivery = "draft", pendingId = null) else draft
+        }
+    }
+    fun send() = perform { host, rt -> sendInput(host, rt, edited = false) }
+    fun resendInterruptedInput() = perform { host, rt -> sendInput(host, rt, edited = true) }
+
+    private suspend fun sendInput(host: String, rt: Runtime, edited: Boolean) {
+        val thread = ui(host).selectedThread ?: return
+        val ws = ui(host)
+        if (thread in ws.threadProblems || ws.loadingHistory || thread in ws.historySyncingThreads) {
+            message(tr(R.string.ui_restore_this_session_before_sending_your_draft)); return
+        }
+        if (summary(host, thread)?.archived == true || ws.conversations[thread]?.activeTurn != null || thread in ws.stoppingTurns) return
+        val draft = ws.drafts[thread] ?: return
+        val edit = draft.edit
+        if (draft.delivery != "draft" || (edited && edit?.delivery != "draft") || (!edited && edit != null)) return
+        if (edited && editableInterruptedMessage(ws, thread)?.let { it.id == edit!!.itemId && it.turnId == edit.turnId } != true) {
+            message(tr(R.string.ui_edit_task_changed)); return
+        }
+        val input = if (edited) edit!!.input else draft.input()
+        if (input.attachments.any { it.state != "ready" } || (input.text.isBlank() && input.attachments.isEmpty())) return
         val firstMessage = summary(host, thread)?.awaitingFirstMessage == true
         val messageId = UUID.randomUUID().toString()
-        updateDraft(host, thread) { it.copy(delivery = "sending", pendingId = messageId) }
-        // Persist before sending, so a killed process cannot accidentally turn an in-flight message into an unsent draft.
-        flushDraft(host, thread)
-        try {
-            val text = (listOf(draft.text) + draft.attachments.filterNot { it.image }.map { tr(R.string.ui_attachment , it.remotePath) }).filter { it.isNotBlank() }.joinToString("\n\n")
-            val option = ui(host).modelOptions.firstOrNull { it.id == (draft.model ?: summary(host, thread)?.model ?: ui(host).modelOptions.firstOrNull { it.isDefault }?.id) }
-            val effort = draft.effort ?: if (draft.model != null) option?.defaultEffort else null
-            require(effort == null || option?.efforts?.contains(effort) == true) { tr(R.string.ui_the_current_model_does_not_support_this) }
-            rt.api.send(thread, text, draft.attachments.filter { it.image }.map { it.remotePath }, draft.model, messageId, effort)
-            summary(host, thread)?.let { rememberSummary(host, it.copy(model = draft.model ?: it.model, reasoningEffort = effort ?: it.reasoningEffort)) }
-            updateDraft(host, thread) { Draft(model = draft.model, effort = draft.effort) }
+        val option = ws.modelOptions.firstOrNull { it.id == (input.model ?: summary(host, thread)?.model ?: ws.modelOptions.firstOrNull { it.isDefault }?.id) }
+        val effort = input.effort ?: if (input.model != null) option?.defaultEffort else null
+        require(effort == null || option?.efforts?.contains(effort) == true) { tr(R.string.ui_the_current_model_does_not_support_this) }
+        val submitted = input.copy(model = input.model ?: summary(host, thread)?.model ?: option?.id,
+            effort = effort ?: summary(host, thread)?.reasoningEffort)
+        updateDraft(host, thread) {
+            if (edited) it.copy(edit = edit!!.copy(delivery = "sending", pendingId = messageId, error = null))
+            else it.copy(delivery = "sending", pendingId = messageId)
+        }
+        val response = try {
+            // The original/edit input and its delivery fence reach disk before any mutation.
             flushDraft(host, thread)
+            if (edited) {
+                for (attachment in input.attachments) {
+                    require(rt.files.readableFile(attachment.remotePath)) { tr(R.string.ui_edit_attachment_unavailable, attachment.name) }
+                }
+                val latest = rt.api.latestTurnStatus(thread)
+                rt.rpc.awaitEventsApplied()
+                if (latest?.string("id") != edit!!.turnId || latest.string("status") != "interrupted") {
+                    rt.sessions.dirty(thread)
+                    synchronizeHistory(host, thread, rt)
+                    error(tr(R.string.ui_edit_task_changed))
+                }
+                check(editableInterruptedMessage(ui(host), thread)?.let { it.id == edit.itemId && it.turnId == edit.turnId } == true) {
+                    tr(R.string.ui_edit_task_changed)
+                }
+            }
+            check(runtimes[host] === rt && rt.rpc.isConnected && ui(host).conversations[thread]?.activeTurn == null) {
+                tr(R.string.ui_restore_this_session_before_sending_your_draft)
+            }
+            val text = (listOf(input.text) + input.attachments.filterNot { it.image }.map { tr(R.string.ui_attachment, it.remotePath) })
+                .filter { it.isNotBlank() }.joinToString("\n\n")
+            rt.api.send(thread, text, input.attachments.filter { it.image }.map { it.remotePath }, input.model, messageId, effort)
         } catch (e: Exception) {
-            updateDraft(host, thread) { it.copy(delivery = if (e is UncertainDelivery) "uncertain" else "draft") }
-            flushDraft(host, thread)
+            updateDraft(host, thread) {
+                val delivery = if (e is UncertainDelivery) "uncertain" else "draft"
+                if (edited) it.copy(edit = it.edit?.let { current ->
+                    if (current.id == edit!!.id) current.copy(delivery = delivery, error = errorText(e),
+                        pendingId = messageId.takeIf { delivery == "uncertain" }) else current
+                }) else it.copy(delivery = delivery, pendingId = messageId.takeIf { delivery == "uncertain" })
+            }
+            withContext(NonCancellable) { flushDraft(host, thread) }
             throw e
         }
-        // This is outside the delivery catch: a subscription failure must never
-        // turn an accepted first message back into a draft that could be resent.
+        // An accepted turn must never become sendable again because a later disk/sync operation fails.
+        val turn = response.obj("turn").string("id").orEmpty()
+        summary(host, thread)?.let { rememberSummary(host, it.copy(model = submitted.model, reasoningEffort = submitted.effort)) }
+        updateDraft(host, thread) { it.acceptedSubmission(submitted, turn, messageId, edited) }
+        flushDraft(host, thread)
         if (firstMessage && runtimes[host] === rt) {
             summary(host, thread)?.let { rememberSummary(host, it.copy(awaitingFirstMessage = false)) }
             rt.sessions.dirty(thread)
@@ -1572,12 +1647,22 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 message(tr(R.string.ui_message_sent_restoring_session_state_please_do))
-                record("first_turn_sync_failed", e.javaClass.simpleName)
-                checkConnection(host)
+                record("first_turn_sync_failed", e.javaClass.simpleName); checkConnection(host)
             }
         }
     }
-    fun interrupt() = perform { host, rt -> ui(host).selectedThread?.let { thread -> ui(host).conversations[thread]?.activeTurn?.let { rt.api.interrupt(thread, it) } } }
+
+    fun interrupt() = perform { host, rt ->
+        val thread = ui(host).selectedThread ?: return@perform
+        val turn = ui(host).conversations[thread]?.activeTurn ?: return@perform
+        if (thread in ui(host).stoppingTurns) return@perform
+        update(host) { it.copy(stoppingTurns = it.stoppingTurns + (thread to turn)) }
+        try { rt.api.interrupt(thread, turn) }
+        catch (e: Exception) {
+            update(host) { it.copy(stoppingTurns = it.stoppingTurns - thread) }
+            throw e
+        }
+    }
     /** Notification action: only for a still-pending request on a live connection. */
     fun approveFromNotification(host: String, requestKey: String, decision: String): Boolean {
         val pending = ui(host).approvals.firstOrNull { it.request.key == requestKey && !it.submitted } ?: return false
@@ -1662,26 +1747,30 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun attachRemote(file: RemoteFile) {
         val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: run { message(tr(R.string.ui_choose_a_session_first)); return }
-        updateDraft(host, thread) { it.copy(attachments = it.attachments + Attachment(UUID.randomUUID().toString(), file.name, image = imageName(file.name), remotePath = file.path, state = "ready")) }
+        val editId = s.draft.edit?.id
+        updateMessageInput(host, thread, editId) { it.copy(attachments = it.attachments + Attachment(UUID.randomUUID().toString(), file.name, image = imageName(file.name), remotePath = file.path, state = "ready")) }
         selectTab(WorkspaceTab.SESSIONS)
     }
 
     fun upload(uri: Uri, image: Boolean) {
         val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: run { message(tr(R.string.ui_select_a_session_first)); return }
+        val editId = s.draft.edit?.id
+        val delivery = s.draft.edit?.delivery ?: s.draft.delivery
+        if (delivery != "draft") return
         val id = UUID.randomUUID().toString()
-        updateDraft(host, thread) { it.copy(attachments = it.attachments + Attachment(id, if (image) tr(R.string.ui_image) else tr(R.string.ui_attachment_57), uri.toString(), image)) }
+        updateMessageInput(host, thread, editId) { it.copy(attachments = it.attachments + Attachment(id, if (image) tr(R.string.ui_image) else tr(R.string.ui_attachment_57), uri.toString(), image)) }
         val job = viewModelScope.launch {
             try {
                 val rt = waitForFileRuntime(host) ?: error(tr(R.string.ui_remote_files_are_temporarily_unavailable))
                 val name = withContext(Dispatchers.IO) {
                     app.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
                 } ?: if (image) "image.jpg" else "attachment"
-                updateDraft(host, thread) { it.copy(attachments = it.attachments.map { a -> if (a.id == id) a.copy(name = name) else a }) }
+                updateMessageInput(host, thread, editId) { it.copy(attachments = it.attachments.map { a -> if (a.id == id) a.copy(name = name) else a }) }
                 val cwd = (ui(host).threads.firstOrNull { it.id == thread } ?: ui(host).selectedSummary?.takeIf { it.id == thread })?.cwd ?: error(tr(R.string.ui_cannot_determine_the_session_working_directory))
                 val path = withContext(Dispatchers.IO) { app.contentResolver.openInputStream(uri)?.use { rt.files.upload(cwd, name, it) } ?: error(tr(R.string.ui_cannot_open_file)) }
-                updateDraft(host, thread) { it.copy(attachments = it.attachments.map { a -> if (a.id == id) a.copy(remotePath = path, state = "ready") else a }) }
+                updateMessageInput(host, thread, editId) { it.copy(attachments = it.attachments.map { a -> if (a.id == id) a.copy(remotePath = path, state = "ready") else a }) }
             } catch (e: Exception) {
-                if (e !is CancellationException) updateDraft(host, thread) { it.copy(attachments = it.attachments.map { a -> if (a.id == id) a.copy(state = "failed", error = errorText(e)) else a }) }
+                if (e !is CancellationException) updateMessageInput(host, thread, editId) { it.copy(attachments = it.attachments.map { a -> if (a.id == id) a.copy(state = "failed", error = errorText(e)) else a }) }
             } finally { uploads.remove(id) }
         }
         uploads[id] = job
@@ -1689,7 +1778,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     fun removeAttachment(id: String) {
         uploads.remove(id)?.cancel()
         val s = state.value; val host = s.activeHost ?: return; val thread = s.workspace.selectedThread ?: return
-        updateDraft(host, thread) { it.copy(attachments = it.attachments.filterNot { a -> a.id == id }) }
+        val editId = s.draft.edit?.id
+        updateMessageInput(host, thread, editId) { it.copy(attachments = it.attachments.filterNot { a -> a.id == id }) }
     }
     fun download(path: String, uri: Uri) = performFile { _, rt -> withContext(Dispatchers.IO) {
         app.contentResolver.openOutputStream(uri, "w")?.use { rt.files.download(path, it) } ?: error(tr(R.string.ui_cannot_open_the_save_location))
@@ -1854,7 +1944,9 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         val key = "draft:${host}:${thread}"
         persistLater(key, 200) { flushDraft(host, thread) }
     }
-    private suspend fun flushDraft(host: String, thread: String) { ui(host).drafts[thread]?.let { dao.putDraft(DraftRow(host, thread, wireJson.encodeToString(it))) } }
+    private suspend fun flushDraft(host: String, thread: String) = draftWrites.withLock {
+        ui(host).drafts[thread]?.let { dao.putDraft(DraftRow(host, thread, wireJson.encodeToString(it))) }
+    }
     fun flush() = launchStorage {
         state.value.workspaces.forEach { (host, ws) ->
             flushEditor(host)

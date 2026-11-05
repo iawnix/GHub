@@ -34,6 +34,7 @@ import dev.remotegpt.client.*
     imagePreviews: Map<String, String> = emptyMap(),
     imageLoading: Set<String> = emptySet(),
     onLoadImage: (String) -> Unit = {},
+    revision: MessageRevisionActions? = null,
 ) {
     val answer = items.lastOrNull { it.kind == "agentMessage" }
     val files = items.filter { it.kind == "fileChange" }
@@ -43,7 +44,11 @@ import dev.remotegpt.client.*
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items.filter { it.kind == "userMessage" }.forEach { item ->
             key(item.identityKey) {
-                TimelineCard(item, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+                Column {
+                    TimelineCard(item, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+                    UserMessageActions(item.text, if (revision?.editableItemId == item.id && revision.edit == null)
+                        ({ revision.onBegin(item.id) }) else null)
+                }
             }
         }
         questions.forEach { question ->
@@ -89,7 +94,7 @@ import dev.remotegpt.client.*
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val commands = steps.count { it.kind == "commandExecution" }
-    val unknown = steps.any { it.kind !in setOf("agentMessage", "commandExecution", "reasoning", "plan") }
+    val unknown = steps.any { it.kind !in setOf("agentMessage", "commandExecution", "dynamicToolCall", "contextCompaction", "reasoning", "plan") }
     val failures = steps.filter { it.failed }
     val status = when {
         active -> TaskStatus.RUNNING
@@ -189,6 +194,8 @@ import dev.remotegpt.client.*
 
 private fun eventShortLabel(kind: String): String = tr(when (kind) {
     "commandExecution" -> R.string.ui_output_command_short
+    "dynamicToolCall" -> R.string.ui_tool_call
+    "contextCompaction" -> R.string.ui_context_compaction
     "fileChange" -> R.string.ui_output_files_short
     "reasoning" -> R.string.ui_output_reasoning_short
     "plan" -> R.string.ui_output_plan_short

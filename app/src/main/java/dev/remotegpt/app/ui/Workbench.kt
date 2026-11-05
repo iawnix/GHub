@@ -79,9 +79,16 @@ import java.util.UUID
     val snackbars = remember { SnackbarHostState() }
     var bottomControls by remember(state.activeHost, state.workspace.selectedThread, state.tab) { mutableIntStateOf(0) }
     val holder = rememberSaveableStateHolder()
-    val currentText by rememberUpdatedState(state.draft.text)
-    val speech = remember { SpeechInput(context, { vm.draftText(listOf(currentText, it).filter(String::isNotBlank).joinToString(" ")) }, vm::message) }
-    LaunchedEffect(state.activeHost, state.workspace.selectedThread, state.tab) { speech.cancel() }
+    var speechTarget by remember { mutableStateOf<Triple<String?, String?, String?>?>(null) }
+    val speech = remember { SpeechInput(context, { result ->
+        val current = vm.state.value
+        if (speechTarget == Triple(current.activeHost, current.workspace.selectedThread, current.draft.edit?.id)) {
+            val text = current.draft.edit?.input?.text ?: current.draft.text
+            vm.draftText(listOf(text, result).filter(String::isNotBlank).joinToString(" "))
+        }
+    }, vm::message) }
+    LaunchedEffect(state.activeHost, state.workspace.selectedThread, state.tab, state.draft.edit?.id,
+        state.draft.edit?.delivery ?: state.draft.delivery) { speech.cancel() }
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -92,7 +99,13 @@ import java.util.UUID
     }
     val listening by speech.listening.collectAsState()
     DisposableEffect(Unit) { onDispose { speech.cancel() } }
-    val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) speech.start() else vm.message(tr(R.string.ui_microphone_permission_was_denied_you_can_continue)) }
+    val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            val current = vm.state.value
+            speechTarget = Triple(current.activeHost, current.workspace.selectedThread, current.draft.edit?.id)
+            speech.start()
+        } else vm.message(tr(R.string.ui_microphone_permission_was_denied_you_can_continue))
+    }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         runCatching { RemoteConnectionService.start(context) }
             .onSuccess { if (!granted) vm.message(tr(R.string.ui_background_without_notifications)) }

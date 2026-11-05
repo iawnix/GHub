@@ -26,7 +26,7 @@ object Timeline {
             "userMessage" -> raw.array("content").mapNotNull { (it as? JsonObject)?.string("text") }.joinToString("\n")
             "commandExecution" -> raw.string("aggregatedOutput").orEmpty()
             "fileChange" -> raw.array("changes").joinToString("\n\n") { c -> c.jsonObject.string("path").orEmpty() + "\n" + c.jsonObject.string("diff").orEmpty() }
-            "imageView" -> ""
+            "imageView", "dynamicToolCall", "contextCompaction" -> ""
             "plan" -> raw.string("text").orEmpty()
             "reasoning" -> raw.array("summary").joinToString("\n") { (it as? JsonPrimitive)?.contentOrNull.orEmpty() }
             else -> "此类型暂未完整显示：$type"
@@ -41,9 +41,17 @@ object Timeline {
             entry.string("path")?.let { FileEdit(it, entry.string("diff").orEmpty()) }
         } else emptyList()
         val failed = raw.string("status") in setOf("failed", "declined") ||
+            (type == "dynamicToolCall" && (raw["success"] as? JsonPrimitive)?.booleanOrNull == false) ||
             (raw["exitCode"] as? JsonPrimitive)?.intOrNull?.let { it != 0 } == true
         return TimelineItem(raw.string("id") ?: error("Item without ID"), turn, type, text, complete, images, files, failed,
             executionStatus = raw.string("status"),
+            dynamicToolCall = if (type == "dynamicToolCall") DynamicToolCallDetails(
+                tool = raw.string("tool").orEmpty(), namespace = raw.string("namespace"),
+                arguments = raw["arguments"] ?: JsonNull,
+                contentItems = (raw["contentItems"] as? JsonArray)?.mapNotNull { it as? JsonObject },
+                success = (raw["success"] as? JsonPrimitive)?.booleanOrNull,
+                durationMs = (raw["durationMs"] as? JsonPrimitive)?.longOrNull?.takeIf { it >= 0 },
+            ) else null,
             commandExecution = if (type == "commandExecution") CommandExecutionDetails(
                 command = raw.string("command"),
                 workingDirectory = raw.string("cwd"),
@@ -114,6 +122,9 @@ object Timeline {
             val current = liveItems[snapshot.identityKey]
             when {
                 snapshot.complete -> snapshot
+                // Active-turn history has no per-item status for compaction markers.
+                // A known completion must survive that less precise snapshot.
+                snapshot.kind == "contextCompaction" && current?.complete == true -> snapshot.copy(complete = true)
                 current != null && current.complete && current != beforeItems[current.identityKey] -> current
                 current != null && snapshot.text.startsWith(current.text) -> snapshot
                 current != null && current != beforeItems[current.identityKey] -> current

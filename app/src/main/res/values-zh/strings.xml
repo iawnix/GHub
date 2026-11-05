@@ -542,4 +542,28 @@
     <plurals name="ui_question_pending_banner">
         <item quantity="other">%1$d 个问题等待回答</item>
     </plurals>
+    <string name="ui_tool_call">工具调用</string>
+    <string name="ui_tool_arguments">调用参数</string>
+    <string name="ui_copy_tool_arguments">复制调用参数</string>
+    <string name="ui_tool_result">返回结果</string>
+    <string name="ui_tool_image_result">图片结果地址</string>
+    <string name="ui_tool_audio_result">音频结果地址</string>
+    <string name="ui_tool_other_result">其他返回内容</string>
+    <string name="ui_tool_no_result">未返回内容</string>
+    <string name="ui_tool_waiting_result">等待工具返回…</string>
+    <string name="ui_tool_legacy_record">旧缓存未保存工具详情，请连接后刷新会话。</string>
+    <string name="ui_context_compaction">上下文整理</string>
+    <string name="ui_context_compaction_running">正在整理上下文…</string>
+    <string name="ui_context_compaction_completed">上下文已整理</string>
+    <string name="ui_copy_message">复制消息</string>
+    <string name="ui_edit_interrupted_input">修改已停止任务的输入</string>
+    <string name="ui_editing_interrupted_input">正在修改已停止任务的输入</string>
+    <string name="ui_edit_interrupted_text">编辑消息</string>
+    <string name="ui_edit_and_resend">修改后重发</string>
+    <string name="ui_resending_input">正在发送…</string>
+    <string name="ui_stopping_task">正在停止任务…</string>
+    <string name="ui_edit_task_changed">会话状态已变化，请刷新查看最新任务；修改内容已保留。</string>
+    <string name="ui_edit_attachment_unavailable">无法读取附件 %1$s，请检查连接，或移除后重新添加。</string>
+    <string name="ui_refresh_edit_history">刷新会话</string>
+    <string name="ui_edit_wait_for_sync">连接并确认该任务仍是最近一次已停止的任务后才能重发，修改内容会保留。</string>
 </resources>

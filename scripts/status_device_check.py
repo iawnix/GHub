@@ -81,17 +81,18 @@ def main():
     for apk in ['app/build/outputs/apk/debug/app-debug.apk', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk']:
         subprocess.run(adb + ['install', '-r', apk], check=True)
     subprocess.run(adb + ['shell', 'pm', 'clear', package], check=True)
-    with servers() as fixture:
+    with servers(model_provider="remote_gpt_status_fixture") as fixture:
         model = http.server.ThreadingHTTPServer(('127.0.0.1', 0), DelayedAnswer)
         threading.Thread(target=model.serve_forever, daemon=True).start()
         subprocess.run(adb + ['shell', 'run-as', package, 'mkdir', '-p', 'files'], check=True)
         subprocess.run(adb + ['shell', 'run-as', package, 'sh', '-c', "'cat > files/device-test-key'"],
                        input=Path(fixture['encrypted_ed25519']).read_bytes(), check=True)
         try:
+            subprocess.run(adb + ['reverse', f'tcp:{fixture["ports"][-1]}', f'tcp:{fixture["ports"][-1]}'], check=True)
             result = subprocess.run(adb + ['shell', 'am', 'instrument', '-w', '-r',
-                '-e', 'class', 'dev.remotegpt.app.SessionStatusDeviceTest',
+                '-e', 'class', os.environ.get('DEVICE_TEST_CLASS', 'dev.remotegpt.app.SessionStatusDeviceTest'),
                 '-e', 'statusFixturePort', str(model.server_port),
-                '-e', 'fixtureRoot', fixture['root'], '-e', 'sshPort', str(fixture['ports'][-1]),
+                '-e', 'fixtureRoot', fixture['root'], '-e', 'sshPort', str(fixture['ports'][-1]), '-e', 'sshHost', '127.0.0.1',
                 '-e', 'sshUser', getpass.getuser(), '-e', 'fingerprint', fixture['fingerprint'],
                 '-e', 'codexPath', fixture["codex"], package + '.test/androidx.test.runner.AndroidJUnitRunner'],
                 text=True, capture_output=True, timeout=180)
@@ -99,6 +100,7 @@ def main():
             if result.returncode or 'FAILURES!!!' in result.stdout or 'OK (' not in result.stdout:
                 raise SystemExit('Status synchronization verification failed')
         finally:
+            subprocess.run(adb + ['reverse', '--remove', f'tcp:{fixture["ports"][-1]}'], check=False)
             subprocess.run(adb + ['shell', 'run-as', package, 'rm', '-f', 'files/device-test-key'], check=False)
             model.shutdown()
 

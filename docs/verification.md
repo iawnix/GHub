@@ -99,3 +99,19 @@ ANDROID_SERIAL=emulator-5556 python3 scripts/release_device_check.py
 真机体验检查主要关注厂商输入法、TalkBack、相机与语音服务、Wi-Fi / 蜂窝切换、长时间后台和内存表现。提交这类结果时，请记录设备、系统版本、操作步骤与观察时长，便于复现和比较。
 
 `TaskNotificationTrackerTest` 覆盖重连已在线但请求尚未重放、多个会话独立同步、离线处理请求的撤回，以及新轮次清理旧结果通知。`TaskNotificationDeviceTest` 在 API 29/35/36 检查审批动作的解锁要求或打开应用确认、设置页跳转及同一会话重复通知跳转。
+
+`DynamicToolTimelineTest` 与缓存测试覆盖动态工具的实时/历史一致性、结构化返回内容、失败结果和旧缓存兼容。`DynamicToolCallDeviceTest` 验证展开查看、参数与结果复制、媒体地址及旧缓存刷新提示。
+
+`ContextCompactionTimelineTest` 和 `ContextCompactionDeviceTest` 覆盖上下文整理的开始/完成状态、实时与历史一致性、旧缓存显示，以及活动历史刷新时保留已完成状态。
+
+`InterruptedInputTest` 覆盖可编辑范围、输入快照、普通草稿保留和缓存恢复；`InterruptedInputDeviceTest` 检查铅笔入口、复用底部输入框、原消息保留、普通草稿恢复、重新发送和交付不确定时的锁定。
+
+停止后修改的真实 SSH 专项使用独立 daemon、本地模型和临时附件：
+
+```sh
+ANDROID_SERIAL=emulator-5556 \
+DEVICE_TEST_CLASS=dev.remotegpt.app.InterruptedInputSyncDeviceTest \
+  python3 scripts/status_device_check.py
+```
+
+该专项检查重复停止/发送只执行一次、编辑草稿落盘、附件失效时不发送、原始与修改后的历史均保留，以及其他客户端推进会话后阻止旧编辑稿重发。先按前文构建预览包；脚本会清空预览应用数据，并通过临时 `adb reverse` 端口连接隔离 SSH 服务。fixture 默认模型提供方与测试会话保持一致，兼容要求两者一致的新版 Codex CLI。
