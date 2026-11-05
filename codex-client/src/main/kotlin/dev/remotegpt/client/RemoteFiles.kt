@@ -21,6 +21,16 @@ class RemoteFiles(private val ssh: SshConnection) {
             RemoteFile(it.name, it.path, it.isDirectory, it.attributes.size, it.attributes.mtime.toLong())
         }.sortedWith(compareByDescending<RemoteFile> { it.directory }.thenBy { it.name.lowercase() }) }
     }
+    /** Verify retained attachments without changing or downloading them. */
+    suspend fun readableFile(path: String): Boolean = withContext(Dispatchers.IO) {
+        if (!path.startsWith('/') || '\u0000' in path) return@withContext false
+        ssh.client.newSFTPClient().use { sftp ->
+            val attributes = sftp.statExistence(path) ?: return@use false
+            if (attributes.type != FileMode.Type.REGULAR) return@use false
+            sftp.open(path, setOf(OpenMode.READ)).use { true }
+        }
+    }
+
     suspend fun home(): String = withContext(Dispatchers.IO) { ssh.client.newSFTPClient().use { it.canonicalize(".") } }
 
     /** Idempotent directory creation over SFTP; paths are never interpreted by a shell. */

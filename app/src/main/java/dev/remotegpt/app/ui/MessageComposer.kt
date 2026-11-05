@@ -21,7 +21,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import dev.remotegpt.app.composerDraft
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -35,10 +39,21 @@ import dev.remotegpt.client.ModelOption
     listening: Boolean, onText: (String) -> Unit, onRemoveAttachment: (String) -> Unit,
     onModel: (String?) -> Unit, onImage: () -> Unit, onFile: () -> Unit,
     onCamera: () -> Unit, onVoice: () -> Unit, onSend: () -> Unit,
-    running: Boolean = false, onStop: () -> Unit = {}, modifier: Modifier = Modifier,
+    running: Boolean = false, stopping: Boolean = false, onStop: () -> Unit = {}, modifier: Modifier = Modifier,
     modelOptions: List<ModelOption> = emptyList(), effort: String? = null,
     onEffort: (String?) -> Unit = {}, onReloadModels: () -> Unit = {},
+    revision: MessageRevisionActions? = null,
 ) {
+    val edit = draft.edit
+    val inputDraft = draft.composerDraft()
+    val textFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(edit?.id) {
+        if (edit?.delivery == "draft" && !archived) {
+            textFocus.requestFocus()
+            keyboard?.show()
+        }
+    }
     var attachmentsMenu by remember { mutableStateOf(false) }
     var modelsMenu by remember { mutableStateOf(false) }
     var effortMenu by remember { mutableStateOf(false) }
@@ -47,7 +62,7 @@ import dev.remotegpt.client.ModelOption
     var focused by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val haptic = rememberHaptic()
-    val editable = !archived && draft.delivery == "draft"
+    val editable = !archived && inputDraft.delivery == "draft"
     val composerShape = RoundedCornerShape(22.dp)
     Surface(
         // ConversationViewport owns IME insets; typing never starts a separate layout animation.
@@ -60,11 +75,23 @@ import dev.remotegpt.client.ModelOption
         tonalElevation = 1.dp,
     ) {
         Column {
-            if (draft.attachments.isNotEmpty()) LazyRow(
+            if (edit != null) Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(WorkbenchIcons.Edit, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr(R.string.ui_editing_interrupted_input), Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = { revision?.onCancel?.invoke() }, enabled = edit.delivery == "draft") {
+                    Text(tr(R.string.ui_cancel))
+                }
+            }
+            if (inputDraft.attachments.isNotEmpty()) LazyRow(
                 contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface),
             ) {
-                items(draft.attachments, key = { it.id }) { attachment ->
+                items(inputDraft.attachments, key = { it.id }) { attachment ->
                     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(12.dp), modifier = Modifier.width(248.dp)) {
                         Row(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -87,19 +114,20 @@ import dev.remotegpt.client.ModelOption
                     }
                 }
             }
-            val hasContent = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
+            val hasContent = inputDraft.text.isNotBlank() || inputDraft.attachments.isNotEmpty()
             BasicTextField(
-                value = draft.text, onValueChange = onText, enabled = editable, minLines = 1, maxLines = 5,
+                value = inputDraft.text, onValueChange = onText, enabled = editable, minLines = 1, maxLines = 5,
                 modifier = Modifier.weight(1f, fill = false).fillMaxWidth().background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 16.dp, vertical = 12.dp)
                     .heightIn(min = 28.dp, max = LocalComposerTextHeight.current)
+                    .focusRequester(textFocus)
                     .onFocusChanged { focused = it.isFocused }
-                    .semantics { contentDescription = tr(R.string.ui_message_input) },
+                    .semantics { contentDescription = tr(if (edit != null) R.string.ui_edit_interrupted_text else R.string.ui_message_input) },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
                     Box {
-                        if (draft.text.isEmpty()) Text(if (listening) tr(R.string.ui_listening) else tr(R.string.chat_message_placeholder),
+                        if (inputDraft.text.isEmpty()) Text(if (listening) tr(R.string.ui_listening) else tr(R.string.chat_message_placeholder),
                             style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         inner()
                     }
@@ -119,8 +147,8 @@ import dev.remotegpt.client.ModelOption
                                 .semantics { contentDescription = tr(R.string.ui_message_options_current, modelLabel, effortLabel(effort)) },
                             contentPadding = PaddingValues(horizontal = 4.dp),
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
-                            Text(modelLabel, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
-                            Text(" · ${effortLabel(effort)}", maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                            Text("$modelLabel · ${effortLabel(effort)}", Modifier.weight(1f, fill = false),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
                     } else {
@@ -142,8 +170,16 @@ import dev.remotegpt.client.ModelOption
                             tr(if (listening) R.string.ui_stop_voice_input else R.string.ui_voice_input), Modifier.size(20.dp),
                             tint = if (listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    val enabled = if (running) online else editable && online && draft.attachments.all { it.state == "ready" } && hasContent
-                    IconButton(onClick = { haptic(running); if (running) onStop() else onSend() }, enabled = enabled, modifier = Modifier.size(48.dp)) {
+                    val enabled = if (running) online && !stopping else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
+                    val sendLabel = tr(when {
+                        stopping -> R.string.ui_stopping_task
+                        running -> R.string.ui_stop_task
+                        inputDraft.delivery == "sending" -> R.string.ui_resending_input
+                        edit != null -> R.string.ui_edit_and_resend
+                        else -> R.string.ui_send_message
+                    })
+                    IconButton(onClick = { haptic(running); if (running) onStop() else onSend() }, enabled = enabled,
+                        modifier = Modifier.size(48.dp).semantics { contentDescription = sendLabel }) {
                         // Stop is destructive for the running turn, so it must not look like Send.
                         val container = when {
                             !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)
@@ -156,10 +192,23 @@ import dev.remotegpt.client.ModelOption
                                 running -> MaterialTheme.colorScheme.onError
                                 else -> MaterialTheme.colorScheme.surface
                             }
-                            if (draft.delivery == "sending" && !running) CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
+                            if (inputDraft.delivery == "sending" && !running) CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
                             else Icon(if (running) WorkbenchIcons.Stop else WorkbenchIcons.ArrowUpward,
-                                tr(if (running) R.string.ui_stop_task else R.string.ui_send_message), Modifier.size(20.dp), tint = tint)
+                                null, Modifier.size(20.dp), tint = tint)
                         }
+                    }
+                }
+            }
+            if (edit != null && (edit.error != null || edit.delivery == "uncertain" || (edit.delivery == "draft" && revision?.canResend != true))) {
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    edit.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                    if (edit.delivery == "uncertain") {
+                        Text(tr(R.string.ui_your_last_message_has_an_unconfirmed_delivery), style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { revision?.onRefresh?.invoke() }, enabled = online) { Text(tr(R.string.ui_refresh_edit_history)) }
+                        TextButton(onClick = { revision?.onResolveUncertain?.invoke() }) { Text(tr(R.string.ui_history_checked_unlock_draft)) }
+                    } else if (edit.delivery == "draft" && revision?.canResend != true) {
+                        Text(tr(R.string.ui_edit_wait_for_sync), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -182,9 +231,9 @@ import dev.remotegpt.client.ModelOption
             SheetAction(tr(R.string.ui_choose_file), WorkbenchIcons.AttachFile, enabled = editable && online) { attachmentsMenu = false; onFile() }
         }
     }
-    if (modelsMenu) ModelPickerSheet(models, draft.model, running, online, onReloadModels,
+    if (modelsMenu) ModelPickerSheet(models, inputDraft.model, running, online, onReloadModels,
         onSelect = { onModel(it); modelsMenu = false }, onDismiss = { modelsMenu = false })
-    if (effortMenu) EffortPickerSheet(currentModel?.efforts.orEmpty(), draft.effort, draft.model == null, running,
+    if (effortMenu) EffortPickerSheet(currentModel?.efforts.orEmpty(), inputDraft.effort, inputDraft.model == null, running,
         onSelect = { onEffort(it); effortMenu = false }, onDismiss = { effortMenu = false })
 
 

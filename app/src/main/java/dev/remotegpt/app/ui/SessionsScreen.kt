@@ -49,6 +49,7 @@ import dev.remotegpt.client.*
     )
     val outputConnected = ws.connection == ConnectionStatus.ONLINE
     val draft = state.draft
+    val composerDraft = draft.composerDraft()
     val archived = state.thread?.archived == true
     val problem = ws.threadProblems[thread]
     val listState = rememberLazyListState()
@@ -108,6 +109,9 @@ import dev.remotegpt.client.*
                     layout.visibleItemsInfo.lastOrNull()?.let { Triple(it.key, it.offset, it.size) })
             } else null
         }.conflate().collect {
+            // Dock/IME resizing can publish geometry during layout. Defer the scroll
+            // until the next frame so scrollToItem cannot recursively remeasure it.
+            withFrameNanos { }
             val layout = listState.layoutInfo
             if (followingLatest && !userScrolling && !listState.isScrollInProgress &&
                 layout.totalItemsCount > 0 && listState.canScrollForward) {
@@ -139,6 +143,14 @@ import dev.remotegpt.client.*
         }
     }
     // Approvals and blocking questions follow the turns in the list (see items below).
+    val editableMessage = editableInterruptedMessage(ws, thread)
+    val revision = MessageRevisionActions(
+        editableItemId = editableMessage?.id?.takeIf { draft.delivery == "draft" }, edit = draft.edit,
+        canResend = ws.connection == ConnectionStatus.ONLINE && editableMessage?.let { it.id == draft.edit?.itemId && it.turnId == draft.edit?.turnId } == true,
+        onBegin = { id -> if (listening) onVoice(); followingLatest = false; vm.editInterruptedInput(id) },
+        onCancel = { if (listening) onVoice(); vm.cancelInterruptedEdit() },
+        onRefresh = { vm.refreshConversation() }, onResolveUncertain = { confirmRetry = true },
+    )
     val showEmpty = problem == null && timeline.isEmpty() && !ws.loadingHistory && ws.connection == ConnectionStatus.ONLINE
     val firstPendingIndex = (if (state.conversation?.nextCursor != null) 1 else 0) + (if (showEmpty) 1 else 0) + turns.size
     val blockingQuestions = questions.count { it.request.isBlocking }
@@ -189,14 +201,21 @@ import dev.remotegpt.client.*
                     if (draft.delivery == "uncertain") {
                         InfoCard(tr(R.string.ui_your_last_message_has_an_unconfirmed_delivery), tr(R.string.ui_history_checked_unlock_draft)) { confirmRetry = true }
                     }
+                    if (thread in ws.stoppingTurns) Text(tr(R.string.ui_stopping_task),
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
                     MessageComposer(
-                        draft = draft, models = ws.models, model = draft.model ?: state.thread?.model,
-                        modelOptions = ws.modelOptions, effort = draft.effort ?: if (draft.model != null) ws.modelOptions.firstOrNull { it.id == draft.model }?.defaultEffort else state.thread?.reasoningEffort,
+                        draft = draft, models = ws.models, model = composerDraft.model ?: state.thread?.model,
+                        modelOptions = ws.modelOptions, effort = composerDraft.effort ?: if (composerDraft.model != null) ws.modelOptions.firstOrNull { it.id == composerDraft.model }?.defaultEffort else state.thread?.reasoningEffort,
                         onEffort = vm::selectEffort, onReloadModels = { vm.reloadModels() },
                         online = ws.connection == ConnectionStatus.ONLINE && problem == null && !ws.loadingHistory, archived = archived, listening = listening,
                         onText = vm::draftText, onRemoveAttachment = vm::removeAttachment, onModel = vm::selectModel,
-                        onImage = onImage, onFile = onFile, onCamera = onCamera, onVoice = onVoice, onSend = { userScrolling = false; followingLatest = true; vm.send() },
-                        running = state.conversation?.activeTurn != null, onStop = { vm.interrupt() }, modifier = Modifier,
+                        onImage = onImage, onFile = onFile, onCamera = onCamera, onVoice = onVoice, onSend = {
+                            if (listening) onVoice()
+                            userScrolling = false; followingLatest = true
+                            if (draft.edit != null) vm.resendInterruptedInput() else vm.send()
+                        },
+                        revision = revision,
+                        running = state.conversation?.activeTurn != null, stopping = thread in ws.stoppingTurns, onStop = { vm.interrupt() }, modifier = Modifier,
                     )
                 }) { listPadding, dockHeight ->
                 LazyColumn(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().workbenchBackdropSource().nestedScroll(scrollIntent), state = listState, contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -217,6 +236,7 @@ import dev.remotegpt.client.*
                             imagePreviews = ws.imagePreviews,
                             imageLoading = ws.imageLoading,
                             onLoadImage = vm::loadImagePreview,
+                            revision = revision.takeIf { turn.key == editableMessage?.turnId || turn.key == draft.edit?.turnId },
                         )
                     }
                     items(approvals, key = { "approval:${it.request.key}" }) { pending -> ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) } }

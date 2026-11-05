@@ -21,6 +21,8 @@ internal class ConversationMemoryBudget {
     private fun size(c: Conversation): Long = c.items.sumOf { item ->
         128L + item.text.length + item.imagePaths.sumOf { it.length.toLong() } +
             (item.commandExecution?.command?.length ?: 0) + (item.commandExecution?.workingDirectory?.length ?: 0) +
+            (item.dynamicToolCall?.let { call -> call.tool.length.toLong() + (call.namespace?.length ?: 0) +
+                call.arguments.toString().length + call.contentItems.orEmpty().sumOf { it.toString().length.toLong() } } ?: 0L) +
             item.fileEdits.sumOf { it.path.length.toLong() + it.diff.length } +
             item.questions.sumOf { it.title.length.toLong() + it.options.sumOf { option -> option.length.toLong() } }
     }

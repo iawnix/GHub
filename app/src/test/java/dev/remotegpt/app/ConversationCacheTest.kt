@@ -1,8 +1,11 @@
 package dev.remotegpt.app
 
 import dev.remotegpt.app.data.*
+import dev.remotegpt.app.ui.TaskStatus
+import dev.remotegpt.app.ui.itemTaskStatus
 import dev.remotegpt.client.*
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -70,6 +73,20 @@ class ConversationCacheTest {
         assertEquals(original, decodeConversationCache(stored))
         assertTrue(rows.all { it.toByteArray(Charsets.UTF_8).size < 131_072 })
         assertNull(decodeConversationCache(rows.dropLast(1)))
+    }
+
+    @Test fun dynamicToolMetadataAndLongStructuredResultsSurviveCacheRoundTrip() {
+        val output = "中文😀\n".repeat(5000)
+        val item = Timeline.parseItem(buildJsonObject {
+            put("id", "tool"); put("type", "dynamicToolCall"); put("tool", "search")
+            put("status", "completed"); put("success", false)
+            putJsonObject("arguments") { put("query", "test") }
+            putJsonArray("contentItems") { add(buildJsonObject { put("type", "inputText"); put("text", output) }) }
+        }, "turn", true)
+        val original = Conversation("thread", listOf(item))
+        assertEquals(original, decodeConversationCache(encodeConversationCache(original)))
+        assertEquals(original, planConversationCache(null, original).snapshot)
+        assertEquals(TaskStatus.FAILED, itemTaskStatus(item))
     }
 
     @Test fun existingInstalledCachesStillLoad() {

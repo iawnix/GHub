@@ -85,6 +85,17 @@ import java.io.File
     imageLoading: Set<String> = emptySet(),
     onLoadImage: (String) -> Unit = {},
 ) {
+    // Compaction is a lifecycle marker, with no parameters or summary body to expand.
+    // Ignore the old placeholder text as well, so existing offline caches display correctly.
+    if (item.kind == "contextCompaction") {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TaskStatusIcon(itemTaskStatus(item))
+            Text(tr(if (item.complete) R.string.ui_context_compaction_completed else R.string.ui_context_compaction_running),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
     val user = item.kind == "userMessage"
     val questionReply = remember(item.kind, item.text) { if (user) UserQuestions.parseReply(item.text) else null }
     val tool = item.kind !in setOf("userMessage", "agentMessage")
@@ -107,13 +118,14 @@ import java.io.File
                 }
                 if (tool) Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = if (expanded) tr(R.string.ui_collapse_details) else tr(R.string.ui_expand_details)) { expanded = !expanded }.heightIn(min = 48.dp).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(when (item.kind) { "fileChange" -> WorkbenchIcons.Difference; "commandExecution" -> WorkbenchIcons.Terminal; "imageView" -> WorkbenchIcons.Image; else -> WorkbenchIcons.Checklist }, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(when (item.kind) { "fileChange" -> tr(R.string.ui_file_changes); "commandExecution" -> tr(R.string.ui_command_execution); "imageView" -> tr(R.string.ui_image_view); "plan" -> tr(R.string.ui_execution_plan); "reasoning" -> tr(R.string.ui_reasoning_summary); else -> item.kind }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(when (item.kind) { "fileChange" -> tr(R.string.ui_file_changes); "commandExecution" -> tr(R.string.ui_command_execution); "imageView" -> tr(R.string.ui_image_view); "plan" -> tr(R.string.ui_execution_plan); "reasoning" -> tr(R.string.ui_reasoning_summary); "dynamicToolCall" -> item.dynamicToolCall?.displayName?.takeIf { it.isNotBlank() } ?: tr(R.string.ui_tool_call); else -> item.kind }, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TaskStatusIcon(itemTaskStatus(item))
 
                     Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ExpandMore, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (expanded) {
                     if (item.kind == "commandExecution") CommandExecutionContent(item)
+                    else if (item.kind == "dynamicToolCall") DynamicToolCallContent(item)
                     else if (questionReply != null) QuestionReplyContent(questionReply)
                     else SelectionContainer {
                         if (item.kind == "agentMessage") key(item.identityKey) { StyledMarkdown(item.text.ifBlank { "…" }, item.complete) }

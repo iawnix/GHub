@@ -10,7 +10,7 @@ import tempfile
 
 
 @contextlib.contextmanager
-def isolated_codex(binary=None):
+def isolated_codex(binary=None, model_provider="fixture_offline"):
     executable = shutil.which(binary or "codex")
     if not executable:
         raise RuntimeError("Codex CLI is required for the isolated fixture")
@@ -19,8 +19,8 @@ def isolated_codex(binary=None):
     data.mkdir(mode=0o700)
     # No real credentials or user configuration are copied. All test model
     # requests must explicitly select a localhost fixture provider.
-    (data / "config.toml").write_text('''model_provider = "fixture_offline"
-[model_providers.fixture_offline]
+    (data / "config.toml").write_text(f'''model_provider = {json.dumps(model_provider)}
+[model_providers.{json.dumps(model_provider)}]
 name = "Offline test default"
 base_url = "http://127.0.0.1:1/v1"
 wire_api = "responses"

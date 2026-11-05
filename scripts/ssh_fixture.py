@@ -13,8 +13,8 @@ from codex_fixture import isolated_codex
 
 
 @contextlib.contextmanager
-def servers():
-    with isolated_codex() as codex, tempfile.TemporaryDirectory(prefix="remote-gpt-ssh-") as folder:
+def servers(model_provider="fixture_offline"):
+    with isolated_codex(model_provider=model_provider) as codex, tempfile.TemporaryDirectory(prefix="remote-gpt-ssh-") as folder:
         root = Path(folder)
         key = root / "identity"
         host = root / "host"
