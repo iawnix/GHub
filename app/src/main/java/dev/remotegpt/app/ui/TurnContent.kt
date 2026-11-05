@@ -36,11 +36,12 @@ import dev.remotegpt.client.*
     onLoadImage: (String) -> Unit = {},
     revision: MessageRevisionActions? = null,
 ) {
-    val answer = items.lastOrNull { it.kind == "agentMessage" }
+    val answers = items.filter { it.kind == "agentMessage" && it.questions.isEmpty() }
+    val answer = answers.lastOrNull()
     val files = items.filter { it.kind == "fileChange" }
     val images = items.filter { it.kind == "imageView" }
-    val questions = items.filter { it.questions.isNotEmpty() && it !== answer }
-    val steps = items.filter { it.kind != "userMessage" && it.kind != "fileChange" && it.kind != "imageView" && it.questions.isEmpty() && it !== answer }
+    val questions = items.filter { it.questions.isNotEmpty() }
+    val steps = items.filter { it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "fileChange" && it.kind != "imageView" }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items.filter { it.kind == "userMessage" }.forEach { item ->
             key(item.identityKey) {
@@ -61,14 +62,14 @@ import dev.remotegpt.client.*
                 TimelineCard(image, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
             }
         }
-        answer?.let {
+        answers.forEachIndexed { index, answer ->
             TimelineCard(
-                it,
+                answer,
                 preview,
                 assistantOutput = true,
                 assistantSyncing = syncing,
                 assistantConnected = connected,
-                assistantShowSync = !active && steps.isEmpty(),
+                assistantShowSync = index == answers.lastIndex && !active && steps.isEmpty(),
                 imagePreviews = imagePreviews,
                 imageLoading = imageLoading,
                 onLoadImage = onLoadImage,
@@ -79,7 +80,52 @@ import dev.remotegpt.client.*
     }
 }
 
-@Composable private fun ExecutionSummary(
+/** Render one independently measured row in the conversation LazyColumn. */
+@Composable internal fun ConversationRowContent(
+    row: ConversationRow,
+    preview: (String) -> Unit,
+    turnStatus: String?,
+    syncing: Boolean,
+    connected: Boolean,
+    imagePreviews: Map<String, String>,
+    imageLoading: Set<String>,
+    onLoadImage: (String) -> Unit,
+    revision: MessageRevisionActions?,
+) {
+    when (row) {
+        is ConversationRow.User -> Column {
+            TimelineCard(row.item, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+            UserMessageActions(row.item.text, if (revision?.editableItemId == row.item.id && revision.edit == null)
+                ({ revision.onBegin(row.item.id) }) else null)
+        }
+        is ConversationRow.AssistantBlock -> TimelineCard(
+            row.item.copy(text = row.source), preview,
+            assistantOutput = row.showSync && row.index == 0,
+            assistantSyncing = syncing,
+            assistantConnected = connected,
+            assistantShowSync = row.showSync && row.index == 0,
+            imagePreviews = imagePreviews,
+            imageLoading = imageLoading,
+            onLoadImage = onLoadImage,
+        )
+        is ConversationRow.AssistantFallback -> TimelineCard(
+            row.item, preview, assistantOutput = row.showSync, assistantSyncing = syncing,
+            assistantConnected = connected, imagePreviews = imagePreviews,
+            imageLoading = imageLoading, onLoadImage = onLoadImage,
+        )
+        is ConversationRow.Question -> TimelineCard(row.item, preview)
+        is ConversationRow.Execution -> ExecutionSummary(
+            row.items, row.active, row.fileCount, row.imageCount, syncing, connected,
+            preview, turnStatus, imagePreviews, imageLoading, onLoadImage,
+        )
+        is ConversationRow.Image -> TimelineCard(row.item, preview, imagePreviews = imagePreviews,
+            imageLoading = imageLoading, onLoadImage = onLoadImage)
+        is ConversationRow.Files -> FileSummary(row.items, preview)
+        is ConversationRow.Reply -> ReplyActions(row.item.text, completed = row.completed)
+    }
+}
+
+@Composable internal fun ExecutionSummary(
     steps: List<TimelineItem>,
     active: Boolean,
     fileCount: Int,

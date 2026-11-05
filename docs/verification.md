@@ -106,6 +106,8 @@ ANDROID_SERIAL=emulator-5556 python3 scripts/release_device_check.py
 
 `InterruptedInputTest` 覆盖可编辑范围、输入快照、普通草稿保留和缓存恢复；`InterruptedInputDeviceTest` 检查铅笔入口、复用底部输入框、原消息保留、普通草稿恢复、重新发送和交付不确定时的锁定。
 
+`ConversationRowsTest` 验证一轮中的多个助手消息按顺序分别进入列表，后续消息出现时前文不会被重新归入执行摘要，并且回复操作只绑定到最后一条完整助手消息。Markdown 流式界面测试同时覆盖块解析和稳定复用；会话列表直接按助手块测量，长回复不会再作为一个轮次条目整体组合。
+
 停止后修改的真实 SSH 专项使用独立 daemon、本地模型和临时附件：
 
 ```sh
