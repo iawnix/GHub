@@ -44,7 +44,7 @@ import dev.remotegpt.client.*
                 // The icon already says "folder"; the second line carries what it cannot: size and age.
                 val details = fileDetails(file)
                 ListItem(headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    supportingContent = if (details != null) @Composable { Text(details, maxLines = 1) } else null,
+                    supportingContent = supportingLine(details),
                     leadingContent = {
                         Icon(if (file.directory) WorkbenchIcons.Folder else if (imageName(file.name)) WorkbenchIcons.Image else fileTypeIcon(file.name),
                             null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -114,6 +114,12 @@ private fun Modifier.clickableFile(onClick: () -> Unit) = this.then(Modifier.cli
             android.text.format.DateUtils.MINUTE_IN_MILLIS, android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE).toString()
     }
     return if (file.directory) age else listOfNotNull(formatSize(file.size), age).joinToString(" · ")
+}
+
+/** A declared return type makes the lambda composable; inline `if`/`let` forms do not. */
+private fun supportingLine(text: String?): (@Composable () -> Unit)? {
+    if (text == null) return null
+    return { Text(text, maxLines = 1) }
 }
 
 private fun formatSize(size: Long) = when { size >= 1_048_576 -> "%.1f MiB".format(size / 1_048_576.0); size >= 1024 -> "%.1f KiB".format(size / 1024.0); else -> "${size} B" }

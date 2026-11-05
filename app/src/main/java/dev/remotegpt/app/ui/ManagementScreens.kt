@@ -233,8 +233,7 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                     // Stopping is a secondary action beside the state; connecting stays the full-width primary action.
                     PreferenceRow(tr(R.string.ui_status), if (connected || workspace.connection.busy) WorkbenchIcons.CloudDone else WorkbenchIcons.CloudOff,
                         description = connectionLabel(workspace.connection), tint = statusColor, descriptionColor = statusColor,
-                        trailing = if (canStop) @Composable { OutlinedButton(onClick = onDisconnect, modifier = Modifier.heightIn(min = 48.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp)) { Text(actionLabel, maxLines = 1) } } else null)
+                        trailing = if (canStop) stopAction(actionLabel, onDisconnect) else null)
                     workspace.error?.let { error ->
                         Text(error, Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     }
@@ -275,4 +274,10 @@ private fun hostSummary(profile: HostProfile): String? {
     val address = listOfNotNull(endpoint.username.takeIf { it.isNotBlank() }, endpoint.host).joinToString("@")
     return if (profile.jumps.isEmpty()) address
     else "$address · ${AppStrings.quantity(R.plurals.ui_via_jump_hosts, profile.jumps.size, profile.jumps.size)}"
+}
+
+private fun stopAction(label: String, onClick: () -> Unit): @Composable () -> Unit = {
+    OutlinedButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+        Text(label, maxLines = 1)
+    }
 }
