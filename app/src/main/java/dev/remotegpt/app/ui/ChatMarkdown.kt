@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -26,7 +25,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mikepenz.markdown.compose.MarkdownElement
 import com.mikepenz.markdown.compose.components.*
-import com.mikepenz.markdown.compose.elements.MarkdownParagraph
 import com.mikepenz.markdown.model.*
 import com.mikepenz.markdown.model.State
 import kotlinx.coroutines.delay
@@ -76,11 +74,15 @@ private class ChatMarkdownState : MarkdownState {
     MarkdownElement(block.node, components, block.source)
 }
 
-internal fun chatMarkdownComponents() = markdownComponents(
-    table = { ChatTable(it) },
-    codeFence = { ChatCode(it, fenced = true) },
-    codeBlock = { ChatCode(it, fenced = false) },
-)
+internal fun chatMarkdownComponents(): MarkdownComponents {
+    lateinit var components: MarkdownComponents
+    components = markdownComponents(
+        table = { ChatTable(it, components) },
+        codeFence = { ChatCode(it, fenced = true) },
+        codeBlock = { ChatCode(it, fenced = false) },
+    )
+    return components
+}
 
 @Composable private fun CopyControl(text: String) {
     val context = LocalContext.current
@@ -105,7 +107,7 @@ internal fun chatMarkdownComponents() = markdownComponents(
     CodeBlock(code, language, language.ifBlank { tr(R.string.ui_code) })
 }
 
-@Composable private fun ChatTable(model: MarkdownComponentModel, fullScreen: Boolean = false) {
+@Composable private fun ChatTable(model: MarkdownComponentModel, components: MarkdownComponents, fullScreen: Boolean = false) {
     val rows = model.node.children.filter { it.type == GFMElementTypes.HEADER || it.type == GFMElementTypes.ROW }
     val count = rows.firstOrNull()?.children?.count { it.type == GFMTokenTypes.CELL } ?: 0
     if (count == 0) { Text(model.content.substring(model.node.startOffset, model.node.endOffset)); return }
@@ -148,10 +150,11 @@ internal fun chatMarkdownComponents() = markdownComponents(
                                     else -> Alignment.TopStart
                                 }) {
                                     cells.getOrNull(column)?.let { cell ->
-                                        // The library's table text uses the legacy renderer,
-                                        // which drops rounded inline-code spans and link styling.
-                                        MarkdownParagraph(model.content, cell, Modifier.fillMaxWidth(),
-                                            style = model.typography.table.copy(fontWeight = if (index == 0) FontWeight.SemiBold else FontWeight.Normal, textAlign = alignment))
+                                        // Render cells through the same component tree as the rest
+                                        // of the document so links, inline code and emphasis keep
+                                        // their chat styling instead of using the legacy paragraph
+                                        // renderer.
+                                        MarkdownElement(cell, components, model.content)
                                     }
                                 }
                             }
@@ -169,7 +172,9 @@ internal fun chatMarkdownComponents() = markdownComponents(
     if (expanded && !fullScreen) Dialog(onDismissRequest = { expanded = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(topBar = { TopAppBar(title = { Text(tr(R.string.ui_table)) }, navigationIcon = { IconButton(onClick = { expanded = false }) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back_to_session)) } }) }) { padding ->
             SelectionContainer {
-                Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) { ChatTable(model, fullScreen = true) }
+                Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
+                    ChatTable(model, components, fullScreen = true)
+                }
             }
         }
     }

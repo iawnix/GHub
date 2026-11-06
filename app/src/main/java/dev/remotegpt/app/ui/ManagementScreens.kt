@@ -189,10 +189,6 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(profile.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            hostSummary(profile)?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
                         }
                         Spacer(Modifier.width(8.dp))
                         StatusPill(workspaces[profile.id]?.connection ?: ConnectionStatus.OFFLINE)
@@ -265,15 +261,6 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
             }
         }
     }
-}
-
-/** "user@host · via 1 jump host", the detail that tells similar servers apart. */
-private fun hostSummary(profile: HostProfile): String? {
-    val endpoint = profile.endpoint
-    if (endpoint.host.isBlank()) return null
-    val address = listOfNotNull(endpoint.username.takeIf { it.isNotBlank() }, endpoint.host).joinToString("@")
-    return if (profile.jumps.isEmpty()) address
-    else "$address · ${AppStrings.quantity(R.plurals.ui_via_jump_hosts, profile.jumps.size, profile.jumps.size)}"
 }
 
 private fun stopAction(label: String, onClick: () -> Unit): @Composable () -> Unit = {
