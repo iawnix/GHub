@@ -64,7 +64,7 @@ adb shell am start -n dev.remotegpt.preview/dev.remotegpt.app.DesignPreviewActiv
 | `projects`、`sessions` | 项目与会话列表 |
 | `chat`、`reference` | 聊天和完整输入布局 |
 | `workspace`、`approval` | 工作区操作和审批 |
-| `status`、`markdown`、`code` | 状态、Markdown、命令与代码阅读 |
+| `status`、`markdown`、`math`、`code` | 状态、Markdown、数学公式、命令与代码阅读 |
 | `picker-model`、`picker-effort` | 模型和思考级别选择 |
 | `picker-hosts`、`picker-projects` | 服务器和项目选择 |
 | `terminal`、`terminal-multi` | 终端和多会话切换 |

@@ -13,6 +13,8 @@ import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
+import org.intellij.markdown.parser.sequentialparsers.SequentialParserManager
+import org.intellij.markdown.parser.sequentialparsers.impl.MathParser
 
 /** Immutable, block-local source/offsets: retaining a paragraph must not retain an
  * entire earlier version of a growing answer. Created only on the parser worker. */
@@ -35,7 +37,14 @@ private class DocumentLinks(links: Map<String, String?>) : ReferenceLinkHandler 
 /** Full GFM parsing preserves tables, fences, lists and late reference definitions.
  * Rendering reuses unchanged blocks. Do not share an instance between parse jobs. */
 internal class ChatMarkdownParser {
-    private val flavour = GFMFlavourDescriptor()
+    private val flavour = object : GFMFlavourDescriptor() {
+        private val standard = super.sequentialParserManager
+        // Its dollar parser also consumes prices like "$5 and $10". Our scanner
+        // owns math; unmatched delimiters must stay ordinary Markdown text.
+        override val sequentialParserManager = object : SequentialParserManager() {
+            override fun getParserSequence() = standard.getParserSequence().filterNot { it is MathParser }
+        }
+    }
     private val parser = MarkdownParser(flavour)
     private var previous = emptyMap<Int, ChatMarkdownBlock>()
     private var links: Map<String, String?> = emptyMap()
@@ -47,10 +56,13 @@ internal class ChatMarkdownParser {
             override fun store(label: String, destination: String?) { found[label.lowercase()] = destination }
             override fun find(label: String) = found[label.lowercase()].orEmpty()
         }
-        val parsed = parseMarkdownFlow(text, flavour = flavour, parser = parser, referenceLinkHandler = collector)
+        val ranges = if ('$' in text || "\\(" in text || "\\[" in text)
+            mathRanges(text, parser.buildMarkdownTreeFromString(text)) else emptyList()
+        val parsed = parseMarkdownFlow(if (ranges.isEmpty()) text else maskMath(text, ranges), flavour = flavour, parser = parser, referenceLinkHandler = collector)
             .first { it !is State.Loading }
         if (parsed is State.Error) throw parsed.result
-        val root = (parsed as State.Success).node
+        val parsedRoot = (parsed as State.Success).node
+        val root = if (ranges.isEmpty()) parsedRoot else restoreMath(parsedRoot, ranges)
         val normalized = found.mapKeys { it.key.lowercase() }
         if (normalized != links) {
             links = normalized

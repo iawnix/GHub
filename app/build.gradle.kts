@@ -13,8 +13,8 @@ android {
         resValue("string", "app_name", if (providers.gradleProperty("previewApplicationId").isPresent) "GHub Preview" else "GHub")
         minSdk = 29
         targetSdk = 36
-        versionCode = 50
-        versionName = "0.1.49"
+        versionCode = 51
+        versionName = "0.1.50"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testProguardFiles("proguard-test-rules.pro")
     }
@@ -73,6 +73,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.37.0")
+    implementation("ru.noties:jlatexmath-android:0.2.0")
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")
     implementation("dev.chrisbanes.haze:haze:1.6.10")
     testImplementation("junit:junit:4.13.2")

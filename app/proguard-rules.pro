@@ -36,3 +36,7 @@
 -keep class kotlinx.coroutines.** { *; }
 -keep class dev.remotegpt.client.** { *; }
 -keep class kotlinx.serialization.** { *; }
+
+# JLaTeXMath resolves predefined formulas/macros reflectively; preserve names and
+# entry points used by its bundled XML/font assets in optimized release builds.
+-keep class org.scilab.forge.jlatexmath.** { *; }

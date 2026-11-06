@@ -51,6 +51,7 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     if (initialScreen.startsWith("picker-")) { PickerGallery(initialScreen); return@WorkbenchTheme }
     if (initialScreen == "reference") { ConversationGallery(); return@WorkbenchTheme }
     if (initialScreen == "status") { TaskStatusGallery(); return@WorkbenchTheme }
+    if (initialScreen == "math") { MathGallery(); return@WorkbenchTheme }
     if (initialScreen == "markdown") { MarkdownGallery(); return@WorkbenchTheme }
     if (initialScreen == "code") { CodeGallery(); return@WorkbenchTheme }
     if (initialScreen.startsWith("terminal")) { TerminalGallery(initialScreen == "terminal-multi"); return@WorkbenchTheme }

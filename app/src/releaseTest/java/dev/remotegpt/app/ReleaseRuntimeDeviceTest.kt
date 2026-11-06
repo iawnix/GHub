@@ -19,6 +19,8 @@ import java.util.Base64
 
 /** Run against the actual non-debuggable, R8-optimized release build. */
 class ReleaseRuntimeDeviceTest {
+    private val RELEASE_MATH = "\\[\\frac{1}{3}=\\int_0^1 x^2 dx\\]"
+
     @Test fun optimizedReleaseStartsAndUsesEncryptedKeysSftpAndPty() = runBlocking {
         val args = InstrumentationRegistry.getArguments()
         Assume.assumeTrue("Requires isolated OpenSSH fixture", args.containsKey("releaseSshPort"))
@@ -51,6 +53,9 @@ class ReleaseRuntimeDeviceTest {
             click(label("ui_back_to_session"))
             click(label("ui_copy_code"))
             assertClipboard(code)
+            // The description belongs to the native formula canvas; a raw-text
+            // fallback must not pass this optimized-release smoke check.
+            find(RELEASE_MATH) { it.contentDescription?.toString() == RELEASE_MATH }
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
             SQLiteDatabase.openDatabase(context.getDatabasePath("workbench.db").path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
@@ -104,7 +109,7 @@ class ReleaseRuntimeDeviceTest {
         val conversation = Conversation(thread.id, listOf(
             TimelineItem("command", "turn", "commandExecution", output, true, failed = true, executionStatus = "failed",
                 commandExecution = CommandExecutionDetails(command, thread.cwd, 7, 123)),
-            TimelineItem("reply", "turn", "agentMessage", "```python\n${code}```", true),
+            TimelineItem("reply", "turn", "agentMessage", "```python\n${code}```\n\n$RELEASE_MATH", true),
         ), status = "completed")
         SQLiteDatabase.openOrCreateDatabase(file, null).use { db ->
             val entities = schema.getJSONArray("entities")

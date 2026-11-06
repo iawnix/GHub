@@ -117,3 +117,5 @@ DEVICE_TEST_CLASS=dev.remotegpt.app.InterruptedInputSyncDeviceTest \
 ```
 
 该专项检查重复停止/发送只执行一次、编辑草稿落盘、附件失效时不发送、原始与修改后的历史均保留，以及其他客户端推进会话后阻止旧编辑稿重发。先按前文构建预览包；脚本会清空预览应用数据，并通过临时 `adb reverse` 端口连接隔离 SSH 服务。fixture 默认模型提供方与测试会话保持一致，兼容要求两者一致的新版 Codex CLI。
+
+`ChatMathParserTest` 覆盖四种公式分隔符、代码/价格排除、列表/表格混排、流式前缀及块复用。`MathRenderingDeviceTest` 验证分数、积分、矩阵的实际像素输出、深浅主题、字号、宽公式与源码复制；Release 设备回归也检查经过 R8 优化后的原生公式画布。

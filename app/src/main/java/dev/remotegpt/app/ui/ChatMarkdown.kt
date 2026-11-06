@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mikepenz.markdown.compose.MarkdownElement
+import com.mikepenz.markdown.compose.elements.MarkdownText
 import com.mikepenz.markdown.compose.components.*
 import com.mikepenz.markdown.model.*
 import com.mikepenz.markdown.model.State
@@ -71,20 +72,34 @@ private class ChatMarkdownState : MarkdownState {
 }
 
 @Composable private fun StableMarkdownBlock(block: ChatMarkdownBlock, components: MarkdownComponents) {
-    MarkdownElement(block.node, components, block.source)
+    MathMarkdownContent(block) { MarkdownElement(block.node, components, block.source) }
 }
 
 internal fun chatMarkdownComponents(): MarkdownComponents {
     lateinit var components: MarkdownComponents
+    fun mathWidth(component: MarkdownComponent): MarkdownComponent = { model -> MathInlineWidth { component(model) } }
     components = markdownComponents(
+        paragraph = mathWidth(CurrentComponentsBridge.paragraph),
+        heading1 = mathWidth(CurrentComponentsBridge.heading1),
+        heading2 = mathWidth(CurrentComponentsBridge.heading2),
+        heading3 = mathWidth(CurrentComponentsBridge.heading3),
+        heading4 = mathWidth(CurrentComponentsBridge.heading4),
+        heading5 = mathWidth(CurrentComponentsBridge.heading5),
+        heading6 = mathWidth(CurrentComponentsBridge.heading6),
+        setextHeading1 = mathWidth(CurrentComponentsBridge.setextHeading1),
+        setextHeading2 = mathWidth(CurrentComponentsBridge.setextHeading2),
         table = { ChatTable(it, components) },
         codeFence = { ChatCode(it, fenced = true) },
         codeBlock = { ChatCode(it, fenced = false) },
+        custom = { type, model ->
+            if (type == MATH_DISPLAY) DisplayMath(model.content.substring(model.node.startOffset, model.node.endOffset))
+            else model.node.children.forEach { MarkdownElement(it, components, model.content) }
+        },
     )
     return components
 }
 
-@Composable private fun CopyControl(text: String) {
+@Composable internal fun CopyControl(text: String) {
     val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }
     val haptic = rememberHaptic()
@@ -150,11 +165,12 @@ internal fun chatMarkdownComponents(): MarkdownComponents {
                                     else -> Alignment.TopStart
                                 }) {
                                     cells.getOrNull(column)?.let { cell ->
-                                        // Render cells through the same component tree as the rest
-                                        // of the document so links, inline code and emphasis keep
-                                        // their chat styling instead of using the legacy paragraph
-                                        // renderer.
-                                        MarkdownElement(cell, components, model.content)
+                                        // A cell is an inline container, not a list of separate
+                                        // blocks. Keep links, emphasis and formulas on one text run.
+                                        MathInlineWidth {
+                                            MarkdownText(model.content, cell,
+                                                style = model.typography.table.copy(textAlign = alignment))
+                                        }
                                     }
                                 }
                             }
