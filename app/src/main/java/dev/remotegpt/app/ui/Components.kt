@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -23,16 +24,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.markdownDimens
 import com.mikepenz.markdown.model.NoOpImageTransformerImpl
-import com.mikepenz.markdown.model.markdownExtendedSpans
 import com.mikepenz.markdown.model.markdownPadding
-import com.mikepenz.markdown.compose.extendedspans.ExtendedSpans
-import com.mikepenz.markdown.compose.extendedspans.RoundedCornerSpanPainter
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
 import java.io.File
@@ -202,7 +199,10 @@ import java.io.File
         colors = markdownColor(
             text = colors.onSurface,
             codeBackground = colors.surfaceContainerLow,
-            inlineCodeBackground = colors.surfaceContainerLow,
+            // Inline code stays readable through its monospace face. A filled
+            // pill around every identifier makes dense technical prose noisy,
+            // especially in dark mode; fenced code keeps its own code surface.
+            inlineCodeBackground = Color.Transparent,
             dividerColor = colors.outlineVariant,
             tableBackground = colors.surfaceContainerLow,
         ),
@@ -223,16 +223,6 @@ import java.io.File
             list = body,
             table = compact,
         ),
-        extendedSpans = markdownExtendedSpans {
-            ExtendedSpans(
-                RoundedCornerSpanPainter(
-                    cornerRadius = 6.sp,
-                    padding = RoundedCornerSpanPainter.TextPaddingValues(horizontal = 2.sp, vertical = 1.sp),
-                    topMargin = 1.sp,
-                    bottomMargin = 1.sp,
-                )
-            )
-        },
         padding = markdownPadding(
             block = 8.dp,
             list = 3.dp,
