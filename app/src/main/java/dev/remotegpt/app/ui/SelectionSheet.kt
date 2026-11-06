@@ -32,7 +32,10 @@ internal data class SelectionOption(val id: String, val label: String, val detai
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = glassSurfaceColor(lightAlpha = .97f, darkAlpha = .95f),
+        // Keep the sheet one surface level above the dark canvas. Using the
+        // page surface for both the sheet and every row made the switcher read
+        // as one flat black block in dark mode.
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 2.dp) {
         SelectionList(title, options, selected, onSelect, hint, emptyText, onRefresh, refreshEnabled)
     }
@@ -82,22 +85,24 @@ internal data class SelectionOption(val id: String, val label: String, val detai
     val stackedStatus = LocalDensity.current.fontScale > 1.3f || with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < 360.dp
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
         .clip(RoundedCornerShape(12.dp))
-        .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .72f) else MaterialTheme.colorScheme.surface)
+        .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .86f) else androidx.compose.ui.graphics.Color.Transparent)
         .selectable(selected, role = Role.RadioButton, onClick = { haptic(false); onClick() })
         .heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
             Text(option.label, style = MaterialTheme.typography.bodyLarge,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
-            option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (stackedStatus) option.status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (stackedStatus) option.status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         if (!stackedStatus) option.status?.let {
-            Text(it, Modifier.widthIn(max = 96.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(it, Modifier.widthIn(max = 96.dp), style = MaterialTheme.typography.bodySmall,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // Reserve the same trailing space in every row. Selection is exposed by selectable().
         Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-            if (selected) Icon(WorkbenchIcons.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+            if (selected) Icon(WorkbenchIcons.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }

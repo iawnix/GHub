@@ -7,7 +7,10 @@ import dev.remotegpt.app.R
 import androidx.activity.compose.BackHandler
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -18,7 +21,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.*
@@ -35,17 +41,20 @@ import dev.remotegpt.client.HostProfile
 
 @Composable private fun SectionLabel(label: String) {
     Text(label, Modifier.padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 8.dp),
-        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
 }
 
 @Composable fun PreferenceRow(title: String, icon: ImageVector, value: String? = null, description: String? = null, accent: WorkbenchAccent? = null, onClick: (() -> Unit)? = null,
     tint: androidx.compose.ui.graphics.Color? = null, descriptionColor: androidx.compose.ui.graphics.Color? = null,
     descriptionMonospace: Boolean = false, trailing: (@Composable () -> Unit)? = null) {
     val haptic = rememberHaptic()
+    val iconTint = tint ?: accent?.let { accentColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = { haptic(false); onClick() }) else Modifier)
         .heightIn(min = 60.dp).padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, Modifier.size(20.dp), tint = tint ?: accent?.let { accentColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.width(16.dp))
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(iconTint.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(20.dp), tint = iconTint)
+        }
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             description?.let { Text(it, style = MaterialTheme.typography.bodySmall,
@@ -108,11 +117,18 @@ import dev.remotegpt.client.HostProfile
             item { SectionLabel(tr(R.string.ui_theme)) }
             item {
                 WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
-                    listOf("system" to tr(R.string.ui_system_default), "light" to tr(R.string.ui_light), "dark" to tr(R.string.ui_dark)).forEachIndexed { index, (id, title) ->
-                        if (index > 0) GroupDivider()
-                        Row(Modifier.fillMaxWidth().clickable { onTheme(id) }.heightIn(min = 56.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                            RadioButton(selected = theme == id, onClick = { onTheme(id) })
+                    Column(Modifier.selectableGroup()) {
+                        listOf("system" to tr(R.string.ui_system_default), "light" to tr(R.string.ui_light), "dark" to tr(R.string.ui_dark)).forEachIndexed { index, (id, title) ->
+                            if (index > 0) GroupDivider()
+                            val selected = theme == id
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .72f) else androidx.compose.ui.graphics.Color.Transparent)
+                                .selectable(selected, role = Role.RadioButton, onClick = { onTheme(id) })
+                                .heightIn(min = 56.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                                RadioButton(selected = selected, onClick = null)
+                            }
                         }
                     }
                 }
@@ -133,12 +149,19 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(20.dp)) {
             item {
                 WorkbenchSurface {
-                    listOf("" to tr(R.string.ui_system_default), "zh" to "中文", "en" to "English").forEachIndexed { index, (tag, title) ->
-                        if (index > 0) GroupDivider()
-                        val select = { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag)) }
-                        Row(Modifier.fillMaxWidth().clickable(onClick = select).heightIn(min = 56.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                            RadioButton(selected = current == tag, onClick = select)
+                    Column(Modifier.selectableGroup()) {
+                        listOf("" to tr(R.string.ui_system_default), "zh" to "中文", "en" to "English").forEachIndexed { index, (tag, title) ->
+                            if (index > 0) GroupDivider()
+                            val select = { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag)) }
+                            val selected = current == tag
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .72f) else androidx.compose.ui.graphics.Color.Transparent)
+                                .selectable(selected, role = Role.RadioButton, onClick = select)
+                                .heightIn(min = 56.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                                RadioButton(selected = selected, onClick = null)
+                            }
                         }
                     }
                 }
