@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -30,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.*
@@ -246,7 +248,6 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
     LaunchedEffect(connected) { if (!connected) showEnvironment = false }
     ManagementPage(profile.name, onBack, snackbar = snackbar, actions = {
         HostConnectionButton(workspace, onConnect, onDisconnect)
-        Spacer(Modifier.width(12.dp))
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -254,14 +255,13 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                 Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             } }
             item {
-                Column {
-                    ServerSettingRow(tr(R.string.ui_edit_connection), WorkbenchIcons.Dns, onClick = onEdit)
-                    ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key, authenticationSummary(profile.endpoint, null)) { onEditSection(HostEditorSection.AUTH) }
-                    ServerSettingRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.Route,
-                        if (profile.jumps.isEmpty()) null else tr(R.string.ui_hops, profile.jumps.size)) { onEditSection(HostEditorSection.JUMPS) }
-                    ServerSettingRow(tr(R.string.ui_remote_codex), WorkbenchIcons.Terminal,
-                        if (profile.codexPath == "codex" && profile.defaultCwd.isBlank() && profile.socketPath.isBlank()) null else tr(R.string.ui_custom_configuration)) { onEditSection(HostEditorSection.REMOTE) }
-                }
+                ServerSettingRow(tr(R.string.ui_connection_overview), WorkbenchIcons.Dns,
+                    "${profile.endpoint.username.ifBlank { tr(R.string.ui_not_configured) }} · ${tr(R.string.ui_port)} ${profile.endpoint.port}", onClick = onEdit)
+                ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key, authenticationSummary(profile.endpoint, null)) { onEditSection(HostEditorSection.AUTH) }
+                ServerSettingRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.Route,
+                    if (profile.jumps.isEmpty()) null else tr(R.string.ui_hops, profile.jumps.size)) { onEditSection(HostEditorSection.JUMPS) }
+                ServerSettingRow(tr(R.string.ui_remote_codex), WorkbenchIcons.Terminal,
+                    if (profile.codexPath == "codex" && profile.defaultCwd.isBlank() && profile.socketPath.isBlank()) null else tr(R.string.ui_custom_configuration)) { onEditSection(HostEditorSection.REMOTE) }
             }
             if (connected) item {
                 ServerSettingRow(tr(R.string.ui_remote_environment), WorkbenchIcons.Description) { showEnvironment = true }
@@ -299,14 +299,16 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
     val state = connectionLabel(status)
     TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { PlainTooltip { Text("$state · $action") } }, state = rememberTooltipState()) {
-        OutlinedIconButton(onClick = if (canStop) onDisconnect else onConnect,
-            modifier = Modifier.size(48.dp).semantics { contentDescription = action; stateDescription = state },
-            colors = IconButtonDefaults.outlinedIconButtonColors(contentColor = connectionColor(status))) {
-            Box(contentAlignment = Alignment.Center) {
+        val haptic = rememberHaptic()
+        Box(Modifier.size(48.dp).clickable(onClick = {
+            haptic(false)
+            if (canStop) onDisconnect() else onConnect()
+        }).semantics { contentDescription = action; stateDescription = state }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(36.dp).border(1.dp, connectionColor(status), CircleShape), contentAlignment = Alignment.Center) {
                 Crossfade(icon, animationSpec = tween(150), label = "connectionAction") {
-                    Icon(it, null, Modifier.size(20.dp))
+                    Icon(it, null, Modifier.size(16.dp), tint = connectionColor(status))
                 }
-                if (status.busy && status != ConnectionStatus.WAITING_NETWORK) CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 1.5.dp, color = connectionColor(status))
+                if (status.busy && status != ConnectionStatus.WAITING_NETWORK) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 1.5.dp, color = connectionColor(status))
             }
         }
     }

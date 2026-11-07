@@ -58,25 +58,25 @@ class WorkbenchDeviceTest {
             assertEquals(primary.id, vm.state.value.activeHost)
             assertEquals("/workspace/primary", vm.state.value.workspace.selectedProject)
             compose.activityRule.scenario.recreate()
+            compose.onNodeWithText(tr(R.string.ui_connection_overview)).performClick()
             compose.onNodeWithText(tr(R.string.ui_authentication)).performScrollTo().performClick()
-            compose.onNodeWithContentDescription(tr(R.string.ui_back_to_server_settings)).performClick()
-            compose.onNodeWithText(tr(R.string.ui_edit_connection)).assertExists()
+            compose.onNodeWithContentDescription(tr(R.string.ui_back)).performClick()
+            compose.onNodeWithText(tr(R.string.ui_connection_name)).assertIsDisplayed()
             compose.onNodeWithText(tr(R.string.ui_remote_codex)).performScrollTo().performClick()
-            compose.onNodeWithContentDescription(tr(R.string.ui_back_to_server_settings)).performClick()
-            compose.onNodeWithText(tr(R.string.ui_edit_connection)).performScrollTo().performClick()
-            compose.onNodeWithContentDescription(tr(R.string.ui_back_to_server_settings)).assertIsDisplayed()
+            compose.onNodeWithContentDescription(tr(R.string.ui_back)).performClick()
+            compose.onNodeWithText(tr(R.string.ui_connection_name)).assertIsDisplayed()
             compose.onNodeWithText(tr(R.string.ui_connection_name)).performTextReplacement("Renamed secondary")
             compose.waitUntil { compose.onAllNodes(hasText(tr(R.string.ui_save_connection)) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText(tr(R.string.ui_save_connection)).performClick()
             compose.waitUntil { vm.state.value.profiles.any { it.id == secondary.id && it.name == "Renamed secondary" } }
-            compose.onNodeWithText(tr(R.string.ui_edit_connection)).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(tr(R.string.ui_connection_overview)).assertIsDisplayed()
             assertEquals(primary.id, vm.state.value.activeHost)
             assertEquals("/workspace/primary", vm.state.value.workspace.selectedProject)
 
             // The save snackbar can cover the last row while this test immediately
             // opens the editor again. Clear it before testing the delete action.
             compose.runOnIdle { vm.message(null) }
-            compose.onNodeWithText(tr(R.string.ui_edit_connection)).performClick()
+            compose.onNodeWithText(tr(R.string.ui_connection_overview)).performClick()
             compose.onNodeWithText(tr(R.string.ui_delete_server_connection)).performScrollTo().assertIsDisplayed().performClick()
             compose.onNodeWithText(tr(R.string.ui_delete)).performClick()
             compose.waitUntil { vm.state.value.profiles.none { it.id == secondary.id } }

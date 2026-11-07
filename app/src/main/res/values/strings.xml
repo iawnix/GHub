@@ -205,6 +205,7 @@
     <string name="ui_open_source_licenses" formatted="false">Open-source licenses</string>
     <string name="ui_settings" formatted="false">Settings</string>
     <string name="ui_connection" formatted="false">Connection</string>
+    <string name="ui_connection_overview" formatted="false">Connection overview</string>
     <string name="ui_servers" formatted="false">Servers</string>
     <string name="ui_servers_189">%1$s servers</string>
     <string name="ui_ssh_connections_keys_and_jump_hosts" formatted="false">SSH connections, keys, and jump hosts</string>

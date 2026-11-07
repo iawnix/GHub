@@ -202,6 +202,7 @@
     <string name="ui_open_source_licenses" formatted="false">开源许可</string>
     <string name="ui_settings" formatted="false">设置</string>
     <string name="ui_connection" formatted="false">连接</string>
+    <string name="ui_connection_overview" formatted="false">连接概览</string>
     <string name="ui_servers" formatted="false">服务器</string>
     <string name="ui_servers_189">%1$s 台</string>
     <string name="ui_ssh_connections_keys_and_jump_hosts" formatted="false">SSH 连接、密钥与跳板机</string>
