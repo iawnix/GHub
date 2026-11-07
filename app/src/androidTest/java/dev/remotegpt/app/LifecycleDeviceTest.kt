@@ -81,6 +81,10 @@ class LifecycleDeviceTest {
     }
 
     @Test fun systemAppearanceChangesInPlaceAndExplicitChoiceOverridesIt() {
+        // UiModeManager application night-mode callbacks are available from API 31.
+        // API 29 still exercises the persisted explicit light/dark choices through
+        // the regular lifecycle tests above.
+        org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
         val activity = compose.activity
         val app = activity.application as RemoteApplication
         val vm = app.workbench()
