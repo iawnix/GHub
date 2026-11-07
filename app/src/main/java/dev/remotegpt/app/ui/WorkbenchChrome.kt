@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.ConnectionStatus
 
 @Composable fun WorkbenchHeader(
-    title: String, host: String?, status: ConnectionStatus, conversation: Boolean,
+    title: String, @Suppress("UNUSED_PARAMETER") host: String? = null, status: ConnectionStatus, conversation: Boolean,
     onNavigate: () -> Unit, backLabel: String = tr(R.string.ui_back), large: Boolean = false,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     onMenu: (() -> Unit)? = null, onHosts: (() -> Unit)? = null, onAdd: (() -> Unit)? = null,
@@ -26,25 +26,14 @@ import dev.remotegpt.app.ConnectionStatus
     menuIcon: ImageVector = WorkbenchIcons.MoreHoriz, menuLabel: String = tr(R.string.ui_more_actions),
 ) {
     val heading: @Composable () -> Unit = {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(title, Modifier.weight(1f, fill = false).semantics { contentDescription = title }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (host == null && status == ConnectionStatus.ONLINE) ConnectionIndicator(status)
-            }
-            if (host != null || status != ConnectionStatus.ONLINE) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ConnectionIndicator(status, showLabel = host == null)
-                    host?.let {
-                        Text(it, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, Modifier.weight(1f, fill = false).semantics { contentDescription = title }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ConnectionIndicator(status, showLabel = false)
         }
     }
     val back: @Composable () -> Unit = {
         if (conversation) IconButton(onClick = onNavigate) { Icon(WorkbenchIcons.ArrowBack, backLabel) }
-        else onHosts?.let { IconButton(onClick = it) { Icon(WorkbenchIcons.Dns, tr(R.string.ui_switch_server), Modifier.size(20.dp)) } }
+        else onHosts?.let { IconButton(onClick = it) { Icon(WorkbenchIcons.Dns, tr(R.string.ui_switch_server), Modifier.size(20.dp), tint = functionalIconColor(WorkbenchIcons.Dns)) } }
     }
     val colors = TopAppBarDefaults.topAppBarColors(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,

@@ -9,8 +9,13 @@ import dev.remotegpt.client.Credential
 import dev.remotegpt.client.HostProfile
 import dev.remotegpt.client.wireJson
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class HostEditorSection { BASIC, AUTH, PORT, JUMPS, JUMP, JUMP_AUTH, REMOTE }
+
+@Serializable
+private data class HostEditorPage(val section: HostEditorSection, val jumpId: String)
 
 /** Only connection metadata enters saved state. Unsaved credentials stay in memory. */
 class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
@@ -32,12 +37,35 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
         private set
     var jumpId by mutableStateOf(saved.get<String>(JUMP_ID).orEmpty())
         private set
+    private var history by mutableStateOf(saved.get<String>(HISTORY)?.let {
+        runCatching { wireJson.decodeFromString<List<HostEditorPage>>(it) }.getOrNull()
+    }.orEmpty())
+    val atEntryPage: Boolean get() = history.isEmpty()
     val hasChanges: Boolean get() = profile != originalProfile ||
         profile?.let { value -> (value.jumps + value.endpoint).any {
             (credentials[it.credentialId] ?: Credential()) != (originalCredentials[it.credentialId] ?: Credential())
         } } == true
 
     fun navigate(value: HostEditorSection, endpointId: String = jumpId) {
+        if (value == section && endpointId == jumpId) return
+        updateHistory(history + HostEditorPage(section, jumpId))
+        show(value, endpointId)
+    }
+
+    /** False means the editor was opened here, so Back should leave the draft. */
+    fun goBack(): Boolean {
+        val previous = history.lastOrNull() ?: return false
+        updateHistory(history.dropLast(1))
+        show(previous.section, previous.jumpId)
+        return true
+    }
+
+    private fun updateHistory(value: List<HostEditorPage>) {
+        history = value
+        saved[HISTORY] = wireJson.encodeToString(value)
+    }
+
+    private fun show(value: HostEditorSection, endpointId: String) {
         section = value
         jumpId = endpointId
         saved[SECTION] = value.name
@@ -51,7 +79,8 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
         originalProfile = value
         saved[ORIGINAL] = wireJson.encodeToString(value)
         originalCredentials = emptyMap()
-        navigate(section, "")
+        updateHistory(emptyList())
+        show(section, "")
         saving = false
         credentials = emptyMap()
         loaded = false
@@ -84,6 +113,8 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
         loading = true
         originalProfile = null
         originalCredentials = emptyMap()
+        history = emptyList()
+        saved.remove<String>(HISTORY)
         saved.remove<String>(ORIGINAL)
         saved.remove<String>(SECTION)
         saved.remove<String>(JUMP_ID)
@@ -92,6 +123,7 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
     }
 
     companion object {
+        private const val HISTORY = "host_editor_history"
         private const val ORIGINAL = "host_editor_original"
         private const val SECTION = "host_editor_section"
         private const val JUMP_ID = "host_editor_jump_id"

@@ -53,10 +53,10 @@ import dev.remotegpt.client.HostProfile
     tint: androidx.compose.ui.graphics.Color? = null, descriptionColor: androidx.compose.ui.graphics.Color? = null,
     descriptionMonospace: Boolean = false, trailing: (@Composable () -> Unit)? = null) {
     val haptic = rememberHaptic()
-    val iconTint = tint ?: accent?.let { accentColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val iconTint = tint ?: accent?.let { accentColor(it) } ?: functionalIconColor(icon)
     Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = { haptic(false); onClick() }) else Modifier)
         .heightIn(min = 60.dp).padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(iconTint.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
             Icon(icon, null, Modifier.size(20.dp), tint = iconTint)
         }
         Spacer(Modifier.width(12.dp))
@@ -106,10 +106,9 @@ import dev.remotegpt.client.HostProfile
                     }
                 }
                 item {
-                    Column(Modifier.padding(horizontal = 24.dp, vertical = 32.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("${tr(R.string.app_name)} ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(tr(R.string.ui_no_telemetry_by_default_tasks_run_on), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text("${tr(R.string.app_name)} ${BuildConfig.VERSION_NAME}",
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -214,7 +213,7 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                 val connection = workspaces[profile.id]?.connection ?: ConnectionStatus.OFFLINE
                 WorkbenchSurface(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), onClick = { onOpen(profile) }) {
                     Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(WorkbenchIcons.Dns, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(WorkbenchIcons.Dns, null, Modifier.size(20.dp), tint = functionalIconColor(WorkbenchIcons.Dns))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(profile.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

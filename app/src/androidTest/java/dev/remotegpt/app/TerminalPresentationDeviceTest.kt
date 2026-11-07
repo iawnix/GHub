@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
+import com.termux.terminal.TerminalColors
+import com.termux.terminal.TextStyle
 import com.termux.terminal.TerminalBackend
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
@@ -129,6 +131,86 @@ class TerminalPresentationDeviceTest {
             sessions.single().append(("line\r\n".repeat(10) + "cursor_here").toByteArray())
             assertEquals(1, emulator.cursorRow)
             assertTrue(emulator.screen.transcriptText.contains("cursor_here"))
+        }
+    }
+
+    @Test fun themeChangeRepaintsWithoutReplacingTerminalOrLosingHistoryAndInputState() {
+        var mode by mutableStateOf("light")
+        var expectedPalette = intArrayOf()
+        val tab = TerminalTab("one", "Terminal 1", session())
+        compose.setContent { WorkbenchTheme(mode) {
+            expectedPalette = rememberTerminalPalette()
+            TerminalPane(listOf(tab), "one", "project", "/tmp/project", ConnectionStatus.ONLINE, false, TerminalPreferences(),
+                {}, {}, {}, {}, {}, {}, {}, {})
+        } }
+        compose.onNodeWithContentDescription("Ctrl").performTouchInput { longClick() }
+        lateinit var originalView: TerminalView
+        var transcript = ""
+        var oldBackground = 0
+        compose.runOnIdle {
+            originalView = view()
+            tab.session.append(("history line\r\n".repeat(100) + "prompt> ").toByteArray())
+            originalView.topRow = -15
+            transcript = tab.session.getEmulator()!!.screen.transcriptText
+            oldBackground = originalView.mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]
+        }
+        // Leave a modal open while its underlying terminal changes theme.
+        compose.onNodeWithText("Terminal 1").performClick()
+        compose.runOnIdle { mode = "dark" }
+        compose.onNodeWithText(tr(R.string.terminal_sessions)).assertIsDisplayed()
+        compose.onAllNodesWithText("Terminal 1").onLast().performClick()
+        compose.runOnIdle {
+            assertSame(originalView, view())
+            assertSame(tab.session.getEmulator(), view().mEmulator)
+            assertEquals(-15, view().topRow)
+            assertEquals(transcript, view().mEmulator.screen.transcriptText)
+            val actual = view().mEmulator.mColors.mCurrentColors
+            assertNotEquals(oldBackground, actual[TextStyle.COLOR_INDEX_BACKGROUND])
+            assertArrayEquals(expectedPalette, actual)
+            bytes.reset()
+            view().onCreateInputConnection(EditorInfo()).commitText("ab", 1)
+            assertEquals("\u0001\u0002", output())
+            mode = "light"
+        }
+        compose.runOnIdle {
+            assertSame(originalView, view())
+            assertEquals(-15, view().topRow)
+            assertEquals(oldBackground, view().mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND])
+        }
+    }
+
+    @Test fun remoteColorsSurviveThemeChangesAndOscResetUsesLatestTheme() {
+        var mode by mutableStateOf("light")
+        var expectedPalette = intArrayOf()
+        val tab = TerminalTab("one", "Terminal 1", session())
+        // Remote output can arrive before the view initializes its emulator.
+        tab.session.append("\u001b]11;#123456\u0007".toByteArray())
+        compose.setContent { WorkbenchTheme(mode) {
+            expectedPalette = rememberTerminalPalette()
+            TerminalPane(listOf(tab), "one", "project", "/tmp/project", ConnectionStatus.ONLINE, false, TerminalPreferences(),
+                {}, {}, {}, {}, {}, {}, {}, {})
+        } }
+        var explicitRed = 0
+        compose.runOnIdle {
+            assertEquals(0xFF123456.toInt(), view().mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND])
+            explicitRed = expectedPalette[1]
+            // Explicitly setting a color to its current default still counts as an override.
+            val hex = "%06x".format(explicitRed and 0xffffff)
+            tab.session.append("\u001b]4;1;#$hex\u0007".toByteArray())
+            mode = "dark"
+        }
+        compose.runOnIdle {
+            val colors = view().mEmulator.mColors.mCurrentColors
+            assertEquals(0xFF123456.toInt(), colors[TextStyle.COLOR_INDEX_BACKGROUND])
+            assertEquals(explicitRed, colors[1])
+            assertEquals(expectedPalette[TextStyle.COLOR_INDEX_FOREGROUND], colors[TextStyle.COLOR_INDEX_FOREGROUND])
+            tab.session.append("\u001b]111\u0007\u001b]104;1\u0007".toByteArray())
+            assertArrayEquals(expectedPalette, colors)
+            // Another session must not inherit this session's theme defaults or overrides.
+            assertArrayEquals(TerminalColors.COLOR_SCHEME.mDefaultColors, TerminalColors().mCurrentColors)
+            tab.session.append("\u001b]10;#abcdef\u0007".toByteArray())
+            tab.session.reset()
+            assertArrayEquals(expectedPalette, colors)
         }
     }
 

@@ -14,6 +14,18 @@ public final class TerminalColors {
      */
     public final int[] mCurrentColors = new int[TextStyle.NUM_INDEXED_COLORS];
 
+    // Per-session defaults let the host theme change without discarding remote OSC overrides.
+    private final int[] mDefaultColors = COLOR_SCHEME.mDefaultColors.clone();
+    private final boolean[] mOverridden = new boolean[TextStyle.NUM_INDEXED_COLORS];
+
+    public void setDefaultColors(int[] colors) {
+        if (colors.length != TextStyle.NUM_INDEXED_COLORS) throw new IllegalArgumentException("Invalid palette size");
+        System.arraycopy(colors, 0, mDefaultColors, 0, colors.length);
+        for (int i = 0; i < colors.length; i++) {
+            if (!mOverridden[i]) mCurrentColors[i] = colors[i];
+        }
+    }
+
     /** Create a new instance with default colors from the theme. */
     public TerminalColors() {
         reset();
@@ -21,12 +33,14 @@ public final class TerminalColors {
 
     /** Reset a particular indexed color with the default color from the color theme. */
     public void reset(int index) {
-        mCurrentColors[index] = COLOR_SCHEME.mDefaultColors[index];
+        mOverridden[index] = false;
+        mCurrentColors[index] = mDefaultColors[index];
     }
 
     /** Reset all indexed colors with the default color from the color theme. */
     public void reset() {
-        System.arraycopy(COLOR_SCHEME.mDefaultColors, 0, mCurrentColors, 0, TextStyle.NUM_INDEXED_COLORS);
+        java.util.Arrays.fill(mOverridden, false);
+        System.arraycopy(mDefaultColors, 0, mCurrentColors, 0, TextStyle.NUM_INDEXED_COLORS);
     }
 
     /**
@@ -72,7 +86,10 @@ public final class TerminalColors {
     /** Try parse a color from a text parameter and into a specified index. */
     public void tryParseColor(int intoIndex, String textParameter) {
         int c = parse(textParameter);
-        if (c != 0) mCurrentColors[intoIndex] = c;
+        if (c != 0) {
+            mOverridden[intoIndex] = true;
+            mCurrentColors[intoIndex] = c;
+        }
     }
 
     /**

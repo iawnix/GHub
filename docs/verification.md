@@ -126,8 +126,12 @@ DEVICE_TEST_CLASS=dev.remotegpt.app.InterruptedInputSyncDeviceTest \
 
 图标更换后用 `DesignPreviewActivity --es screen icons --es theme dark`（以及 `light`）查看完整 Phosphor Bold 图集，在 16dp / 20dp 实际尺寸下核对形状和填充；预览会实例化所有图标，包括不常见页面使用的图标。运行 `python3 scripts/generate_icons.py` 后生成文件应保持一致，常规构建不需要下载图标。
 
-`HostEditorDeviceTest` 覆盖分组编辑共用草稿、缺失私钥跳转认证、无效跳板机定位与删除、未保存凭据的取消/丢弃，以及保存期间禁用修改和返回。`LifecycleDeviceTest` 检查元数据、编辑分组恢复与凭据不进入 SavedState；`WorkbenchDeviceTest` 检查编辑/删除另一服务器不影响当前工作区。
+`HostEditorDeviceTest` 覆盖分组编辑共用草稿、缺失私钥跳转认证、无效跳板机定位与删除、未保存凭据的取消/丢弃，保存期间禁用修改和返回、直接打开配置分组时就地保存及返回详情、系统返回与跳板机多层返回路径。`LifecycleDeviceTest` 检查元数据、编辑分组与返回路径恢复及凭据不进入 SavedState；`WorkbenchDeviceTest` 检查编辑/删除另一服务器不影响当前工作区。
 
 服务器布局离线预览使用 `DesignPreviewActivity --es screen host`、`host-editor`、`host-editor-auth`、`host-editor-jumps`、`host-editor-remote`。本轮在 API 35 模拟器核对中英文、深浅主题、320dp 宽度和 200% 字号；未执行真实远端 SSH 用例或真机 TalkBack 检查。
 
 `HostDetailsDeviceTest` 同时验证标题栏单个连接图标按钮的 48dp 点击区域、状态读屏信息、连接/取消/断开/停止重连/初始化操作，以及远端环境详情的展开与关闭。
+
+主题统一的专项回归：`LifecycleDeviceTest` 验证应用深浅／跟随系统模式、系统明暗变化、手动选择优先、系统栏与原生强调色一致，切换时 Activity、编辑分组与未保存凭据保持不变。`TerminalPresentationDeviceTest` 验证弹窗打开时切换主题，终端视图、模拟器、历史输出、滚动位置与锁定修饰键保持不变；还覆盖初始化前 OSC 颜色、自定义颜色跨主题保留、OSC 重置恢复最新主题，以及会话之间颜色隔离。
+
+本轮 API 35 上上述 13 项测试通过，服务器编辑专项 7 项通过；预览构建与 lint 通过（0 错误，31 条既有警告）。实机渲染路径的离线预览核对服务器详情、设置、服务器切换面板和终端的深浅主题，截图在 `dist/theme-unification/`。按实际使用角色计算的 114 组前景／背景配对均达到相应阈值：正文／次要文字与代码 4.5:1，功能／状态图标 3:1；次要文字最低 4.554:1、功能图标最低 4.313:1、终端彩色 ANSI 文字在默认背景上最低 4.526:1。结果在 `dist/theme-unification/contrast.json`，不包含远端程序自行指定的颜色组合。本轮未连接真实 SSH 或执行真机 TalkBack 检查。

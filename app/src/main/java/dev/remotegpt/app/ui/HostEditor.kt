@@ -48,7 +48,7 @@ import kotlinx.coroutines.*
         onDelete = { vm.deleteProfile(profile); onClose() })
 }
 
-/** All sections edit one draft. Only the root Save action writes it to storage. */
+/** All sections edit one draft. The entry page owns Save, and Back retraces the actual navigation path. */
 @Composable fun HostEditorForm(editor: HostEditorViewModel, existing: Boolean = false, reconnect: Boolean = false,
     loadError: String? = null, snackbar: SnackbarHostState? = null,
     backLabel: String = tr(R.string.ui_back_to_servers), onClose: () -> Unit,
@@ -65,16 +65,18 @@ import kotlinx.coroutines.*
     val context = LocalContext.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     fun navigate(page: HostEditorSection, id: String = editor.jumpId) {
+        invalidField = null
+        error = null
         focusManager.clearFocus()
         editor.navigate(page, id)
     }
     fun back() {
         if (saving) return
-        when (section) {
-            HostEditorSection.BASIC -> if (editor.hasChanges) discarding = true else onClose()
-            HostEditorSection.JUMP_AUTH -> navigate(HostEditorSection.JUMP)
-            HostEditorSection.JUMP -> navigate(HostEditorSection.JUMPS)
-            else -> navigate(HostEditorSection.BASIC)
+        invalidField = null
+        error = null
+        focusManager.clearFocus()
+        if (!editor.goBack()) {
+            if (editor.hasChanges) discarding = true else onClose()
         }
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -105,7 +107,12 @@ import kotlinx.coroutines.*
     fun save() {
         val issue = validateHostDraft(profile, editor.credentials)
         if (issue != null) {
-            navigate(issue.section, issue.endpointId)
+            // Build the hop hierarchy so Back and Remove both return to its list.
+            if (issue.section == HostEditorSection.JUMP || issue.section == HostEditorSection.JUMP_AUTH) {
+                if (section != HostEditorSection.JUMPS) navigate(HostEditorSection.JUMPS)
+                navigate(HostEditorSection.JUMP, issue.endpointId)
+                if (issue.section == HostEditorSection.JUMP_AUTH) navigate(HostEditorSection.JUMP_AUTH, issue.endpointId)
+            } else navigate(issue.section)
             invalidField = issue.field
             error = tr(issue.message)
             return
@@ -129,11 +136,11 @@ import kotlinx.coroutines.*
     Scaffold(modifier = Modifier.imePadding(), snackbarHost = { snackbar?.let { SnackbarHost(it) } }, topBar = {
         TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = {
             IconButton(onClick = ::back, enabled = !saving) {
-                Icon(WorkbenchIcons.ArrowBack, if (section == HostEditorSection.BASIC) backLabel else tr(R.string.ui_back))
+                Icon(WorkbenchIcons.ArrowBack, if (editor.atEntryPage) backLabel else tr(R.string.ui_back))
             }
         }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
     }, bottomBar = {
-        if (section == HostEditorSection.BASIC) Surface {
+        if (editor.atEntryPage) Surface {
             Button(onClick = ::save, enabled = !editor.loading && !saving,
                 modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp).heightIn(min = 48.dp)) {
                 Text(tr(if (saving) R.string.ui_saving else R.string.ui_save_connection))
@@ -144,12 +151,10 @@ import kotlinx.coroutines.*
             Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
                 .verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (editor.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (section != HostEditorSection.BASIC) Text(tr(R.string.ui_shared_connection_draft),
+                if (reconnect && editor.atEntryPage) Text(tr(R.string.ui_connection_changes_require_reconnect),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 when (section) {
                     HostEditorSection.BASIC -> {
-                        if (reconnect) Text(tr(R.string.ui_connection_changes_require_reconnect), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                         DraftField(profile.name, { editor.updateProfile(profile.copy(name = it)) }, R.string.ui_connection_name,
                             "name", invalidField, enabled = !saving)
                         EndpointAddressFields(profile.endpoint, ::changeEndpoint, invalidField, enabled = !saving)
@@ -169,10 +174,10 @@ import kotlinx.coroutines.*
                         }
                     }
                     HostEditorSection.PORT -> DraftField(if (profile.endpoint.port == 0) "" else profile.endpoint.port.toString(),
-                        { changeEndpoint(profile.endpoint.copy(port = it.toIntOrNull() ?: 0)) }, R.string.ui_port, "port", invalidField, KeyboardType.Number)
+                        { changeEndpoint(profile.endpoint.copy(port = it.toIntOrNull() ?: 0)) }, R.string.ui_port, "port", invalidField, KeyboardType.Number, enabled = !saving)
                     HostEditorSection.AUTH, HostEditorSection.JUMP_AUTH -> endpoint?.let { value ->
                         AuthenticationFields(value, editor.credentials[value.credentialId] ?: Credential(), invalidField,
-                            enabled = !editor.loading, onEndpoint = ::changeEndpoint,
+                            enabled = !editor.loading && !saving, onEndpoint = ::changeEndpoint,
                             onCredential = { editor.updateCredential(value.credentialId, it) }, onImport = {
                                 editor.importTarget = value.credentialId
                                 picker.launch(arrayOf("*/*"))
@@ -185,32 +190,32 @@ import kotlinx.coroutines.*
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         profile.jumps.forEachIndexed { index, hop ->
                             ServerSettingRow(tr(R.string.ui_hop, index + 1), WorkbenchIcons.Dns,
-                                hop.host.ifBlank { tr(R.string.ui_not_configured) }) { navigate(HostEditorSection.JUMP, hop.credentialId) }
+                                hop.host.ifBlank { tr(R.string.ui_not_configured) }, enabled = !saving) { navigate(HostEditorSection.JUMP, hop.credentialId) }
                         }
                         OutlinedButton(onClick = {
                             val hop = SshEndpoint()
                             editor.updateProfile(profile.copy(jumps = profile.jumps + hop))
                             navigate(HostEditorSection.JUMP, hop.credentialId)
-                        }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        }, enabled = !saving, modifier = Modifier.heightIn(min = 48.dp)) {
                             Icon(WorkbenchIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(tr(R.string.ui_add_jump_host))
                         }
                     }
                     HostEditorSection.JUMP -> endpoint?.let { hop ->
                         Text(tr(R.string.ui_hop, profile.jumps.indexOf(hop) + 1), style = MaterialTheme.typography.titleMedium)
-                        EndpointAddressFields(hop, ::changeEndpoint, invalidField)
+                        EndpointAddressFields(hop, ::changeEndpoint, invalidField, enabled = !saving)
                         DraftField(if (hop.port == 0) "" else hop.port.toString(), { changeEndpoint(hop.copy(port = it.toIntOrNull() ?: 0)) },
-                            R.string.ui_port, "port", invalidField, KeyboardType.Number)
+                            R.string.ui_port, "port", invalidField, KeyboardType.Number, enabled = !saving)
                         ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key,
-                            authenticationSummary(hop, editor.credentials[hop.credentialId], editor.loading)) { navigate(HostEditorSection.JUMP_AUTH) }
+                            authenticationSummary(hop, editor.credentials[hop.credentialId], editor.loading), enabled = !saving) { navigate(HostEditorSection.JUMP_AUTH) }
                         TextButton(onClick = {
                             editor.updateProfile(profile.copy(jumps = profile.jumps.filterNot { it.credentialId == hop.credentialId }))
-                            navigate(HostEditorSection.JUMPS)
-                        }) { Text(tr(R.string.ui_remove_jump_host), color = MaterialTheme.colorScheme.error) }
+                            back()
+                        }, enabled = !saving) { Text(tr(R.string.ui_remove_jump_host), color = MaterialTheme.colorScheme.error) }
                     }
                     HostEditorSection.REMOTE -> {
-                        DraftField(profile.codexPath, { editor.updateProfile(profile.copy(codexPath = it)) }, R.string.ui_executable_path, "codex", invalidField)
-                        DraftField(profile.defaultCwd, { editor.updateProfile(profile.copy(defaultCwd = it)) }, R.string.ui_default_working_directory, "cwd", invalidField)
-                        DraftField(profile.socketPath, { editor.updateProfile(profile.copy(socketPath = it)) }, R.string.ui_service_socket_path_optional, "socket", invalidField)
+                        DraftField(profile.codexPath, { editor.updateProfile(profile.copy(codexPath = it)) }, R.string.ui_executable_path, "codex", invalidField, enabled = !saving)
+                        DraftField(profile.defaultCwd, { editor.updateProfile(profile.copy(defaultCwd = it)) }, R.string.ui_default_working_directory, "cwd", invalidField, enabled = !saving)
+                        DraftField(profile.socketPath, { editor.updateProfile(profile.copy(socketPath = it)) }, R.string.ui_service_socket_path_optional, "socket", invalidField, enabled = !saving)
                         Text(tr(R.string.ui_leave_empty_to_use_the_default_shared), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -291,7 +296,7 @@ internal fun validateHostDraft(profile: HostProfile, credentials: Map<String, Cr
             val focus = remember { androidx.compose.ui.focus.FocusRequester() }
             LaunchedEffect(invalid) { if (invalid == "key") focus.requestFocus() }
             OutlinedButton(onClick = onImport, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).focusRequester(focus)) {
-                Icon(WorkbenchIcons.Key, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
+                Icon(WorkbenchIcons.Key, null, Modifier.size(20.dp), tint = if (enabled) functionalIconColor(WorkbenchIcons.Key) else LocalContentColor.current); Spacer(Modifier.width(8.dp))
                 Text(tr(if (secret.privateKey.isBlank()) R.string.ui_import_private_key else R.string.ui_key_imported_replace))
             }
             SecretField(secret.passphrase, { onCredential(secret.copy(passphrase = it)) }, R.string.ui_key_passphrase_optional, enabled)
@@ -312,7 +317,7 @@ internal fun validateHostDraft(profile: HostProfile, credentials: Map<String, Cr
     summary: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).heightIn(min = if (summary == null) 56.dp else 64.dp).padding(vertical = 12.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, null, Modifier.size(20.dp), tint = if (enabled) functionalIconColor(icon) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .38f))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (summary != null) Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

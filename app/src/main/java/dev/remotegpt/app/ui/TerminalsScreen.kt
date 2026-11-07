@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
 import dev.remotegpt.app.*
 import dev.remotegpt.app.R
@@ -68,6 +69,17 @@ import kotlin.math.roundToInt
     val modifiers = remember(selected?.id) { TerminalModifiers() }
     var view by remember { mutableStateOf<TerminalView?>(null) }
     var running by remember(selected?.session) { mutableStateOf(selected?.session?.isRunning() == true) }
+    val palette = rememberTerminalPalette()
+    val currentPalette by rememberUpdatedState(palette)
+    var terminalBackground by remember(selected?.id) { mutableStateOf(Color(palette[TextStyle.COLOR_INDEX_BACKGROUND])) }
+    fun updatePalette(terminal: TerminalView, colorsForTheme: IntArray) {
+        terminal.mEmulator?.mColors?.let { colors ->
+            colors.setDefaultColors(colorsForTheme)
+            terminalBackground = Color(colors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND])
+        }
+        // Repainting must not reset scrollback, selection, or the live PTY session.
+        terminal.invalidate()
+    }
     val density = LocalDensity.current
     val imeVisible = WindowInsets.isImeVisible
     val keyboardHeight = (WindowInsets.ime.getBottom(density) - WindowInsets.navigationBars.getBottom(density)).coerceAtLeast(0)
@@ -103,14 +115,8 @@ import kotlin.math.roundToInt
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(selected?.name ?: tr(R.string.ui_terminal_290), Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        ConnectionIndicator(connection, showLabel = false)
                         Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 4.dp).size(16.dp))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ConnectionIndicator(connection)
-                        Text(project + if (selected != null && !running) " · " + tr(R.string.terminal_ended) else "",
-                            modifier = Modifier.weight(1f, fill = false),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }, navigationIcon = {
@@ -147,15 +153,18 @@ import kotlin.math.roundToInt
             } else {
                 // An outer inset keeps drawing, text selection and PTY dimensions in
                 // the same coordinate system; TerminalView does not support padding.
-                Row(Modifier.weight(1f).fillMaxWidth().background(Color.Black)) {
+                Row(Modifier.weight(1f).fillMaxWidth().background(terminalBackground)) {
                     Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 8.dp, vertical = if (compactInput) 2.dp else 6.dp)) {
                         key(selected.id) {
                             AndroidView(factory = { ctx ->
                                 TerminalView(ctx, null).apply {
                                     isFocusable = true; isFocusableInTouchMode = true
-                                    setTextSize((fontSize * density.density * density.fontScale).roundToInt())
+                                    val pixels = (fontSize * density.density * density.fontScale).roundToInt()
+                                    setTextSize(pixels)
+                                    tag = pixels
                                     setTypeface(Typeface.MONOSPACE)
                                     setTerminalViewClient(object : ViewCallbacks() {
+                                        override fun onEmulatorSet() { updatePalette(this@apply, currentPalette) }
                                         override fun readControlKey() = modifiers.ctrl.active
                                         override fun readAltKey() = modifiers.alt.active
                                         override fun readShiftKey() = modifiers.shift.active
@@ -174,11 +183,17 @@ import kotlin.math.roundToInt
                             }, modifier = Modifier.fillMaxSize(), update = { terminal ->
                                 val pixels = (fontSize * density.density * density.fontScale).roundToInt()
                                 if (terminal.tag != pixels) { terminal.setTextSize(pixels); terminal.tag = pixels }
-                                terminal.onScreenUpdated()
+                                updatePalette(terminal, palette)
                             }, onRelease = { terminal -> if (view === terminal) view = null })
                             DisposableEffect(selected.session, view) {
                                 val attached = view
-                                selected.session.onChanged = { running = selected.session.isRunning(); attached?.onScreenUpdated() }
+                                selected.session.onChanged = {
+                                    running = selected.session.isRunning()
+                                    attached?.let { terminal ->
+                                        terminal.mEmulator?.mColors?.let { terminalBackground = Color(it.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]) }
+                                        terminal.onScreenUpdated()
+                                    }
+                                }
                                 onDispose { selected.session.onChanged = null }
                             }
                         }
@@ -216,7 +231,8 @@ import kotlin.math.roundToInt
         LazyColumn(Modifier.weight(1f, fill = false)) {
             items(terminals, key = { it.id }) { tab ->
                 ListItem(headlineContent = { Text(tab.name) }, supportingContent = { if (!tab.session.isRunning()) Text(tr(R.string.terminal_ended)) },
-                    leadingContent = { Icon(if (tab.id == selected?.id) WorkbenchIcons.Check else WorkbenchIcons.Terminal, null) },
+                    leadingContent = { Icon(if (tab.id == selected?.id) WorkbenchIcons.Check else WorkbenchIcons.Terminal, null,
+                        tint = if (tab.id == selected?.id) MaterialTheme.colorScheme.onSurfaceVariant else functionalIconColor(WorkbenchIcons.Terminal)) },
                     trailingContent = { IconButton(onClick = { closing = tab.id }) { Icon(WorkbenchIcons.Close, tr(R.string.ui_close_330, tab.name), Modifier.size(20.dp)) } },
                     modifier = Modifier.clickable { onSelect(tab.id); switching = false }.semantics { this.selected = tab.id == selected?.id })
             }

@@ -215,7 +215,6 @@
     <string name="ui_system_default" formatted="false">跟随系统</string>
     <string name="ui_data_and_diagnostics" formatted="false">数据与诊断</string>
     <string name="ui_cache_diagnostic_logs_and_licenses" formatted="false">缓存、诊断记录与开源许可</string>
-    <string name="ui_no_telemetry_by_default_tasks_run_on" formatted="false">默认无遥测。任务在远端运行。</string>
     <string name="ui_theme" formatted="false">主题</string>
     <string name="ui_local_data" formatted="false">本地数据</string>
     <string name="ui_clear_session_cache" formatted="false">清除会话缓存</string>
@@ -569,6 +568,5 @@
     <string name="ui_configured">已配置</string>
     <string name="ui_not_configured">未配置</string>
     <string name="ui_custom_configuration">自定义</string>
-    <string name="ui_shared_connection_draft">返回连接配置页统一保存。</string>
     <string name="ui_ask_when_connecting">连接时询问</string>
 </resources>

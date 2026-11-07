@@ -14,6 +14,7 @@ Only terminal-emulator and terminal-view Java sources are included. TerminalSess
 - The adapter bounds pending UI reads and initial output buffering.
 - Added a default `TerminalViewClient.onKeyInput()` callback, called after input is consumed, so the app can implement one-shot and locked modifier keys while retaining upstream key encoding.
 - Reduced the view's minimum row count from four to two to keep the cursor visible in short viewports, including landscape layouts with the keyboard open.
+- Added per-session theme defaults to `TerminalColors`; theme changes preserve remote OSC overrides, and OSC resets restore the latest theme defaults. The app repaints palette changes without resetting scrollback.
 - Gradle configuration is maintained by this project; no upstream Termux app, packages or shell process launcher is included.
 
 The upstream license notice is copied to `../licenses/Termux-LICENSE.md`.

@@ -185,7 +185,6 @@ import java.util.UUID
                     state.tab == WorkspaceTab.TERMINAL -> tr(R.string.ui_terminal_290)
                     else -> state.profile?.name ?: tr(R.string.app_name)
                 },
-                host = if (showConversation || state.tab != WorkspaceTab.SESSIONS) state.project?.name else null,
                 status = state.workspace.connection,
                 conversation = !showHome,
                 onNavigate = { vm.navigateBack() },

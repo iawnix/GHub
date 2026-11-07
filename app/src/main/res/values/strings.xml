@@ -218,7 +218,6 @@
     <string name="ui_system_default" formatted="false">System default</string>
     <string name="ui_data_and_diagnostics" formatted="false">Data and diagnostics</string>
     <string name="ui_cache_diagnostic_logs_and_licenses" formatted="false">Cache, diagnostic logs, and licenses</string>
-    <string name="ui_no_telemetry_by_default_tasks_run_on" formatted="false">No telemetry by default. Tasks run on the server.</string>
     <string name="ui_theme" formatted="false">Theme</string>
     <string name="ui_local_data" formatted="false">Local data</string>
     <string name="ui_clear_session_cache" formatted="false">Clear session cache</string>
@@ -583,6 +582,5 @@
     <string name="ui_configured">Configured</string>
     <string name="ui_not_configured">Not configured</string>
     <string name="ui_custom_configuration">Custom</string>
-    <string name="ui_shared_connection_draft">Save all changes on the connection page.</string>
     <string name="ui_ask_when_connecting">Ask when connecting</string>
 </resources>

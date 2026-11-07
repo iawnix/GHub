@@ -27,8 +27,10 @@ import dev.remotegpt.client.TimelineItem
 /** Debug-only offline gallery. Sample content, no SSH connections or protocol calls. */
 class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         val dark = intent.getStringExtra("theme") == "dark"
+        delegate.localNightMode = if (dark) androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+            else androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
+        super.onCreate(savedInstanceState)
         val bars = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
             else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)

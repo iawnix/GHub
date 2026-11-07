@@ -45,7 +45,7 @@ import java.io.File
 
 /** One mapping for every connection indicator: header and server rows. */
 @Composable internal fun connectionColor(status: ConnectionStatus): androidx.compose.ui.graphics.Color = when (status) {
-    ConnectionStatus.ONLINE -> MaterialTheme.colorScheme.onSurfaceVariant
+    ConnectionStatus.ONLINE -> LocalWorkbenchSemanticColors.current.success
     ConnectionStatus.CONNECTING, ConnectionStatus.CHECKING, ConnectionStatus.WAITING_NETWORK, ConnectionStatus.RECONNECTING, ConnectionStatus.SYNCING -> accentColor(WorkbenchAccent.BLUE)
     ConnectionStatus.ERROR -> MaterialTheme.colorScheme.error
     ConnectionStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant

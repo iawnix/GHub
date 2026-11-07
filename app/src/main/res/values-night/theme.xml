@@ -1,0 +1,6 @@
+<resources>
+    <!-- Native widgets and the launch window mirror the Compose theme. -->
+    <color name="workbench_accent">#B0C1DF</color>
+    <color name="window_background">#17191C</color>
+    <bool name="light_system_bars">false</bool>
+</resources>

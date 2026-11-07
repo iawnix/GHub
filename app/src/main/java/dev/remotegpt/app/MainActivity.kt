@@ -9,7 +9,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.appcompat.app.AppCompatDelegate
 import dev.remotegpt.app.ui.*
 
 class MainActivity : AppCompatActivity() {
@@ -21,14 +22,23 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContent {
             val state by vm.uiState.collectAsStateWithLifecycle()
-            val dark = state.theme == "dark" || (state.theme == "system" && isSystemInDarkTheme())
-            DisposableEffect(dark) {
-                val bars = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-                    else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
-                enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
-                onDispose {}
+            LaunchedEffect(state.theme) {
+                delegate.localNightMode = when (state.theme) {
+                    "dark" -> AppCompatDelegate.MODE_NIGHT_YES
+                    "light" -> AppCompatDelegate.MODE_NIGHT_NO
+                    else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+                }
             }
-            WorkbenchTheme(state.theme) { Workbench(vm, state) }
+            WorkbenchTheme(state.theme) {
+                val dark = LocalWorkbenchDarkTheme.current
+                DisposableEffect(dark) {
+                    val bars = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                        else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                    enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+                    onDispose {}
+                }
+                Workbench(vm, state)
+            }
         }
         // Recreation (rotation, theme) must not reopen a conversation the user has since left.
         if (savedInstanceState == null) openFromNotification(intent)

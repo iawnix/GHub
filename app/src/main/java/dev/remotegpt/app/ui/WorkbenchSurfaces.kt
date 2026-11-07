@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
 enum class WorkbenchAccent { BLUE, TEAL, AMBER }
@@ -23,12 +22,12 @@ enum class WorkbenchAccent { BLUE, TEAL, AMBER }
     lightAlpha: Float = .90f,
     darkAlpha: Float = .88f,
 ): Color {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val dark = LocalWorkbenchDarkTheme.current
     return MaterialTheme.colorScheme.surface.copy(alpha = if (dark) darkAlpha else lightAlpha)
 }
 
 @Composable internal fun glassBorderColor(): Color {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val dark = LocalWorkbenchDarkTheme.current
     return if (dark) Color.White.copy(alpha = .12f)
     else MaterialTheme.colorScheme.outlineVariant.copy(alpha = .72f)
 }
