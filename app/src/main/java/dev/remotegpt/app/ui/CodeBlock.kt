@@ -1,9 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package dev.remotegpt.app.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -17,7 +14,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
@@ -86,13 +82,15 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
             if (inlineControls) Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.Top) {
                 // 6dp + the text's 8dp inset centers the first 20sp line on the 48dp button.
                 code(Modifier.weight(1f).padding(top = 6.dp, bottom = 6.dp))
-                CodeCopyControl(source, copyLabel)
+                Column {
+                    ConversationCopyButton(source, copyLabel)
+                    if (document?.shortened == true || overflow) ConversationActionButton(
+                        WorkbenchIcons.Fullscreen, tr(R.string.ui_view_full_content), { full = true })
+                }
             } else {
-                CodeToolbar(title, source, copyLabel, wrap) { wrap = !wrap }
+                CodeToolbar(title, source, copyLabel, wrap, { wrap = !wrap },
+                    onExpand = if (document?.shortened == true || overflow) ({ full = true }) else null)
                 code(Modifier.fillMaxWidth())
-            }
-            if (document?.shortened == true || overflow) TextButton(onClick = { full = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(tr(R.string.ui_view_full_content))
             }
         }
     }
@@ -102,12 +100,14 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
     if (full) FullCodeDialog(source, language, title, copyLabel, wrap, { wrap = !wrap }) { full = false }
 }
 
-@Composable private fun CodeToolbar(title: String, source: String, copyLabel: String, wrap: Boolean, onWrap: () -> Unit) {
+@Composable private fun CodeToolbar(title: String, source: String, copyLabel: String, wrap: Boolean,
+    onWrap: () -> Unit, onExpand: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         WrapControl(wrap, onWrap)
-        CodeCopyControl(source, copyLabel)
+        if (onExpand != null) ConversationActionButton(WorkbenchIcons.Fullscreen, tr(R.string.ui_view_full_content), onExpand)
+        ConversationCopyButton(source, copyLabel)
     }
 }
 
@@ -124,20 +124,6 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
         )) {
         Icon(WorkbenchIcons.WrapText, tr(R.string.ui_wrap_lines), Modifier.size(18.dp))
     }
-}
-
-@Composable private fun CodeCopyControl(source: String, label: String) {
-    val context = LocalContext.current
-    var copied by remember { mutableStateOf(false) }
-    val haptic = rememberHaptic()
-    LaunchedEffect(copied) { if (copied) { delay(1800); copied = false } }
-    IconButton(onClick = {
-        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-            .setPrimaryClip(ClipData.newPlainText(label, source))
-        haptic(false)
-        copied = true
-    }) { Icon(if (copied) WorkbenchIcons.Check else WorkbenchIcons.Copy,
-        if (copied) tr(R.string.ui_copied) else label, Modifier.size(18.dp)) }
 }
 
 @Composable private fun codeColors(): Map<CodeTone, Color> {
@@ -190,7 +176,7 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
         Scaffold(topBar = {
             TopAppBar(title = { Text(title) }, navigationIcon = {
                 IconButton(onClick = onClose) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back_to_session)) }
-            }, actions = { WrapControl(wrap, onWrap); CodeCopyControl(source, copyLabel) })
+            }, actions = { WrapControl(wrap, onWrap); ConversationCopyButton(source, copyLabel) })
         }) { padding ->
             val current = document
             if (current == null) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

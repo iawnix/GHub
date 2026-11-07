@@ -4,30 +4,29 @@ package dev.remotegpt.app.ui
 import dev.remotegpt.app.tr
 import dev.remotegpt.app.R
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
 import kotlinx.coroutines.*
@@ -35,121 +34,291 @@ import kotlinx.coroutines.*
 @Composable fun HostEditor(editor: HostEditorViewModel, vm: WorkbenchViewModel, snackbar: SnackbarHostState? = null,
     backLabel: String = tr(R.string.ui_back_to_servers), onClose: () -> Unit) {
     val profile = editor.profile ?: return
-    val credentials = editor.credentials
-    val loading = editor.loading
-    var deleting by remember { mutableStateOf(false) }
-    var advanced by rememberSaveable { mutableStateOf(profile.jumps.isNotEmpty() || profile.codexPath != "codex" || profile.socketPath.isNotBlank()) }
-    var saving by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    var loadError by remember(profile.id) { mutableStateOf<String?>(null) }
     LaunchedEffect(profile.id) {
         try { editor.loadCredentials(vm::credential) }
         catch (e: CancellationException) { throw e }
-        catch (_: Exception) { error = tr(R.string.ui_saved_credentials_cannot_be_decrypted_import_them) }
+        catch (_: Exception) { loadError = tr(R.string.ui_saved_credentials_cannot_be_decrypted_import_them) }
+    }
+    val state by vm.state.collectAsStateWithLifecycle()
+    HostEditorForm(editor, existing = state.profiles.any { it.id == profile.id },
+        reconnect = state.workspaces[profile.id]?.connection?.let { it != ConnectionStatus.OFFLINE } == true,
+        loadError = loadError, snackbar = snackbar, backLabel = backLabel, onClose = onClose,
+        onSave = { value, secrets, done -> vm.saveProfile(value, secrets, done); Unit },
+        onDelete = { vm.deleteProfile(profile); onClose() })
+}
+
+/** All sections edit one draft. Only the root Save action writes it to storage. */
+@Composable fun HostEditorForm(editor: HostEditorViewModel, existing: Boolean = false, reconnect: Boolean = false,
+    loadError: String? = null, snackbar: SnackbarHostState? = null,
+    backLabel: String = tr(R.string.ui_back_to_servers), onClose: () -> Unit,
+    onSave: (HostProfile, Map<String, Credential>, (Boolean) -> Unit) -> Unit, onDelete: () -> Unit = {}) {
+    val profile = editor.profile ?: return
+    val section = editor.section
+    var deleting by remember { mutableStateOf(false) }
+    var discarding by remember { mutableStateOf(false) }
+    val saving = editor.saving
+    var error by remember { mutableStateOf<String?>(null) }
+    var invalidField by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(profile, editor.credentials) { invalidField = null; error = null }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    fun navigate(page: HostEditorSection, id: String = editor.jumpId) {
+        focusManager.clearFocus()
+        editor.navigate(page, id)
+    }
+    fun back() {
+        if (saving) return
+        when (section) {
+            HostEditorSection.BASIC -> if (editor.hasChanges) discarding = true else onClose()
+            HostEditorSection.JUMP_AUTH -> navigate(HostEditorSection.JUMP)
+            HostEditorSection.JUMP -> navigate(HostEditorSection.JUMPS)
+            else -> navigate(HostEditorSection.BASIC)
+        }
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val target = editor.importTarget
         if (uri != null) scope.launch {
             try {
                 val text = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { stream ->
                     readLimited(stream, 65536).decodeToString()
                 } ?: error(tr(R.string.ui_cannot_read_private_key)) }
                 require(text.contains("PRIVATE KEY")) { tr(R.string.ui_select_a_private_key_not_a_pub) }
-                val target = editor.importTarget
-                editor.updateCredential(target, (editor.credentials[target] ?: Credential()).copy(privateKey = text))
-                error = null
+                // A picker result must never attach to a removed hop or a different draft.
+                val current = editor.profile
+                if (current?.id == profile.id && (current.jumps + current.endpoint).any { it.credentialId == target }) {
+                    editor.updateCredential(target, (editor.credentials[target] ?: Credential()).copy(privateKey = text))
+                    invalidField = null
+                    error = null
+                }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { error = e.message }
         }
     }
-    fun changeSecret(id: String, secret: Credential) { editor.updateCredential(id, secret) }
-    val valid = !loading && profile.name.isNotBlank() && profile.codexPath.isNotBlank() && (profile.jumps + profile.endpoint).all {
-        it.host.isNotBlank() && it.username.isNotBlank() && it.port in 1..65535 &&
-            (it.auth != AuthKind.PRIVATE_KEY || !credentials[it.credentialId]?.privateKey.isNullOrBlank())
+    val endpoint = if (section == HostEditorSection.JUMP || section == HostEditorSection.JUMP_AUTH)
+        profile.jumps.firstOrNull { it.credentialId == editor.jumpId } else profile.endpoint
+    fun changeEndpoint(value: SshEndpoint) {
+        editor.updateProfile(if (value.credentialId == profile.endpoint.credentialId) profile.copy(endpoint = value)
+            else profile.copy(jumps = profile.jumps.map { if (it.credentialId == value.credentialId) value else it }))
     }
-    BackHandler(onBack = onClose)
-    Box(Modifier.fillMaxSize()) {
-        Scaffold(modifier = Modifier.imePadding(), snackbarHost = { snackbar?.let { SnackbarHost(it) } }, topBar = { TopAppBar(title = { Text(tr(R.string.ui_server_connection), style = MaterialTheme.typography.titleLarge) }, navigationIcon = { IconButton(onClick = onClose) { Icon(WorkbenchIcons.ArrowBack, backLabel) } },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)) },
-            bottomBar = {
-                Surface {
-                    Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
-                        Button(onClick = { saving = true; vm.saveProfile(profile, credentials) { success -> saving = false; if (success) onClose() else error = tr(R.string.ui_could_not_save_check_local_storage_and) } },
-                            enabled = valid && !saving, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (saving) tr(R.string.ui_saving) else tr(R.string.ui_save_connection)) }
-                    }
-                }
-            }) { padding ->
-            LazyColumn(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                if (vm.state.value.workspaces[profile.id]?.connection?.let { it != ConnectionStatus.OFFLINE } == true) item {
-                    Text(tr(R.string.ui_connection_changes_require_reconnect), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                item { OutlinedTextField(profile.name, { editor.updateProfile(profile.copy(name = it)) }, label = { Text(tr(R.string.ui_connection_name)) }, placeholder = { Text(tr(R.string.ui_for_example_development_server)) }, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()), singleLine = true) }
-                item {
-                    WorkbenchSurface() {
-                    Column(Modifier.padding(16.dp)) {
-                    EndpointFields(tr(R.string.ui_target_host), profile.endpoint, credentials[profile.endpoint.credentialId] ?: Credential(),
-                        onEndpoint = { editor.updateProfile(profile.copy(endpoint = it)) }, onCredential = { changeSecret(profile.endpoint.credentialId, it) },
-                        onImport = { editor.importTarget = profile.endpoint.credentialId; picker.launch(arrayOf("*/*")) })
-                    }
-                    }
-                }
-                item {
-                    SheetAction(tr(R.string.ui_advanced_settings), WorkbenchIcons.Settings, supporting = if (advanced) tr(R.string.ui_hide_jump_hosts_and_codex_settings) else tr(R.string.ui_jump_hosts_codex_path_and_working_directory)) { advanced = !advanced }
-                }
-                if (advanced) {
-                item { HorizontalDivider(); Text(tr(R.string.ui_jump_hosts), style = MaterialTheme.typography.titleMedium); Text(tr(R.string.ui_add_hosts_in_connection_order_each_host), style = MaterialTheme.typography.bodySmall) }
-                itemsIndexed(profile.jumps, key = { _, endpoint -> endpoint.credentialId }) { index, endpoint ->
-                    OutlinedCard {
-                        Column(Modifier.padding(14.dp)) {
-                            EndpointFields(tr(R.string.ui_hop , index + 1), endpoint, credentials[endpoint.credentialId] ?: Credential(),
-                                onEndpoint = { updated -> editor.updateProfile(profile.copy(jumps = profile.jumps.toMutableList().also { it[index] = updated })) },
-                                onCredential = { changeSecret(endpoint.credentialId, it) }, onImport = { editor.importTarget = endpoint.credentialId; picker.launch(arrayOf("*/*")) })
-                            TextButton(onClick = { editor.updateProfile(profile.copy(jumps = profile.jumps.filterNot { it.credentialId == endpoint.credentialId })) }) { Text(tr(R.string.ui_remove_jump_host)) }
+    fun save() {
+        val issue = validateHostDraft(profile, editor.credentials)
+        if (issue != null) {
+            navigate(issue.section, issue.endpointId)
+            invalidField = issue.field
+            error = tr(issue.message)
+            return
+        }
+        focusManager.clearFocus()
+        editor.saving = true
+        onSave(profile, editor.credentials) { success ->
+            editor.saving = false
+            if (success) onClose() else error = tr(R.string.ui_could_not_save_check_local_storage_and)
+        }
+    }
+    val title = tr(when (section) {
+        HostEditorSection.BASIC -> R.string.ui_server_connection
+        HostEditorSection.AUTH, HostEditorSection.JUMP_AUTH -> R.string.ui_authentication
+        HostEditorSection.PORT -> R.string.ui_port
+        HostEditorSection.JUMPS -> R.string.ui_jump_hosts
+        HostEditorSection.JUMP -> R.string.ui_jump_host
+        HostEditorSection.REMOTE -> R.string.ui_remote_codex
+    })
+    BackHandler { back() }
+    Scaffold(modifier = Modifier.imePadding(), snackbarHost = { snackbar?.let { SnackbarHost(it) } }, topBar = {
+        TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = {
+            IconButton(onClick = ::back, enabled = !saving) {
+                Icon(WorkbenchIcons.ArrowBack, if (section == HostEditorSection.BASIC) backLabel else tr(R.string.ui_back))
+            }
+        }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
+    }, bottomBar = {
+        if (section == HostEditorSection.BASIC) Surface {
+            Button(onClick = ::save, enabled = !editor.loading && !saving,
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp).heightIn(min = 48.dp)) {
+                Text(tr(if (saving) R.string.ui_saving else R.string.ui_save_connection))
+            }
+        }
+    }) { padding ->
+        key(section, editor.jumpId) {
+            Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
+                .verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (editor.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (section != HostEditorSection.BASIC) Text(tr(R.string.ui_shared_connection_draft),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                when (section) {
+                    HostEditorSection.BASIC -> {
+                        if (reconnect) Text(tr(R.string.ui_connection_changes_require_reconnect), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        DraftField(profile.name, { editor.updateProfile(profile.copy(name = it)) }, R.string.ui_connection_name,
+                            "name", invalidField, enabled = !saving)
+                        EndpointAddressFields(profile.endpoint, ::changeEndpoint, invalidField, enabled = !saving)
+                        Column {
+                            ServerSettingRow(tr(R.string.ui_port), WorkbenchIcons.Settings, profile.endpoint.port.toString(), enabled = !saving) { navigate(HostEditorSection.PORT) }
+                            ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key,
+                                authenticationSummary(profile.endpoint, editor.credentials[profile.endpoint.credentialId], editor.loading), enabled = !saving) { navigate(HostEditorSection.AUTH) }
+                            ServerSettingRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.Route,
+                                if (profile.jumps.isEmpty()) null else tr(R.string.ui_hops, profile.jumps.size), enabled = !saving) { navigate(HostEditorSection.JUMPS) }
+                            ServerSettingRow(tr(R.string.ui_remote_codex), WorkbenchIcons.Terminal,
+                                if (profile.codexPath == "codex" && profile.defaultCwd.isBlank() && profile.socketPath.isBlank()) null else tr(R.string.ui_custom_configuration), enabled = !saving) { navigate(HostEditorSection.REMOTE) }
+                        }
+                        if (existing) TextButton(onClick = { deleting = true }, enabled = !saving) {
+                            Icon(WorkbenchIcons.Trash, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.width(8.dp))
+                            Text(tr(R.string.ui_delete_server_connection), color = MaterialTheme.colorScheme.error)
                         }
                     }
+                    HostEditorSection.PORT -> DraftField(if (profile.endpoint.port == 0) "" else profile.endpoint.port.toString(),
+                        { changeEndpoint(profile.endpoint.copy(port = it.toIntOrNull() ?: 0)) }, R.string.ui_port, "port", invalidField, KeyboardType.Number)
+                    HostEditorSection.AUTH, HostEditorSection.JUMP_AUTH -> endpoint?.let { value ->
+                        AuthenticationFields(value, editor.credentials[value.credentialId] ?: Credential(), invalidField,
+                            enabled = !editor.loading, onEndpoint = ::changeEndpoint,
+                            onCredential = { editor.updateCredential(value.credentialId, it) }, onImport = {
+                                editor.importTarget = value.credentialId
+                                picker.launch(arrayOf("*/*"))
+                            })
+                        Text(tr(R.string.ui_credentials_are_encrypted_on_this_device_host), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    HostEditorSection.JUMPS -> {
+                        Text(tr(R.string.ui_add_hosts_in_connection_order_each_host), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        profile.jumps.forEachIndexed { index, hop ->
+                            ServerSettingRow(tr(R.string.ui_hop, index + 1), WorkbenchIcons.Dns,
+                                hop.host.ifBlank { tr(R.string.ui_not_configured) }) { navigate(HostEditorSection.JUMP, hop.credentialId) }
+                        }
+                        OutlinedButton(onClick = {
+                            val hop = SshEndpoint()
+                            editor.updateProfile(profile.copy(jumps = profile.jumps + hop))
+                            navigate(HostEditorSection.JUMP, hop.credentialId)
+                        }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Icon(WorkbenchIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(tr(R.string.ui_add_jump_host))
+                        }
+                    }
+                    HostEditorSection.JUMP -> endpoint?.let { hop ->
+                        Text(tr(R.string.ui_hop, profile.jumps.indexOf(hop) + 1), style = MaterialTheme.typography.titleMedium)
+                        EndpointAddressFields(hop, ::changeEndpoint, invalidField)
+                        DraftField(if (hop.port == 0) "" else hop.port.toString(), { changeEndpoint(hop.copy(port = it.toIntOrNull() ?: 0)) },
+                            R.string.ui_port, "port", invalidField, KeyboardType.Number)
+                        ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key,
+                            authenticationSummary(hop, editor.credentials[hop.credentialId], editor.loading)) { navigate(HostEditorSection.JUMP_AUTH) }
+                        TextButton(onClick = {
+                            editor.updateProfile(profile.copy(jumps = profile.jumps.filterNot { it.credentialId == hop.credentialId }))
+                            navigate(HostEditorSection.JUMPS)
+                        }) { Text(tr(R.string.ui_remove_jump_host), color = MaterialTheme.colorScheme.error) }
+                    }
+                    HostEditorSection.REMOTE -> {
+                        DraftField(profile.codexPath, { editor.updateProfile(profile.copy(codexPath = it)) }, R.string.ui_executable_path, "codex", invalidField)
+                        DraftField(profile.defaultCwd, { editor.updateProfile(profile.copy(defaultCwd = it)) }, R.string.ui_default_working_directory, "cwd", invalidField)
+                        DraftField(profile.socketPath, { editor.updateProfile(profile.copy(socketPath = it)) }, R.string.ui_service_socket_path_optional, "socket", invalidField)
+                        Text(tr(R.string.ui_leave_empty_to_use_the_default_shared), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                item { OutlinedButton(onClick = { editor.updateProfile(profile.copy(jumps = profile.jumps + SshEndpoint())) }) { Icon(WorkbenchIcons.Add, null); Text(tr(R.string.ui_add_jump_host)) } }
-                item {
-                    HorizontalDivider(); Spacer(Modifier.height(16.dp)); Text(tr(R.string.ui_remote_codex), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(profile.codexPath, { editor.updateProfile(profile.copy(codexPath = it)) }, label = { Text(tr(R.string.ui_executable_path)) }, supportingText = { Text(tr(R.string.ui_for_example_codex_or_home_user_local)) }, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()), singleLine = true)
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(profile.defaultCwd, { editor.updateProfile(profile.copy(defaultCwd = it)) }, label = { Text(tr(R.string.ui_default_working_directory)) }, placeholder = { Text("/home/user/project") }, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()), singleLine = true)
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(profile.socketPath, { editor.updateProfile(profile.copy(socketPath = it)) }, label = { Text(tr(R.string.ui_service_socket_path_optional)) }, supportingText = { Text(tr(R.string.ui_leave_empty_to_use_the_default_shared)) }, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()), singleLine = true)
-                }
-                }
-                error?.let { text -> item { Text(text, color = MaterialTheme.colorScheme.error) } }
-                item { Text(tr(R.string.ui_credentials_are_encrypted_on_this_device_host), style = MaterialTheme.typography.bodySmall) }
-                if (vm.state.value.profiles.any { it.id == profile.id }) item { TextButton(onClick = { deleting = true }) { Text(tr(R.string.ui_delete_server_connection), color = MaterialTheme.colorScheme.error) } }
+                (error ?: loadError)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
     }
-    if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text(tr(R.string.ui_delete_server_connection_160)) }, text = { Text(tr(R.string.ui_this_removes_the_connection_and_credentials_saved)) },
-        confirmButton = { TextButton(onClick = { vm.state.value.profiles.firstOrNull { it.id == profile.id }?.let(vm::deleteProfile); onClose() }) { Text(tr(R.string.ui_delete)) } }, dismissButton = { TextButton(onClick = { deleting = false }) { Text(tr(R.string.ui_cancel)) } })
+    if (discarding) AlertDialog(onDismissRequest = { discarding = false }, title = { Text(tr(R.string.ui_discard_unsaved_changes)) },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr(R.string.ui_discard_changes)) } },
+        dismissButton = { TextButton(onClick = { discarding = false }) { Text(tr(R.string.ui_cancel)) } })
+    if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text(tr(R.string.ui_delete_server_connection_160)) },
+        text = { Text(tr(R.string.ui_this_removes_the_connection_and_credentials_saved)) },
+        confirmButton = { TextButton(onClick = onDelete) { Text(tr(R.string.ui_delete)) } },
+        dismissButton = { TextButton(onClick = { deleting = false }) { Text(tr(R.string.ui_cancel)) } })
 }
 
-@Composable private fun EndpointFields(title: String, endpoint: SshEndpoint, secret: Credential, onEndpoint: (SshEndpoint) -> Unit, onCredential: (Credential) -> Unit, onImport: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(endpoint.host, { onEndpoint(endpoint.copy(host = it.trim())) }, label = { Text(tr(R.string.ui_host_address)) }, singleLine = true, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(endpoint.username, { onEndpoint(endpoint.copy(username = it.trim())) }, label = { Text(tr(R.string.ui_username)) }, singleLine = true, modifier = Modifier.weight(2f).then(imeAwareFieldModifier()))
-            OutlinedTextField(if (endpoint.port == 0) "" else endpoint.port.toString(), { onEndpoint(endpoint.copy(port = it.toIntOrNull() ?: 0)) }, label = { Text(tr(R.string.ui_port)) }, singleLine = true, modifier = Modifier.weight(1f).then(imeAwareFieldModifier()), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(AuthKind.PRIVATE_KEY to tr(R.string.ui_private_key), AuthKind.PASSWORD to tr(R.string.ui_password), AuthKind.INTERACTIVE to tr(R.string.ui_interactive_authentication)).forEach { (kind, label) ->
-                FilterChip(selected = endpoint.auth == kind, onClick = { onEndpoint(endpoint.copy(auth = kind)) }, label = { Text(label) })
+internal data class HostDraftIssue(val section: HostEditorSection, val field: String, val message: Int, val endpointId: String = "")
+
+internal fun validateHostDraft(profile: HostProfile, credentials: Map<String, Credential>): HostDraftIssue? {
+    if (profile.name.isBlank()) return HostDraftIssue(HostEditorSection.BASIC, "name", R.string.ui_enter_a_connection_name)
+    for (endpoint in listOf(profile.endpoint) + profile.jumps) {
+        val hop = endpoint.credentialId != profile.endpoint.credentialId
+        val page = if (hop) HostEditorSection.JUMP else HostEditorSection.BASIC
+        if (endpoint.host.isBlank()) return HostDraftIssue(page, "host", R.string.ui_enter_a_host_username_and_valid_port, endpoint.credentialId)
+        if (endpoint.username.isBlank()) return HostDraftIssue(page, "username", R.string.ui_enter_a_host_username_and_valid_port, endpoint.credentialId)
+        if (endpoint.port !in 1..65535) return HostDraftIssue(if (hop) page else HostEditorSection.PORT, "port", R.string.ui_enter_a_host_username_and_valid_port, endpoint.credentialId)
+        if (endpoint.auth == AuthKind.PRIVATE_KEY && credentials[endpoint.credentialId]?.privateKey.isNullOrBlank())
+            return HostDraftIssue(if (hop) HostEditorSection.JUMP_AUTH else HostEditorSection.AUTH, "key", R.string.ui_import_private_key, endpoint.credentialId)
+    }
+    if (profile.codexPath.isBlank() || '\n' in profile.codexPath) return HostDraftIssue(HostEditorSection.REMOTE, "codex", R.string.ui_enter_the_codex_executable_path)
+    return null
+}
+
+@Composable internal fun authenticationSummary(endpoint: SshEndpoint, secret: Credential?, loading: Boolean = false): String {
+    val method = tr(when (endpoint.auth) {
+        AuthKind.PRIVATE_KEY -> R.string.ui_private_key
+        AuthKind.PASSWORD -> R.string.ui_password
+        AuthKind.INTERACTIVE -> R.string.ui_interactive_authentication
+    })
+    if (loading || secret == null || endpoint.auth == AuthKind.INTERACTIVE) return method
+    return method + " · " + tr(when {
+        endpoint.auth == AuthKind.PRIVATE_KEY -> if (secret.privateKey.isNotBlank()) R.string.ui_configured else R.string.ui_not_configured
+        secret.password.isNotBlank() -> R.string.ui_configured
+        else -> R.string.ui_ask_when_connecting
+    })
+}
+
+@Composable private fun EndpointAddressFields(endpoint: SshEndpoint, onEndpoint: (SshEndpoint) -> Unit, invalid: String?, enabled: Boolean = true) {
+    DraftField(endpoint.host, { onEndpoint(endpoint.copy(host = it.trim())) }, R.string.ui_host_address, "host", invalid, KeyboardType.Uri, enabled)
+    DraftField(endpoint.username, { onEndpoint(endpoint.copy(username = it.trim())) }, R.string.ui_username, "username", invalid, enabled = enabled)
+}
+
+@Composable private fun DraftField(value: String, onChange: (String) -> Unit, label: Int, field: String, invalid: String?,
+    keyboard: KeyboardType = KeyboardType.Text, enabled: Boolean = true) {
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(invalid) { if (invalid == field) focus.requestFocus() }
+    OutlinedTextField(value, onChange, label = { Text(tr(label)) }, singleLine = true, enabled = enabled,
+        isError = invalid == field, keyboardOptions = KeyboardOptions(keyboardType = keyboard),
+        modifier = Modifier.fillMaxWidth().focusRequester(focus).then(imeAwareFieldModifier()))
+}
+
+@Composable private fun AuthenticationFields(endpoint: SshEndpoint, secret: Credential, invalid: String?, enabled: Boolean,
+    onEndpoint: (SshEndpoint) -> Unit, onCredential: (Credential) -> Unit, onImport: () -> Unit) {
+    Column(Modifier.selectableGroup()) {
+        listOf(AuthKind.PRIVATE_KEY to R.string.ui_private_key, AuthKind.PASSWORD to R.string.ui_password,
+            AuthKind.INTERACTIVE to R.string.ui_interactive_authentication).forEach { (kind, label) ->
+            Row(Modifier.fillMaxWidth().selectable(selected = endpoint.auth == kind, enabled = enabled,
+                role = androidx.compose.ui.semantics.Role.RadioButton, onClick = { onEndpoint(endpoint.copy(auth = kind)) })
+                .heightIn(min = 48.dp).padding(vertical = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                RadioButton(selected = endpoint.auth == kind, onClick = null, enabled = enabled)
+                Spacer(Modifier.width(12.dp)); Text(tr(label), style = MaterialTheme.typography.bodyLarge)
             }
         }
-        when (endpoint.auth) {
-            AuthKind.PRIVATE_KEY -> {
-                OutlinedButton(onClick = onImport) { Icon(WorkbenchIcons.Key, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(if (secret.privateKey.isBlank()) tr(R.string.ui_import_private_key) else tr(R.string.ui_key_imported_replace)) }
-                OutlinedTextField(secret.passphrase, { onCredential(secret.copy(passphrase = it)) }, label = { Text(tr(R.string.ui_key_passphrase_optional)) }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), singleLine = true, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()))
+    }
+    when (endpoint.auth) {
+        AuthKind.PRIVATE_KEY -> {
+            val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+            LaunchedEffect(invalid) { if (invalid == "key") focus.requestFocus() }
+            OutlinedButton(onClick = onImport, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).focusRequester(focus)) {
+                Icon(WorkbenchIcons.Key, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
+                Text(tr(if (secret.privateKey.isBlank()) R.string.ui_import_private_key else R.string.ui_key_imported_replace))
             }
-            AuthKind.PASSWORD -> OutlinedTextField(secret.password, { onCredential(secret.copy(password = it)) }, label = { Text(tr(R.string.ui_ssh_password)) }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), singleLine = true, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()))
-            AuthKind.INTERACTIVE -> Text(tr(R.string.ui_enter_the_password_or_verification_code_requested), style = MaterialTheme.typography.bodySmall)
+            SecretField(secret.passphrase, { onCredential(secret.copy(passphrase = it)) }, R.string.ui_key_passphrase_optional, enabled)
         }
+        AuthKind.PASSWORD -> SecretField(secret.password, { onCredential(secret.copy(password = it)) }, R.string.ui_ssh_password, enabled)
+        AuthKind.INTERACTIVE -> Text(tr(R.string.ui_enter_the_password_or_verification_code_requested), style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable private fun SecretField(value: String, onChange: (String) -> Unit, label: Int, enabled: Boolean) {
+    OutlinedTextField(value, onChange, label = { Text(tr(label)) }, enabled = enabled,
+        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+        singleLine = true, modifier = Modifier.fillMaxWidth().then(imeAwareFieldModifier()))
+}
+
+/** Lightweight disclosure row; long summaries wrap instead of squeezing the label. */
+@Composable internal fun ServerSettingRow(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector,
+    summary: String? = null, enabled: Boolean = true, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onClick).heightIn(min = if (summary == null) 56.dp else 64.dp).padding(vertical = 12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (summary != null) Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

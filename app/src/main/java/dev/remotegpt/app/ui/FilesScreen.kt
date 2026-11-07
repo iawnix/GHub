@@ -36,7 +36,7 @@ import dev.remotegpt.client.*
             fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         if (ws.loadingFiles) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (ws.files.isEmpty() && ws.loadingFiles) Box(Modifier.weight(1f)) {
-            EmptyPanel(WorkbenchIcons.CloudDone, tr(R.string.ui_connecting_to_remote_files), tr(R.string.ui_this_directory_will_load_automatically_when_the))
+            EmptyPanel(WorkbenchIcons.Connected, tr(R.string.ui_connecting_to_remote_files), tr(R.string.ui_this_directory_will_load_automatically_when_the))
         }
         if (ws.files.isEmpty() && !ws.loadingFiles) Box(Modifier.weight(1f)) { EmptyPanel(WorkbenchIcons.FolderOpen, tr(R.string.ui_this_directory_is_empty), tr(R.string.ui_connect_to_browse_files_edit_text_or)) }
         else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {

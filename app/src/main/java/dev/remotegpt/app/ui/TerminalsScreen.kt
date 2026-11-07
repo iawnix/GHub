@@ -105,9 +105,13 @@ import kotlin.math.roundToInt
                             style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 4.dp).size(16.dp))
                     }
-                    Text(project + " · " + if (selected != null && !running) tr(R.string.terminal_ended) else connectionLabel(connection),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ConnectionIndicator(connection)
+                        Text(project + if (selected != null && !running) " · " + tr(R.string.terminal_ended) else "",
+                            modifier = Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }, navigationIcon = {
                 IconButton(onClick = onBack) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back_to_session)) }

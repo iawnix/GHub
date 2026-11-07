@@ -9,8 +9,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,6 +49,21 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     if (initialScreen.startsWith("picker-")) { PickerGallery(initialScreen); return@WorkbenchTheme }
     if (initialScreen == "reference") { ConversationGallery(); return@WorkbenchTheme }
     if (initialScreen == "status") { TaskStatusGallery(); return@WorkbenchTheme }
+    if (initialScreen.startsWith("host-editor")) {
+        val editor = remember { HostEditorViewModel(androidx.lifecycle.SavedStateHandle()).apply {
+            open(HostProfile(name = "开发机", endpoint = SshEndpoint(host = "dev.example.com", username = "developer", auth = AuthKind.PASSWORD)),
+                when (initialScreen.substringAfter("host-editor-", "")) {
+                    "auth" -> HostEditorSection.AUTH
+                    "jumps" -> HostEditorSection.JUMPS
+                    "remote" -> HostEditorSection.REMOTE
+                    else -> HostEditorSection.BASIC
+                })
+        } }
+        LaunchedEffect(Unit) { editor.loadCredentials { Credential() } }
+        HostEditorForm(editor, existing = true, onClose = {}, onSave = { _, _, done -> done(true) })
+        return@WorkbenchTheme
+    }
+    if (initialScreen == "icons") { IconGallery(); return@WorkbenchTheme }
     if (initialScreen == "math") { MathGallery(); return@WorkbenchTheme }
     if (initialScreen == "markdown") { MarkdownGallery(); return@WorkbenchTheme }
     if (initialScreen == "code") { CodeGallery(); return@WorkbenchTheme }
@@ -93,7 +106,7 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     GlassWorkbenchScaffold(
         glassEnabled = screen == "projects",
         topBar = { WorkbenchHeader(if (screen == "projects") "开发机" else title,
-            if (screen == "projects") "已连接" else project.name, ConnectionStatus.ONLINE, screen != "projects", back,
+            if (screen == "projects") null else project.name, ConnectionStatus.ONLINE, screen != "projects", back,
             backLabel = "返回项目列表", onMenu = { if (screen == "projects") homeMenu = true else menu = true }, onAdd = if (screen == "projects") ({}) else null) },
         modifier = Modifier.imePadding(),
     ) { padding ->

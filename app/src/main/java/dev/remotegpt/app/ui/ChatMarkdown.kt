@@ -4,9 +4,6 @@ package dev.remotegpt.app.ui
 import dev.remotegpt.app.tr
 import dev.remotegpt.app.R
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -99,17 +95,6 @@ internal fun chatMarkdownComponents(): MarkdownComponents {
     return components
 }
 
-@Composable internal fun CopyControl(text: String) {
-    val context = LocalContext.current
-    var copied by remember { mutableStateOf(false) }
-    val haptic = rememberHaptic()
-    LaunchedEffect(copied) { if (copied) { delay(1800); copied = false } }
-    TextButton(onClick = {
-        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(context.getString(R.string.app_name), text))
-        haptic(false); copied = true
-    }) { Text(if (copied) tr(R.string.ui_copied) else tr(R.string.ui_copy), style = MaterialTheme.typography.labelMedium) }
-}
-
 @Composable private fun ChatCode(model: MarkdownComponentModel, fenced: Boolean) {
     val node = model.node
     val language = node.children.firstOrNull { it.type == MarkdownTokenTypes.FENCE_LANG }?.let { model.content.substring(it.startOffset, it.endOffset) }.orEmpty()
@@ -143,8 +128,9 @@ internal fun chatMarkdownComponents(): MarkdownComponents {
     val fontScale = LocalDensity.current.fontScale
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (!fullScreen) TextButton(onClick = { expanded = true }) { Text(tr(R.string.ui_expand_table), style = MaterialTheme.typography.labelMedium) }
-            Spacer(Modifier.weight(1f)); CopyControl(text)
+            Spacer(Modifier.weight(1f))
+            if (!fullScreen) ConversationActionButton(WorkbenchIcons.Fullscreen, tr(R.string.ui_expand_table), { expanded = true })
+            ConversationCopyButton(text, tr(R.string.ui_copy_table))
         }
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp)) {
             BoxWithConstraints(Modifier.fillMaxWidth()) {

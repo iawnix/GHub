@@ -43,23 +43,12 @@ import java.io.File
     }
 }
 
-/** One mapping for every connection indicator: pill, header dot and server rows. */
+/** One mapping for every connection indicator: header and server rows. */
 @Composable internal fun connectionColor(status: ConnectionStatus): androidx.compose.ui.graphics.Color = when (status) {
-    ConnectionStatus.ONLINE -> accentColor(WorkbenchAccent.TEAL)
+    ConnectionStatus.ONLINE -> MaterialTheme.colorScheme.onSurfaceVariant
     ConnectionStatus.CONNECTING, ConnectionStatus.CHECKING, ConnectionStatus.WAITING_NETWORK, ConnectionStatus.RECONNECTING, ConnectionStatus.SYNCING -> accentColor(WorkbenchAccent.BLUE)
     ConnectionStatus.ERROR -> MaterialTheme.colorScheme.error
     ConnectionStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
-}
-
-@Composable fun StatusPill(status: ConnectionStatus) {
-    val label = connectionLabel(status)
-    val tint = connectionColor(status)
-    Surface(color = tint.copy(alpha = 0.09f), contentColor = tint, shape = RoundedCornerShape(50)) {
-        Row(Modifier.padding(horizontal = 9.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Icon(if (status == ConnectionStatus.ONLINE) WorkbenchIcons.CloudDone else WorkbenchIcons.CloudOff, null, Modifier.size(14.dp))
-            Text(label, style = MaterialTheme.typography.labelSmall)
-        }
-    }
 }
 
 @Composable fun InfoCard(text: String, action: String? = null, onAction: () -> Unit = {}) {

@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
@@ -32,7 +33,7 @@ class OutputVisualizationDeviceTest {
         )
         compose.setContent { WorkbenchTheme { OutputSample(items, active = true) } }
         compose.onNodeWithText(context.getString(R.string.ui_output_receiving)).assertIsDisplayed()
-        compose.onNodeWithText(context.getString(R.string.ui_output_live)).assertIsDisplayed()
+        compose.onNodeWithContentDescription(context.getString(R.string.ui_output_live)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.ui_output_command_short)).assertIsDisplayed()
     }
 

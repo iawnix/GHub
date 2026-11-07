@@ -19,10 +19,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.remotegpt.app.ConnectionStatus
 import dev.remotegpt.app.R
 import dev.remotegpt.app.tr
 
-internal data class SelectionOption(val id: String, val label: String, val detail: String? = null, val status: String? = null)
+internal data class SelectionOption(val id: String, val label: String, val detail: String? = null, val connection: ConnectionStatus? = null)
 
 /** A value picker, separate from the icon-led action menus. Material owns gestures/insets. */
 @Composable internal fun SelectionSheet(
@@ -94,11 +95,10 @@ internal data class SelectionOption(val id: String, val label: String, val detai
                 color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
             option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (stackedStatus) option.status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (stackedStatus) option.connection?.takeIf { it != ConnectionStatus.ONLINE }?.let { ConnectionIndicator(it) }
         }
-        if (!stackedStatus) option.status?.let {
-            Text(it, Modifier.widthIn(max = 96.dp), style = MaterialTheme.typography.bodySmall,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+        option.connection?.let {
+            if (!stackedStatus || it == ConnectionStatus.ONLINE) ConnectionIndicator(it, Modifier.widthIn(max = 120.dp))
         }
         // Reserve the same trailing space in every row. Selection is exposed by selectable().
         Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {

@@ -42,8 +42,12 @@ class LifecycleDeviceTest {
         val profile = HostProfile(name = "Restored", endpoint = SshEndpoint("example.test", username = "developer"))
         editor.open(profile)
         editor.updateCredential(profile.endpoint.credentialId, Credential(password = "never-save", privateKey = "private-test-key"))
+        editor.navigate(HostEditorSection.AUTH)
+        editor.updateProfile(profile.copy(name = "Changed metadata"))
         val restored = HostEditorViewModel(SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) }))
-        assertEquals(profile, restored.profile)
+        assertEquals(profile.copy(name = "Changed metadata"), restored.profile)
+        assertEquals(HostEditorSection.AUTH, restored.section)
+        assertTrue(restored.hasChanges)
         assertTrue(restored.credentials.isEmpty())
         assertFalse(saved.keys().any { saved.get<Any?>(it).toString().contains("never-save") || saved.get<Any?>(it).toString().contains("private-test-key") })
         restored.loadCredentials { Credential(password = "encrypted-store-value") }

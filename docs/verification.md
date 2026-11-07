@@ -119,3 +119,15 @@ DEVICE_TEST_CLASS=dev.remotegpt.app.InterruptedInputSyncDeviceTest \
 该专项检查重复停止/发送只执行一次、编辑草稿落盘、附件失效时不发送、原始与修改后的历史均保留，以及其他客户端推进会话后阻止旧编辑稿重发。先按前文构建预览包；脚本会清空预览应用数据，并通过临时 `adb reverse` 端口连接隔离 SSH 服务。fixture 默认模型提供方与测试会话保持一致，兼容要求两者一致的新版 Codex CLI。
 
 `ChatMathParserTest` 覆盖四种公式分隔符、代码/价格排除、列表/表格混排、流式前缀及块复用。`MathRenderingDeviceTest` 验证分数、积分、矩阵的实际像素输出、深浅主题、字号、宽公式与源码复制；Release 设备回归也检查经过 R8 优化后的原生公式画布。
+
+`ConversationActionsDeviceTest` 验证会话复制入口的原文、点击尺寸、勾选反馈、连续点击重新计时、流式内容更新清除反馈、长按提示，以及超长回复的分享引导。公式复制与内容同行，表格全屏入口与原始 Markdown 复制一并覆盖；代码阅读回归检查图标化后的全屏入口。
+
+`StatusIndicatorDeviceTest` 覆盖服务器状态图标的读屏标签、长按说明和行选择，正常连接转失败时的文字提示，以及断网/同步过程中任务完成状态不被覆盖。配合 `HostDetailsDeviceTest`、`OutputVisualizationDeviceTest` 和终端交互测试检查连接操作及状态展示。
+
+图标更换后用 `DesignPreviewActivity --es screen icons --es theme dark`（以及 `light`）查看完整 Phosphor Bold 图集，在 16dp / 20dp 实际尺寸下核对形状和填充；预览会实例化所有图标，包括不常见页面使用的图标。运行 `python3 scripts/generate_icons.py` 后生成文件应保持一致，常规构建不需要下载图标。
+
+`HostEditorDeviceTest` 覆盖分组编辑共用草稿、缺失私钥跳转认证、无效跳板机定位与删除、未保存凭据的取消/丢弃，以及保存期间禁用修改和返回。`LifecycleDeviceTest` 检查元数据、编辑分组恢复与凭据不进入 SavedState；`WorkbenchDeviceTest` 检查编辑/删除另一服务器不影响当前工作区。
+
+服务器布局离线预览使用 `DesignPreviewActivity --es screen host`、`host-editor`、`host-editor-auth`、`host-editor-jumps`、`host-editor-remote`。本轮在 API 35 模拟器核对中英文、深浅主题、320dp 宽度和 200% 字号；未执行真实远端 SSH 用例或真机 TalkBack 检查。
+
+`HostDetailsDeviceTest` 同时验证标题栏单个连接图标按钮的 48dp 点击区域、状态读屏信息、连接/取消/断开/停止重连/初始化操作，以及远端环境详情的展开与关闭。

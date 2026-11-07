@@ -40,7 +40,6 @@
     <string name="ui_connection_saved" formatted="false">连接配置已保存</string>
     <string name="ui_connection_saved_reconnect" formatted="false">配置已保存，请重新连接以使用新配置。</string>
     <string name="ui_connection_changes_require_reconnect" formatted="false">修改地址、认证或远端服务参数会断开此服务器，保存后需重新连接。仅修改名称不会断开。</string>
-    <string name="ui_server_configuration" formatted="false">配置</string>
     <string name="ui_back_to_server_settings" formatted="false">返回服务器设置</string>
     <string name="ui_stop_reconnecting" formatted="false">停止重连</string>
     <string name="ui_save_failed" formatted="false">保存失败</string>
@@ -98,7 +97,6 @@
     <string name="ui_cannot_read_credentials_import_them_again" formatted="false">凭据无法读取，请重新导入</string>
     <string name="ui_could_not_remove_credentials" formatted="false">凭据删除失败</string>
     <string name="ui_copied" formatted="false">已复制</string>
-    <string name="ui_copy" formatted="false">复制</string>
     <string name="ui_code" formatted="false">代码</string>
     <string name="ui_expand_table" formatted="false">展开表格</string>
     <string name="ui_swipe_sideways_to_view" formatted="false">左右滑动查看</string>
@@ -164,11 +162,6 @@
     <string name="ui_saving" formatted="false">正在保存…</string>
     <string name="ui_save_connection" formatted="false">保存配置</string>
     <string name="ui_connection_name" formatted="false">连接名称</string>
-    <string name="ui_for_example_development_server" formatted="false">例如：开发服务器</string>
-    <string name="ui_target_host" formatted="false">目标主机</string>
-    <string name="ui_advanced_settings" formatted="false">高级配置</string>
-    <string name="ui_hide_jump_hosts_and_codex_settings" formatted="false">收起跳板机与 Codex 配置</string>
-    <string name="ui_jump_hosts_codex_path_and_working_directory" formatted="false">跳板机、Codex 路径与默认工作目录</string>
     <string name="ui_jump_hosts" formatted="false">跳板机</string>
     <string name="ui_add_hosts_in_connection_order_each_host" formatted="false">按连接顺序添加，每一级独立认证。</string>
     <string name="ui_hop">第 %1$s 级</string>
@@ -176,7 +169,6 @@
     <string name="ui_add_jump_host" formatted="false">添加跳板机</string>
     <string name="ui_remote_codex" formatted="false">远端 Codex</string>
     <string name="ui_executable_path" formatted="false">可执行文件路径</string>
-    <string name="ui_for_example_codex_or_home_user_local" formatted="false">例如 codex 或 /home/user/.local/bin/codex</string>
     <string name="ui_default_working_directory" formatted="false">默认工作目录</string>
     <string name="ui_service_socket_path_optional" formatted="false">服务 Socket 路径（可选）</string>
     <string name="ui_leave_empty_to_use_the_default_shared" formatted="false">留空使用官方默认共享服务。</string>
@@ -242,12 +234,10 @@
     <string name="ui_open_projects" formatted="false">打开项目</string>
     <string name="ui_disconnect" formatted="false">断开连接</string>
     <string name="ui_connect" formatted="false">连接主机</string>
-    <string name="ui_status" formatted="false">状态</string>
     <string name="ui_address" formatted="false">地址</string>
     <string name="ui_direct_connection" formatted="false">直连</string>
     <string name="ui_hops">%1$s 级</string>
     <string name="ui_remote_environment" formatted="false">远端环境</string>
-    <string name="ui_codex_account" formatted="false">Codex 登录</string>
     <string name="ui_available_after_connecting" formatted="false">连接后读取</string>
     <string name="ui_not_loaded" formatted="false">未读取</string>
     <string name="ui_app_server" formatted="false">应用服务（App Server）</string>
@@ -572,4 +562,13 @@
     <plurals name="ui_project_sessions">
         <item quantity="other">%1$s 个会话</item>
     </plurals>
+    <string name="ui_copy_formula">复制公式</string>
+    <string name="ui_copy_table">复制表格</string>
+    <string name="ui_authentication">身份验证</string>
+    <string name="ui_jump_host">跳板机</string>
+    <string name="ui_configured">已配置</string>
+    <string name="ui_not_configured">未配置</string>
+    <string name="ui_custom_configuration">自定义</string>
+    <string name="ui_shared_connection_draft">返回连接配置页统一保存。</string>
+    <string name="ui_ask_when_connecting">连接时询问</string>
 </resources>

@@ -10,6 +10,8 @@ import dev.remotegpt.client.HostProfile
 import dev.remotegpt.client.wireJson
 import kotlinx.serialization.encodeToString
 
+enum class HostEditorSection { BASIC, AUTH, PORT, JUMPS, JUMP, JUMP_AUTH, REMOTE }
+
 /** Only connection metadata enters saved state. Unsaved credentials stay in memory. */
 class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
     var profile by mutableStateOf(saved.get<String>(PROFILE)?.let {
@@ -20,12 +22,37 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
         private set
     var loading by mutableStateOf(true)
         private set
+    var saving by mutableStateOf(false)
     private var loaded = false
+    private var originalProfile: HostProfile? = saved.get<String>(ORIGINAL)?.let {
+        runCatching { wireJson.decodeFromString<HostProfile>(it) }.getOrNull()
+    } ?: profile
+    private var originalCredentials: Map<String, Credential> = emptyMap()
+    var section by mutableStateOf(runCatching { HostEditorSection.valueOf(saved[SECTION] ?: "BASIC") }.getOrDefault(HostEditorSection.BASIC))
+        private set
+    var jumpId by mutableStateOf(saved.get<String>(JUMP_ID).orEmpty())
+        private set
+    val hasChanges: Boolean get() = profile != originalProfile ||
+        profile?.let { value -> (value.jumps + value.endpoint).any {
+            (credentials[it.credentialId] ?: Credential()) != (originalCredentials[it.credentialId] ?: Credential())
+        } } == true
+
+    fun navigate(value: HostEditorSection, endpointId: String = jumpId) {
+        section = value
+        jumpId = endpointId
+        saved[SECTION] = value.name
+        saved[JUMP_ID] = endpointId
+    }
     var importTarget: String
         get() = saved[IMPORT_TARGET] ?: ""
         set(value) { saved[IMPORT_TARGET] = value }
 
-    fun open(value: HostProfile) {
+    fun open(value: HostProfile, section: HostEditorSection = HostEditorSection.BASIC) {
+        originalProfile = value
+        saved[ORIGINAL] = wireJson.encodeToString(value)
+        originalCredentials = emptyMap()
+        navigate(section, "")
+        saving = false
         credentials = emptyMap()
         loaded = false
         loading = true
@@ -43,7 +70,7 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
         val current = profile ?: return
         try {
             val restored = (current.jumps + current.endpoint).associate { it.credentialId to read(it.credentialId) }
-            if (profile?.id == current.id) { credentials = restored + credentials; loaded = true }
+            if (profile?.id == current.id) { originalCredentials = restored; credentials = restored + credentials; loaded = true }
         } finally { if (profile?.id == current.id) loading = false }
     }
 
@@ -51,14 +78,23 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
 
     fun close() {
         profile = null
+        saving = false
         credentials = emptyMap()
         loaded = false
         loading = true
+        originalProfile = null
+        originalCredentials = emptyMap()
+        saved.remove<String>(ORIGINAL)
+        saved.remove<String>(SECTION)
+        saved.remove<String>(JUMP_ID)
         saved.remove<String>(PROFILE)
         saved.remove<String>(IMPORT_TARGET)
     }
 
     companion object {
+        private const val ORIGINAL = "host_editor_original"
+        private const val SECTION = "host_editor_section"
+        private const val JUMP_ID = "host_editor_jump_id"
         private const val PROFILE = "host_editor_profile"
         private const val IMPORT_TARGET = "host_editor_import_target"
     }

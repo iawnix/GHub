@@ -168,7 +168,8 @@ import java.util.UUID
     else if (settingsHost != null) HostDetailsScreen(settingsHost, settingsWorkspace,
         onBack = { settingsHostId = null; showHosts = true }, onEdit = { hostEditor.open(settingsHost) },
         onConnect = { if (settingsWorkspace.needsBootstrap) bootstrapHost = settingsHost.id else vm.connect(settingsHost.id) },
-        onDisconnect = { vm.disconnect(settingsHost.id) }, snackbar = snackbars)
+        onDisconnect = { vm.disconnect(settingsHost.id) }, snackbar = snackbars,
+        onEditSection = { hostEditor.open(settingsHost, it) })
     else GlassWorkbenchScaffold(
         glassEnabled = (showHome || showConversation) && state.workspace.connection == ConnectionStatus.ONLINE,
         snackbarHost = {
@@ -184,7 +185,7 @@ import java.util.UUID
                     state.tab == WorkspaceTab.TERMINAL -> tr(R.string.ui_terminal_290)
                     else -> state.profile?.name ?: tr(R.string.app_name)
                 },
-                host = if (showConversation || state.tab != WorkspaceTab.SESSIONS) state.project?.name else connectionLabel(state.workspace.connection),
+                host = if (showConversation || state.tab != WorkspaceTab.SESSIONS) state.project?.name else null,
                 status = state.workspace.connection,
                 conversation = !showHome,
                 onNavigate = { vm.navigateBack() },

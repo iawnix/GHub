@@ -5,9 +5,7 @@ import dev.remotegpt.app.tr
 import dev.remotegpt.app.R
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,13 +27,18 @@ import dev.remotegpt.app.ConnectionStatus
 ) {
     val heading: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, Modifier.semantics { contentDescription = title }, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val hostLabel = host?.let { if (status == ConnectionStatus.ONLINE || it == connectionLabel(status)) it else "$it · ${connectionLabel(status)}" } ?: tr(R.string.app_name)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(6.dp).background(connectionColor(status), CircleShape))
-                Text(hostLabel, Modifier.semantics { contentDescription = hostLabel },
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, Modifier.weight(1f, fill = false).semantics { contentDescription = title }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (host == null && status == ConnectionStatus.ONLINE) ConnectionIndicator(status)
+            }
+            if (host != null || status != ConnectionStatus.ONLINE) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ConnectionIndicator(status, showLabel = host == null)
+                    host?.let {
+                        Text(it, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             }
         }
     }

@@ -129,7 +129,7 @@ import dev.remotegpt.app.*
                                     unread > 0 -> TaskStatus.COMPLETED
                                     else -> null
                                 }
-                                projectStatus?.let { TaskStatusLabel(it, text = when (it) {
+                                projectStatus?.let { TaskStatusLabel(it, showLabel = true, text = when (it) {
                                     TaskStatus.APPROVAL -> tr(R.string.ui_approval_needed, approvals)
                                     TaskStatus.FAILED -> tr(R.string.task_failed_count, failures)
                                     TaskStatus.COMPLETED -> tr(R.string.ui_completed, unread)
@@ -218,9 +218,10 @@ import dev.remotegpt.app.*
                 unavailable -> Text(tr(R.string.ui_unavailable), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 status == TaskStatus.COMPLETED -> Row(Modifier.semantics(mergeDescendants = true) {},
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // An unread result is news, not an outcome: a dot reads lighter than a check.
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(taskStatusColor(status)))
-                    Text(tr(R.string.ui_new_result), style = MaterialTheme.typography.labelSmall, color = taskStatusColor(status), maxLines = 1)
+                    // An unread result is news, not a routine completed-state indicator.
+                    val unreadTint = accentColor(WorkbenchAccent.BLUE)
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(unreadTint))
+                    Text(tr(R.string.ui_new_result), style = MaterialTheme.typography.labelSmall, color = unreadTint, maxLines = 1)
                 }
                 status != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(taskStatusLabel(status), style = MaterialTheme.typography.labelSmall, color = taskStatusColor(status), maxLines = 1)

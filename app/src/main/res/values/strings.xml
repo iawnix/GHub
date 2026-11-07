@@ -43,7 +43,6 @@
     <string name="ui_connection_saved" formatted="false">Connection saved</string>
     <string name="ui_connection_saved_reconnect" formatted="false">Connection settings saved. Reconnect to use them.</string>
     <string name="ui_connection_changes_require_reconnect" formatted="false">Changing the address, authentication, or remote service settings disconnects this server. Reconnect after saving. Renaming it keeps the connection open.</string>
-    <string name="ui_server_configuration" formatted="false">Configuration</string>
     <string name="ui_back_to_server_settings" formatted="false">Back to server settings</string>
     <string name="ui_stop_reconnecting" formatted="false">Stop reconnecting</string>
     <string name="ui_save_failed" formatted="false">Save failed</string>
@@ -101,7 +100,6 @@
     <string name="ui_cannot_read_credentials_import_them_again" formatted="false">Cannot read credentials. Import them again.</string>
     <string name="ui_could_not_remove_credentials" formatted="false">Could not remove credentials</string>
     <string name="ui_copied" formatted="false">Copied</string>
-    <string name="ui_copy" formatted="false">Copy</string>
     <string name="ui_code" formatted="false">Code</string>
     <string name="ui_expand_table" formatted="false">Expand table</string>
     <string name="ui_swipe_sideways_to_view" formatted="false">Swipe sideways to view</string>
@@ -167,11 +165,6 @@
     <string name="ui_saving" formatted="false">Saving…</string>
     <string name="ui_save_connection" formatted="false">Save connection</string>
     <string name="ui_connection_name" formatted="false">Connection name</string>
-    <string name="ui_for_example_development_server" formatted="false">For example: Development server</string>
-    <string name="ui_target_host" formatted="false">Target host</string>
-    <string name="ui_advanced_settings" formatted="false">Advanced settings</string>
-    <string name="ui_hide_jump_hosts_and_codex_settings" formatted="false">Hide jump hosts and Codex settings</string>
-    <string name="ui_jump_hosts_codex_path_and_working_directory" formatted="false">Jump hosts, Codex path, and working directory</string>
     <string name="ui_jump_hosts" formatted="false">Jump hosts</string>
     <string name="ui_add_hosts_in_connection_order_each_host" formatted="false">Add hosts in connection order. Each host has separate credentials.</string>
     <string name="ui_hop">Hop %1$s</string>
@@ -179,7 +172,6 @@
     <string name="ui_add_jump_host" formatted="false">Add jump host</string>
     <string name="ui_remote_codex" formatted="false">Remote Codex</string>
     <string name="ui_executable_path" formatted="false">Executable path</string>
-    <string name="ui_for_example_codex_or_home_user_local" formatted="false">For example: codex or /home/user/.local/bin/codex</string>
     <string name="ui_default_working_directory" formatted="false">Default working directory</string>
     <string name="ui_service_socket_path_optional" formatted="false">Service socket path (optional)</string>
     <string name="ui_leave_empty_to_use_the_default_shared" formatted="false">Leave empty to use the default shared service.</string>
@@ -245,12 +237,10 @@
     <string name="ui_open_projects" formatted="false">Open projects</string>
     <string name="ui_disconnect" formatted="false">Disconnect</string>
     <string name="ui_connect" formatted="false">Connect</string>
-    <string name="ui_status" formatted="false">Status</string>
     <string name="ui_address" formatted="false">Address</string>
     <string name="ui_direct_connection" formatted="false">Direct connection</string>
     <string name="ui_hops">%1$s hops</string>
     <string name="ui_remote_environment" formatted="false">Remote environment</string>
-    <string name="ui_codex_account" formatted="false">Codex account</string>
     <string name="ui_available_after_connecting" formatted="false">Available after connecting</string>
     <string name="ui_not_loaded" formatted="false">Not loaded</string>
     <string name="ui_app_server" formatted="false">App Server</string>
@@ -586,4 +576,13 @@
         <item quantity="one">%1$s session</item>
         <item quantity="other">%1$s sessions</item>
     </plurals>
+    <string name="ui_copy_formula">Copy formula</string>
+    <string name="ui_copy_table">Copy table</string>
+    <string name="ui_authentication">Authentication</string>
+    <string name="ui_jump_host">Jump host</string>
+    <string name="ui_configured">Configured</string>
+    <string name="ui_not_configured">Not configured</string>
+    <string name="ui_custom_configuration">Custom</string>
+    <string name="ui_shared_connection_draft">Save all changes on the connection page.</string>
+    <string name="ui_ask_when_connecting">Ask when connecting</string>
 </resources>

@@ -77,8 +77,8 @@ class CodePresentationDeviceTest {
                 }
             }
         } }
-        compose.waitUntil(5000) { compose.onAllNodesWithText(label(R.string.ui_view_full_content)).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(label(R.string.ui_view_full_content)).performScrollTo().performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithContentDescription(label(R.string.ui_view_full_content)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription(label(R.string.ui_view_full_content)).performScrollTo().performClick()
         compose.waitUntil(5000) { compose.onAllNodes(hasScrollToIndexAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasContentDescription(label(R.string.ui_wrap_lines)) and hasAnyAncestor(isDialog())).performClick()
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(codePages(source).lastIndex)
@@ -86,7 +86,7 @@ class CodePresentationDeviceTest {
         compose.onNode(hasContentDescription(label(R.string.ui_copy_output)) and hasAnyAncestor(isDialog())).assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(source, clipboard()) }
         compose.onNodeWithContentDescription(label(R.string.ui_back_to_session)).performClick()
-        compose.onNodeWithText(label(R.string.ui_view_full_content)).assertExists()
+        compose.onNodeWithContentDescription(label(R.string.ui_view_full_content)).assertExists()
     }
 
     @Test fun legacyCommandRecordsStayWholeAndNeverOfferAnInferredCommand() {

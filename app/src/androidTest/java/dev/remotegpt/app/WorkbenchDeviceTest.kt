@@ -27,7 +27,7 @@ class WorkbenchDeviceTest {
         compose.onNodeWithText(tr(R.string.ui_connection_name)).assertIsDisplayed()
         compose.onNodeWithText(tr(R.string.ui_host_address)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(tr(R.string.ui_username)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(tr(R.string.ui_save_connection)).assertIsNotEnabled()
+        compose.waitUntil { compose.onAllNodes(hasText(tr(R.string.ui_save_connection)) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription(tr(R.string.ui_back_to_servers)).performClick()
         compose.onNodeWithContentDescription(tr(R.string.ui_back)).performClick()
         compose.onNodeWithContentDescription(tr(R.string.ui_back)).performClick()
@@ -72,7 +72,6 @@ class WorkbenchDeviceTest {
             // opens the editor again. Clear it before testing the delete action.
             compose.runOnIdle { vm.message(null) }
             compose.onNodeWithText(tr(R.string.ui_edit_connection)).performClick()
-            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(tr(R.string.ui_delete_server_connection)))
             compose.onNodeWithText(tr(R.string.ui_delete_server_connection)).performScrollTo().assertIsDisplayed().performClick()
             compose.onNodeWithText(tr(R.string.ui_delete)).performClick()
             compose.waitUntil { vm.state.value.profiles.none { it.id == secondary.id } }

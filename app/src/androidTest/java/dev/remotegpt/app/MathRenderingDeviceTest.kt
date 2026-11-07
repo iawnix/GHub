@@ -80,7 +80,7 @@ class MathRenderingDeviceTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Streaming \\(\\frac{", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription(inline, useUnmergedTree = true).assertExists()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        compose.onAllNodesWithText(context.getString(R.string.ui_copy)).onLast().performScrollTo().performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.ui_copy_formula)).performScrollTo().performClick()
         compose.runOnIdle {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             assertEquals(wide.drop(2).dropLast(2), clipboard.primaryClip?.getItemAt(0)?.text?.toString())

@@ -58,29 +58,14 @@ internal fun taskStatusLabel(status: TaskStatus): String = tr(when (status) {
 ) {
     val (icon, label, tint) = when {
         syncing -> Triple(WorkbenchIcons.Refresh, tr(R.string.ui_output_reconciling), accentColor(WorkbenchAccent.BLUE))
-        !connected -> Triple(WorkbenchIcons.CloudOff, tr(R.string.ui_output_waiting_to_sync), MaterialTheme.colorScheme.onSurfaceVariant)
-        active -> Triple(WorkbenchIcons.CloudDone, tr(R.string.ui_output_live), accentColor(WorkbenchAccent.BLUE))
-        else -> Triple(WorkbenchIcons.CloudDone, tr(R.string.ui_output_synced), accentColor(WorkbenchAccent.TEAL))
+        !connected -> Triple(WorkbenchIcons.OutputPending, tr(R.string.ui_output_waiting_to_sync), MaterialTheme.colorScheme.onSurfaceVariant)
+        active -> Triple(WorkbenchIcons.OutputLive, tr(R.string.ui_output_live), MaterialTheme.colorScheme.onSurfaceVariant)
+        else -> Triple(WorkbenchIcons.OutputSynced, tr(R.string.ui_output_synced), MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    Surface(
-        modifier = modifier.semantics(mergeDescendants = true) {},
-        color = tint.copy(alpha = 0.09f),
-        contentColor = tint,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Icon(icon, null, Modifier.size(13.dp))
-            Text(label, style = MaterialTheme.typography.labelSmall)
-        }
-    }
+    StatusIndicator(icon, label, tint, modifier, showLabel = syncing || !connected)
 }
 
 @Composable internal fun taskStatusColor(status: TaskStatus): Color = when (status) {
-    TaskStatus.COMPLETED -> accentColor(WorkbenchAccent.TEAL)
     TaskStatus.FAILED -> MaterialTheme.colorScheme.error
     TaskStatus.APPROVAL, TaskStatus.QUESTION -> accentColor(WorkbenchAccent.AMBER)
     else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -104,7 +89,11 @@ internal fun taskStatusLabel(status: TaskStatus): String = tr(when (status) {
     }
 }
 
-@Composable internal fun TaskStatusLabel(status: TaskStatus, modifier: Modifier = Modifier, text: String = taskStatusLabel(status)) {
+@Composable internal fun TaskStatusLabel(status: TaskStatus, modifier: Modifier = Modifier, text: String = taskStatusLabel(status), showLabel: Boolean = status != TaskStatus.COMPLETED) {
+    if (status == TaskStatus.COMPLETED && !showLabel) {
+        StatusIndicator(WorkbenchIcons.TaskDone, text, taskStatusColor(status), modifier)
+        return
+    }
     Row(modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         TaskStatusIcon(status, label = null)
         Text(text, style = MaterialTheme.typography.bodySmall, color = taskStatusColor(status))

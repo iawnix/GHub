@@ -68,11 +68,13 @@ adb shell am start -n dev.remotegpt.preview/dev.remotegpt.app.DesignPreviewActiv
 | `picker-model`、`picker-effort` | 模型和思考级别选择 |
 | `picker-hosts`、`picker-projects` | 服务器和项目选择 |
 | `terminal`、`terminal-multi` | 终端和多会话切换 |
+| `host`、`host-editor` | 服务器概览与基础配置 |
+| `host-editor-auth`、`host-editor-jumps`、`host-editor-remote` | 认证、跳板机与远端配置 |
 
 预览入口仅打包到 Debug APK，数据来自本地示例。README 中的截图使用这些场景生成。
 
 ## 修改界面和资源
 
-组件、颜色与交互规则见[界面设计](ui-design.md)。新增文字同步维护中英文字符串资源；图标来源与生成方式见 [Lucide 记录](../app/design/lucide/UPSTREAM.md)，应用图标见[品牌资源](../app/design/brand/README.md)。
+组件、颜色与交互规则见[界面设计](ui-design.md)。新增文字同步维护中英文字符串资源；图标来源与生成方式见 [Phosphor 记录](../app/design/phosphor/UPSTREAM.md)，应用图标见[品牌资源](../app/design/brand/README.md)。
 
 `dist/` 用于本地 APK、截图和验证报告，`.remote-gpt/` 用于本机开发资料；两个目录均由 Git 忽略。公开文档中的图片放在 `docs/images/`。

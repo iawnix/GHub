@@ -1,6 +1,9 @@
 package dev.remotegpt.app.ui
 
 import android.util.LruCache
+import dev.remotegpt.app.R
+import dev.remotegpt.app.tr
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -135,10 +138,10 @@ internal object ChatMathRenderer {
 
 @Composable internal fun DisplayMath(raw: String) {
     val drawable = LocalMathDrawables.current[raw]
-    Column(Modifier.fillMaxWidth()) {
-        // Use the same copy feedback as tables/code; the clipboard retains TeX.
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { CopyControl(mathSource(raw)) }
-        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        // Reserve an action slot outside the scroll area; never cover the formula.
+        Box(Modifier.weight(1f).heightIn(min = 48.dp).horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            contentAlignment = Alignment.CenterStart) {
             if (drawable == null) Text(raw, style = MaterialTheme.typography.bodyLarge)
             else {
                 val density = LocalDensity.current
@@ -148,6 +151,7 @@ internal object ChatMathRenderer {
                 ))
             }
         }
+        ConversationCopyButton(mathSource(raw), tr(R.string.ui_copy_formula))
     }
 }
 

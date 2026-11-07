@@ -1,100 +1,112 @@
 #!/usr/bin/env python3
-"""Generate Compose vectors from vendored Lucide 0.468.0 SVGs; --fetch refreshes sources."""
-from pathlib import Path
-import concurrent.futures
+"""Generate Compose vectors from vendored Phosphor Bold; --fetch downloads the pinned package."""
+import base64
+import hashlib
+import io
 import json
+from pathlib import Path
 import sys
+import tarfile
 import urllib.request
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / 'app/design/lucide'
-VERSION = '0.468.0'
+SOURCE = ROOT / 'app/design/phosphor'
+VERSION = '2.1.1'
+INTEGRITY = 'v4ARvrip4qBCImOE5rmPUylOEK4iiED9ZyKjcvzuezqMaiRASCHKcRIuvvxL/twvLpkfnEODCOJp5dM4eZilxQ=='
 ICONS = {
-    'Copy': 'copy', 'Share': 'share-2', 'Add': 'plus', 'Archive': 'archive', 'ArrowUpward': 'arrow-up',
-    'AttachFile': 'paperclip', 'AutoAwesome': 'sparkles', 'ChatBubbleOutline': 'message-square',
-    'TaskDone': 'circle-check', 'TaskError': 'circle-alert', 'TaskPending': 'circle-dashed', 'Check': 'check', 'Checklist': 'list-checks', 'ChevronRight': 'chevron-right',
-    'Close': 'x', 'CloudDone': 'cloud', 'CloudOff': 'cloud-off',
-    'Description': 'file-text', 'Difference': 'file-diff', 'Dns': 'server',
-    'Edit': 'pencil', 'ExpandLess': 'chevron-up', 'ExpandMore': 'chevron-down',
+    'Copy': 'copy', 'Share': 'share-network', 'Add': 'plus', 'Archive': 'archive', 'ArrowUpward': 'arrow-up',
+    'AttachFile': 'paperclip', 'AutoAwesome': 'sparkle', 'ChatBubbleOutline': 'chats',
+    'TaskDone': 'check-circle', 'TaskError': 'x-circle', 'TaskPending': 'circle-dashed', 'Check': 'check',
+    'Checklist': 'list-checks', 'ChevronRight': 'caret-right', 'Close': 'x',
+    'Connected': 'plug', 'Disconnected': 'plugs',
+    'OutputLive': 'pulse', 'OutputSynced': 'checks', 'OutputPending': 'clock',
+    'Description': 'file-text', 'Difference': 'git-diff', 'Dns': 'hard-drives',
+    'Fullscreen': 'corners-out', 'Edit': 'pencil-simple', 'ExpandLess': 'caret-up', 'ExpandMore': 'caret-down',
     'Folder': 'folder', 'FolderCopy': 'folders', 'FolderOpen': 'folder-open',
-    'FrontHand': 'hand', 'Home': 'house', 'Image': 'image', 'Key': 'key-round',
-    'Keyboard': 'keyboard', 'Language': 'languages', 'Lan': 'network', 'Menu': 'panels-top-left', 'MicNone': 'mic',
-    'MoreHoriz': 'ellipsis', 'MoreVert': 'ellipsis-vertical', 'PhotoCamera': 'camera',
-    'Refresh': 'refresh-cw', 'Search': 'search', 'Settings': 'settings-2',
-    'Stop': 'square', 'StopCircle': 'circle-stop', 'Terminal': 'square-terminal',
-    'TextDecrease': 'zoom-out', 'TextIncrease': 'zoom-in',
-    'Project': 'folder-code', 'Running': 'circle-play', 'NewSession': 'square-pen',
-    'Download': 'download', 'Save': 'save', 'FileCode': 'file-code-2',
-    'FileConfig': 'file-cog', 'FileArchive': 'file-archive',
-    'ArrowBack': 'arrow-left', 'ArrowForward': 'arrow-right', 'WrapText': 'wrap-text',
-    'SunMoon': 'sun-moon', 'Database': 'database', 'Trash': 'trash-2', 'Route': 'route',
+    'FrontHand': 'shield', 'Home': 'house', 'Image': 'image', 'Key': 'key',
+    'Keyboard': 'keyboard', 'Language': 'translate', 'Lan': 'network', 'Menu': 'layout', 'MicNone': 'microphone',
+    'MoreHoriz': 'dots-three', 'MoreVert': 'dots-three-vertical', 'PhotoCamera': 'camera',
+    'Refresh': 'arrows-clockwise', 'Search': 'magnifying-glass', 'Settings': 'gear',
+    'Stop': 'stop', 'StopCircle': 'stop-circle', 'Terminal': 'terminal-window',
+    'TextDecrease': 'magnifying-glass-minus', 'TextIncrease': 'magnifying-glass-plus',
+    'Project': 'folder-simple-star', 'Running': 'play-circle', 'NewSession': 'note-pencil',
+    'Download': 'download-simple', 'Save': 'floppy-disk', 'FileCode': 'file-code',
+    'FileConfig': 'file-ini', 'FileArchive': 'file-zip',
+    'ArrowBack': 'arrow-left', 'ArrowForward': 'arrow-right', 'WrapText': 'arrow-u-down-left',
+    'SunMoon': 'circle-half', 'Database': 'database', 'Trash': 'trash', 'Route': 'tree-structure',
 }
 
-def fetch(name):
-    url = f'https://raw.githubusercontent.com/lucide-icons/lucide/{VERSION}/icons/{name}.svg'
+
+def fetch():
+    url = f'https://registry.npmjs.org/@phosphor-icons/core/-/core-{VERSION}.tgz'
     with urllib.request.urlopen(url, timeout=30) as response:
-        (SOURCE / f'{name}.svg').write_bytes(response.read())
-
-if '--fetch' in sys.argv:
+        data = response.read()
+    if base64.b64encode(hashlib.sha512(data).digest()).decode() != INTEGRITY:
+        raise ValueError('Phosphor package integrity mismatch')
     SOURCE.mkdir(parents=True, exist_ok=True)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        list(executor.map(fetch, sorted(set(ICONS.values()))))
-    with urllib.request.urlopen(f'https://raw.githubusercontent.com/lucide-icons/lucide/{VERSION}/LICENSE', timeout=30) as response:
-        (ROOT / 'licenses/Lucide-LICENSE.txt').write_bytes(response.read())
-    with urllib.request.urlopen('https://raw.githubusercontent.com/feathericons/feather/v4.29.2/LICENSE', timeout=30) as response:
-        (ROOT / 'licenses/Feather-LICENSE.txt').write_bytes(response.read())
+    with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
+        # Read named regular files only; never extract package paths to the filesystem.
+        for name in sorted(set(ICONS.values())):
+            member = archive.getmember(f'package/assets/bold/{name}-bold.svg')
+            if not member.isfile():
+                raise ValueError(f'Not a regular SVG: {name}')
+            (SOURCE / f'{name}-bold.svg').write_bytes(archive.extractfile(member).read())
+        (ROOT / 'licenses/Phosphor-LICENSE.txt').write_bytes(archive.extractfile('package/LICENSE').read())
 
-def path(el):
-    kind = el.tag.split('}')[-1]
-    a = el.attrib
-    if kind == 'path': return a['d']
-    if kind == 'line': return f"M{a['x1']} {a['y1']}L{a['x2']} {a['y2']}"
-    if kind in ('polyline', 'polygon'):
-        return 'M' + a['points'] + ('Z' if kind == 'polygon' else '')
-    if kind == 'circle':
-        x,y,r = (float(a[k]) for k in ('cx','cy','r'))
-        return f'M{x-r} {y}a{r} {r} 0 1 0 {2*r} 0a{r} {r} 0 1 0 {-2*r} 0'
-    if kind == 'ellipse':
-        x,y,rx,ry = (float(a[k]) for k in ('cx','cy','rx','ry'))
-        return f'M{x-rx} {y}a{rx} {ry} 0 1 0 {2*rx} 0a{rx} {ry} 0 1 0 {-2*rx} 0'
-    if kind == 'rect':
-        x,y,w,h = (float(a.get(k,0)) for k in ('x','y','width','height'))
-        r = min(float(a.get('rx',0)),w/2,h/2)
-        if not r: return f'M{x} {y}h{w}v{h}h{-w}Z'
-        return f'M{x+r} {y}H{x+w-r}A{r} {r} 0 0 1 {x+w} {y+r}V{y+h-r}A{r} {r} 0 0 1 {x+w-r} {y+h}H{x+r}A{r} {r} 0 0 1 {x} {y+h-r}V{y+r}A{r} {r} 0 0 1 {x+r} {y}Z'
-    raise ValueError(f'Unsupported SVG element: {kind}')
 
-out = '''// Generated by scripts/generate_icons.py from Lucide 0.468.0. Do not edit paths manually.
-// Lucide: ISC; Feather-derived artwork: MIT. See licenses/ and app/design/lucide/UPSTREAM.md.
+def paths(source):
+    root = ET.parse(SOURCE / f'{source}-bold.svg').getroot()
+    if root.attrib.get('viewBox') != '0 0 256 256':
+        raise ValueError(f'Unexpected viewBox in {source}')
+    if set(root.attrib) - {'width', 'height', 'viewBox', 'fill'} or root.attrib.get('fill') != 'currentColor':
+        raise ValueError(f'Unsupported root attributes in {source}')
+    for element in root:
+        if element.tag.split('}')[-1] != 'path' or set(element.attrib) - {'d', 'fill-rule', 'clip-rule', 'fill', 'shape-rendering'}:
+            raise ValueError(f'Unsupported SVG geometry in {source}: {element.attrib}')
+        if element.attrib.get('fill', 'currentColor') not in ('currentColor', '#000', '#000000', 'black'):
+            raise ValueError(f'Unsupported fill in {source}')
+        rule = element.attrib.get('fill-rule', 'nonzero')
+        if rule not in ('nonzero', 'evenodd'):
+            raise ValueError(f'Unsupported fill rule in {source}')
+        yield element.attrib['d'], 'EvenOdd' if rule == 'evenodd' else 'NonZero'
+
+
+def generate():
+    out = f'''// Generated by scripts/generate_icons.py from Phosphor Bold {VERSION}. Do not edit paths manually.
+// Copyright (c) 2023 Phosphor Icons. MIT; see licenses/ and app/design/phosphor/UPSTREAM.md.
 package dev.remotegpt.app.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
-/** One vector family for all workbench surfaces; Icon supplies theme and disabled-state tint. */
-object WorkbenchIcons {
+/** Original glyph geometry; Icon supplies theme and disabled-state tint. */
+object WorkbenchIcons {{
 '''
-for name, source in ICONS.items():
-    paths = [path(el) for el in ET.parse(SOURCE / f'{source}.svg').getroot()]
-    mirror = 'true' if name in ('ArrowBack','ArrowForward','ChevronRight') else 'false'
-    out += f'    val {name}: ImageVector by lazy {{ vector("{source}", {mirror},\n'
-    out += ',\n'.join('        '+json.dumps(d) for d in paths) + '\n    ) }\n'
-out += '''
-    private fun vector(name: String, mirrored: Boolean, vararg paths: String): ImageVector =
-        ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp,
-            viewportWidth = 24f, viewportHeight = 24f, autoMirror = mirrored).apply {
-            paths.forEach { data ->
-                addPath(pathData = addPathNodes(data), fill = null, stroke = SolidColor(Color.Black),
-                    strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+    for name, source in ICONS.items():
+        mirror = 'true' if name in ('ArrowBack', 'ArrowForward', 'ChevronRight') else 'false'
+        grid = ET.parse(SOURCE / f'{source}-bold.svg').getroot().attrib['viewBox'].split()[-1]
+        out += f'    val {name}: ImageVector by lazy {{ vector("{source}", {grid}f, {mirror},\n'
+        out += ',\n'.join(f'        {json.dumps(d)} to PathFillType.{rule}' for d, rule in paths(source)) + '\n    ) }\n'
+    out += '''
+    private fun vector(name: String, grid: Float, mirrored: Boolean, vararg paths: Pair<String, PathFillType>): ImageVector =
+        ImageVector.Builder(name = name, defaultWidth = 20.dp, defaultHeight = 20.dp,
+            viewportWidth = grid, viewportHeight = grid, autoMirror = mirrored).apply {
+            paths.forEach { (data, rule) ->
+                addPath(pathData = addPathNodes(data), fill = SolidColor(Color.Black), pathFillType = rule)
             }
         }.build()
 }
 '''
-(ROOT / 'app/src/main/java/dev/remotegpt/app/ui/WorkbenchIcons.kt').write_text(out)
-print(f'Generated {len(ICONS)} icon properties from {len(set(ICONS.values()))} SVGs')
+    (ROOT / 'app/src/main/java/dev/remotegpt/app/ui/WorkbenchIcons.kt').write_text(out)
+    print(f'Generated {len(ICONS)} icon properties from {len(set(ICONS.values()))} SVGs')
+
+
+if __name__ == '__main__':
+    if '--fetch' in sys.argv:
+        fetch()
+    generate()
