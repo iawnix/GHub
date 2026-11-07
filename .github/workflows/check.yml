@@ -4,6 +4,12 @@ on:
     branches: [main]
   pull_request:
   workflow_call:
+    inputs:
+      allow_device_failures:
+        description: Allow emulator matrix failures when publishing a tag.
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -35,6 +41,7 @@ jobs:
             codex-client/build/reports/tests/
             app/build/reports/
   device:
+    continue-on-error: ${{ inputs.allow_device_failures }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

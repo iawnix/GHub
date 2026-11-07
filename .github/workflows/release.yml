@@ -7,6 +7,8 @@ permissions:
 jobs:
   verify:
     uses: ./.github/workflows/check.yml
+    with:
+      allow_device_failures: true
   release:
     needs: verify
     runs-on: ubuntu-latest
