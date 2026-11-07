@@ -169,7 +169,12 @@ import java.util.UUID
         onBack = { settingsHostId = null; showHosts = true }, onEdit = { hostEditor.open(settingsHost) },
         onConnect = { if (settingsWorkspace.needsBootstrap) bootstrapHost = settingsHost.id else vm.connect(settingsHost.id) },
         onDisconnect = { vm.disconnect(settingsHost.id) }, snackbar = snackbars,
-        onEditSection = { hostEditor.open(settingsHost, it) })
+        onEditSection = { section ->
+            // Detail-page subsections share the same draft as the basic editor,
+            // so Back returns to that editor before leaving server settings.
+            hostEditor.open(settingsHost)
+            hostEditor.navigate(section)
+        })
     else GlassWorkbenchScaffold(
         glassEnabled = (showHome || showConversation) && state.workspace.connection == ConnectionStatus.ONLINE,
         snackbarHost = {

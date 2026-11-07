@@ -79,10 +79,7 @@ class HostEditorViewModel(private val saved: SavedStateHandle) : ViewModel() {
         originalProfile = value
         saved[ORIGINAL] = wireJson.encodeToString(value)
         originalCredentials = emptyMap()
-        // Opening a subsection from server details should return to the shared
-        // basic editor before leaving the editor entirely.
-        updateHistory(if (section == HostEditorSection.BASIC) emptyList()
-            else listOf(HostEditorPage(HostEditorSection.BASIC, "")))
+        updateHistory(emptyList())
         show(section, "")
         saving = false
         credentials = emptyMap()
