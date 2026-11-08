@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -181,20 +183,29 @@ import dev.remotegpt.client.ModelOption
                     IconButton(onClick = { haptic(running); if (running) onStop() else onSend() }, enabled = enabled,
                         modifier = Modifier.size(48.dp).semantics { contentDescription = sendLabel }) {
                         // Stop is destructive for the running turn, so it must not look like Send.
-                        val container = when {
+                        val container by animateColorAsState(when {
                             !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)
                             running -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.onSurface
-                        }
+                        }, Motion.short(), label = "send-container")
                         Box(Modifier.size(34.dp).background(container, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
-                            val tint = when {
+                            val tint by animateColorAsState(when {
                                 !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
                                 running -> MaterialTheme.colorScheme.onError
                                 else -> MaterialTheme.colorScheme.surface
+                            }, Motion.short(), label = "send-tint")
+                            val glyph = when {
+                                inputDraft.delivery == "sending" && !running -> 2
+                                running -> 1
+                                else -> 0
                             }
-                            if (inputDraft.delivery == "sending" && !running) CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
-                            else Icon(if (running) WorkbenchIcons.Stop else WorkbenchIcons.ArrowUpward,
-                                null, Modifier.size(20.dp), tint = tint)
+                            AnimatedContent(glyph, transitionSpec = { swap() }, contentAlignment = Alignment.Center, label = "send-glyph") { target ->
+                                when (target) {
+                                    2 -> CircularProgressIndicator(Modifier.size(18.dp), color = tint, strokeWidth = 2.dp)
+                                    1 -> Icon(WorkbenchIcons.Stop, null, Modifier.size(20.dp), tint = tint)
+                                    else -> Icon(WorkbenchIcons.ArrowUpward, null, Modifier.size(20.dp), tint = tint)
+                                }
+                            }
                         }
                     }
                 }

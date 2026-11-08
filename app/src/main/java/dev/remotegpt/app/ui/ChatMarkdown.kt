@@ -61,8 +61,11 @@ private class ChatMarkdownState : MarkdownState {
 @Composable internal fun StableMarkdownContent(state: State.Success, components: MarkdownComponents, modifier: Modifier) {
     Column(modifier) {
         val blocks = (state.node as ChatMarkdownRoot).blocks
+        // Blocks present at first composition (history, scrolling back) never fade; blocks a
+        // streaming reply appends fade in, which softens the chunked growth of the text.
+        val initial = remember { blocks.mapTo(HashSet()) { it.offset } }
         blocks.forEach { block ->
-            key(block.offset) { StableMarkdownBlock(block, components) }
+            key(block.offset) { AppearOnce(block.offset !in initial) { StableMarkdownBlock(block, components) } }
         }
     }
 }

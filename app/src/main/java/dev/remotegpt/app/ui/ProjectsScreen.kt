@@ -101,7 +101,9 @@ import dev.remotegpt.app.*
                             if (revealProject == project.path) revealProject = null
                         }
                     }
-                    Column(Modifier.fillMaxWidth().bringIntoViewRequester(reveal).onSizeChanged { width = it.width }) {
+                    // Added or removed projects fade; no placement motion, which would chase the expand animation.
+                    Column(Modifier.animateItem(fadeInSpec = tween(200), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))
+                        .fillMaxWidth().bringIntoViewRequester(reveal).onSizeChanged { width = it.width }) {
                         Row(Modifier.fillMaxWidth().onSizeChanged { headerHeight = it.height }
                             .clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = emphasis)),
                             verticalAlignment = Alignment.CenterVertically) {
@@ -142,7 +144,8 @@ import dev.remotegpt.app.*
                         AnimatedVisibility(visibleState = visibility,
                             enter = expandVertically(tween(180, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) + fadeIn(tween(120)),
                             exit = shrinkVertically(tween(120, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(90))) {
-                            Column {
+                            // An archived or new session closes or opens its gap instead of jumping.
+                            Column(Modifier.animateContentSize(tween(Motion.EXPAND, easing = Motion.Standard))) {
                                 threads.take(4).forEachIndexed { index, thread -> key(thread.id) {
                                     ProjectThreadRow(ws, thread, onContinue, onArchive,
                                         if (index == 0) Modifier.onSizeChanged { firstHeight = it.height } else Modifier)
@@ -155,7 +158,10 @@ import dev.remotegpt.app.*
                     }
                 }
                 if (open && project.path in all) {
-                    items(threads.drop(4), key = { "thread:${it.id}" }) { ProjectThreadRow(ws, it, onContinue, onArchive) }
+                    items(threads.drop(4), key = { "thread:${it.id}" }) {
+                        Box(Modifier.animateItem(fadeInSpec = tween(200), placementSpec = tween(Motion.EXPAND, easing = Motion.Standard),
+                            fadeOutSpec = tween(Motion.SHORT))) { ProjectThreadRow(ws, it, onContinue, onArchive) }
+                    }
                 }
                 item(key = "project-actions:${project.path}") {
                     val visibility = remember { MutableTransitionState(open) }

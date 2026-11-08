@@ -18,6 +18,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.Modifier
@@ -151,10 +156,22 @@ import java.util.UUID
     }
     BackHandler(!showHome && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) { vm.navigateBack() }
 
-    if (editProfile != null) HostEditor(hostEditor, vm, snackbar = snackbars,
-        backLabel = tr(if (settingsHostId == editProfile.id) R.string.ui_back_to_server_settings else R.string.ui_back_to_servers),
-        overviewOnly = hostEditorMode == "overview", onClose = hostEditor::close)
-    else if (showSettings) SettingsScreen(state.theme, state.profiles.size, state.backgroundKeepAlive, onBack = { showSettings = false },
+    // Pages are keyed by identity only, so data updates never restart a transition. A page
+    // that is leaving renders only while its data still exists; otherwise it leaves blank.
+    val page = when {
+        editProfile != null -> "editor:${editProfile.id}"
+        showSettings -> "settings"
+        showHostList -> "hosts"
+        settingsHost != null -> "host:${settingsHost.id}"
+        else -> "main"
+    }
+    AnimatedContent(page, transitionSpec = { sharedAxisX(forward = pageDepth(targetState) > pageDepth(initialState)) }, label = "page") { shown ->
+    if (shown.startsWith("editor:")) {
+        if (editProfile != null) HostEditor(hostEditor, vm, snackbar = snackbars,
+            backLabel = tr(if (settingsHostId == editProfile.id) R.string.ui_back_to_server_settings else R.string.ui_back_to_servers),
+            overviewOnly = hostEditorMode == "overview", onClose = hostEditor::close)
+    }
+    else if (shown == "settings") SettingsScreen(state.theme, state.profiles.size, state.backgroundKeepAlive, onBack = { showSettings = false },
         onTheme = vm::theme, onHosts = { showSettings = false; showHosts = true },
         onKeepAlive = { enabled -> runCatching {
             if (!enabled) RemoteConnectionService.stop(context)
@@ -163,15 +180,15 @@ import java.util.UUID
         }
             .onFailure { vm.message(tr(R.string.ui_cannot_keep_the_connection_active_check_notification)) } },
         onClearCache = { vm.clearCache() }, onExport = { export.launch("ghub-diagnostics.txt") }, onLegal = { showLegal = true }, snackbar = snackbars)
-    else if (showHostList) HostsScreen(state.profiles, state.workspaces,
+    else if (shown == "hosts") HostsScreen(state.profiles, state.workspaces,
         onBack = { showHosts = false; settingsHostId = null; showSettings = true },
         onOpen = { settingsHostId = it.id; showHosts = false },
         onAdd = { hostEditorMode = "full"; hostEditor.open(HostProfile()) }, snackbar = snackbars)
-    else if (settingsHost != null) HostDetailsScreen(settingsHost, settingsWorkspace,
+    else if (shown.startsWith("host:")) { if (settingsHost != null) HostDetailsScreen(settingsHost, settingsWorkspace,
         onBack = { settingsHostId = null; showHosts = true }, onEdit = { hostEditorMode = "overview"; hostEditor.open(settingsHost) },
         onConnect = { if (settingsWorkspace.needsBootstrap) bootstrapHost = settingsHost.id else vm.connect(settingsHost.id) },
         onDisconnect = { vm.disconnect(settingsHost.id) }, snackbar = snackbars,
-        onEditSection = { section -> hostEditorMode = "section"; hostEditor.open(settingsHost, section) })
+        onEditSection = { section -> hostEditorMode = "section"; hostEditor.open(settingsHost, section) }) }
     else GlassWorkbenchScaffold(
         glassEnabled = (showHome || showConversation) && state.workspace.connection == ConnectionStatus.ONLINE,
         snackbarHost = {
@@ -224,8 +241,14 @@ import java.util.UUID
                         }
                     }
                 }
-                holder.SaveableStateProvider(if (showHome) "${state.activeHost}:home" else "${state.activeHost}:${state.workspace.selectedProject}:${state.tab}:${state.workspace.selectedThread}") {
-                    if (showHome) ProjectsScreen(state.workspace, onAdd = { showProjectEditor = true },
+                val contentKey = if (showHome) "${state.activeHost}:home" else "${state.activeHost}:${state.workspace.selectedProject}:${state.tab}:${state.workspace.selectedThread}"
+                AnimatedContent(contentKey, Modifier.weight(1f).fillMaxWidth(),
+                    transitionSpec = { workspaceTransition(initialState, targetState) }, label = "workspace-content") { view ->
+                // Only the current view and a leaving home list render: other views read the
+                // current selection, so a leaving copy would show the new one twice.
+                val leavingHome = view != contentKey && view == "${state.activeHost}:home"
+                if (view == contentKey || leavingHome) holder.SaveableStateProvider(view) {
+                    if (view.endsWith(":home")) ProjectsScreen(state.workspace, onAdd = { showProjectEditor = true },
                         onRefresh = { vm.refreshThreads() }, onMore = { vm.refreshThreads(more = true) }, onContinue = vm::openThread,
                         onCreate = { vm.createThread(it) }, onProjectMenu = { menuProject = it },
                         onArchive = { vm.archive(it, true, host = state.activeHost, allowUndo = true) })
@@ -242,8 +265,11 @@ import java.util.UUID
                         WorkspaceTab.TERMINAL -> TerminalsScreen(state, vm, onWorkspace = { showWorkspace = true }, onBottomControls = { bottomControls = it })
                     }
                 }
+                }
             }
         }
+    }
+    Unit // The page chain is a statement, not the lambda's value.
     }
 
     if (showHostSwitcher) HostSwitcherSheet(
@@ -315,5 +341,30 @@ import java.util.UUID
             OutlinedTextField(value, { value = it }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Button(onClick = { onConfirm(value) }, enabled = validate(value), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(tr(R.string.ui_ok)) }
         }
+    }
+}
+
+private fun pageDepth(page: String): Int = when {
+    page == "main" -> 0
+    page == "settings" -> 1
+    page == "hosts" -> 2
+    page.startsWith("host:") -> 3
+    else -> 4 // editor
+}
+
+/**
+ * Home ↔ conversation is a step down the hierarchy; sessions, files and terminal are
+ * siblings; another server is a different place. The terminal only fades: it is a
+ * native view whose content should not be scaled or slid.
+ */
+private fun workspaceTransition(from: String, to: String): ContentTransform {
+    val sameHost = from.substringBefore(':') == to.substringBefore(':')
+    val fromHome = from.endsWith(":home")
+    val toHome = to.endsWith(":home")
+    val terminal = ":${WorkspaceTab.TERMINAL}:" in from || ":${WorkspaceTab.TERMINAL}:" in to
+    return when {
+        terminal -> ContentTransform(fadeIn(tween(160, delayMillis = 40)), fadeOut(tween(80)), sizeTransform = null)
+        sameHost && fromHome != toHome -> sharedAxisX(forward = fromHome)
+        else -> fadeThrough()
     }
 }

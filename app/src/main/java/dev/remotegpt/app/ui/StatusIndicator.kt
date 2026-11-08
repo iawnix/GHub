@@ -1,9 +1,12 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package dev.remotegpt.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -11,15 +14,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.ConnectionStatus
 
-/** A passive status, without a button surface or a click action. Long press explains the glyph. */
+/** A passive status, without a button surface or a click action. Long press explains the glyph.
+ * Glyph and color change with a short transition so a status change is noticed, not missed. */
 @Composable internal fun StatusIndicator(
     icon: ImageVector, label: String, tint: Color,
     modifier: Modifier = Modifier, showLabel: Boolean = false,
 ) {
+    val color by animateColorAsState(tint, Motion.short(), label = "status-tint")
     if (showLabel) {
         Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(icon, null, Modifier.size(16.dp), tint = tint)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = tint)
+            StatusGlyph(icon, null, color)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = color)
         }
     } else {
         TooltipBox(
@@ -29,9 +34,15 @@ import dev.remotegpt.app.ConnectionStatus
             modifier = modifier,
         ) {
             Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                Icon(icon, label, Modifier.size(16.dp), tint = tint)
+                StatusGlyph(icon, label, color)
             }
         }
+    }
+}
+
+@Composable private fun StatusGlyph(icon: ImageVector, label: String?, tint: Color) {
+    AnimatedContent(icon, transitionSpec = { swap() }, contentAlignment = Alignment.Center, label = "status-glyph") { glyph ->
+        Icon(glyph, label, Modifier.size(16.dp), tint = tint)
     }
 }
 

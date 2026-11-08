@@ -191,15 +191,17 @@ import dev.remotegpt.client.*
                 }
                 // "Synced" is the quiet default and needs no badge.
                 if (active || syncing || !connected) OutputSyncBadge(active = active, syncing = syncing, connected = connected)
-                Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ChevronRight,
-                    if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
+                    MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (steps.isNotEmpty()) OutputEventRail(steps)
-            if (expanded) Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                steps.forEach { item ->
-                    key(item.identityKey) {
-                        TimelineCard(item, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+            Disclosure(expanded) {
+                Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    steps.forEach { item ->
+                        key(item.identityKey) {
+                            TimelineCard(item, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+                        }
                     }
                 }
             }
@@ -273,19 +275,26 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
                         style = MaterialTheme.typography.labelMedium)
                     ChangeCounts(total)
                 }
-                Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ExpandMore, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
-                    Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                DisclosureChevron(expanded, WorkbenchIcons.ExpandMore, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
+                    MaterialTheme.colorScheme.onSurfaceVariant, openDegrees = 180f)
             }
-            if (expanded) {
-                (if (showAll) grouped else grouped.take(3)).forEach { (path, changes) -> key(path) { FileDiffRow(path, changes, path.substringAfterLast('/') in repeatedNames) } }
-                if (grouped.size > 3) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
-                    TextButton(onClick = { haptic(false); showAll = !showAll }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
-                        Text(if (showAll) tr(R.string.chat_fewer_files) else trq(R.plurals.chat_more_files, grouped.size - 3), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-                        Icon(if (showAll) WorkbenchIcons.ExpandLess else WorkbenchIcons.ChevronRight, null, Modifier.size(16.dp))
+            Disclosure(expanded) {
+                Column {
+                    grouped.take(3).forEach { (path, changes) -> key(path) { FileDiffRow(path, changes, path.substringAfterLast('/') in repeatedNames) } }
+                    Disclosure(showAll) {
+                        Column {
+                            grouped.drop(3).forEach { (path, changes) -> key(path) { FileDiffRow(path, changes, path.substringAfterLast('/') in repeatedNames) } }
+                        }
                     }
+                    if (grouped.size > 3) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+                        TextButton(onClick = { haptic(false); showAll = !showAll }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text(if (showAll) tr(R.string.chat_fewer_files) else trq(R.plurals.chat_more_files, grouped.size - 3), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                            DisclosureChevron(showAll, WorkbenchIcons.ChevronRight, null, LocalContentColor.current, openDegrees = -90f)
+                        }
+                    }
+                    items.filter { it.fileEdits.isEmpty() }.forEach { key(it.identityKey) { Box(Modifier.padding(horizontal = 12.dp)) { TimelineCard(it, preview) } } }
                 }
-                items.filter { it.fileEdits.isEmpty() }.forEach { key(it.identityKey) { Box(Modifier.padding(horizontal = 12.dp)) { TimelineCard(it, preview) } } }
             }
         }
     }

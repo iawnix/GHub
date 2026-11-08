@@ -41,7 +41,7 @@ jobs:
             codex-client/build/reports/tests/
             app/build/reports/
   device:
-    continue-on-error: ${{ inputs.allow_device_failures }}
+    continue-on-error: ${{ inputs.allow_device_failures == true }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
