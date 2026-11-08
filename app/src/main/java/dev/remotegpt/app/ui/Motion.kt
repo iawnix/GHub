@@ -60,8 +60,9 @@ internal object Motion {
  */
 internal fun sharedAxisX(forward: Boolean): ContentTransform {
     val sign = if (forward) 1 else -1
-    val enter = slideInHorizontally(tween(Motion.PAGE, easing = Motion.EmphasizedDecelerate)) { sign * it / 10 } +
-        fadeIn(tween(Motion.PAGE - 70, delayMillis = 70, easing = LinearOutSlowInEasing))
+    // Keep the incoming page opaque from its first frame. The outgoing route can be
+    // cleared as navigation completes, so a delayed fade-in would expose a blank frame.
+    val enter = slideInHorizontally(tween(Motion.PAGE, easing = Motion.EmphasizedDecelerate)) { sign * it / 10 }
     val exit = slideOutHorizontally(tween(Motion.PAGE, easing = Motion.EmphasizedAccelerate)) { -sign * it / 10 } +
         fadeOut(tween(90, easing = FastOutLinearInEasing))
     return ContentTransform(enter, exit, targetContentZIndex = if (forward) 1f else -1f, sizeTransform = null)
@@ -69,8 +70,9 @@ internal fun sharedAxisX(forward: Boolean): ContentTransform {
 
 /** Switching between siblings (sessions, files, terminal; one server to another): no direction. */
 internal fun fadeThrough(): ContentTransform = ContentTransform(
-    fadeIn(tween(200, delayMillis = 70, easing = LinearOutSlowInEasing)) +
-        scaleIn(tween(200, delayMillis = 70, easing = LinearOutSlowInEasing), initialScale = .97f),
+    // Sibling views do not keep a render snapshot of the old tab. Show the new view
+    // immediately instead of fading through an empty frame between two state updates.
+    scaleIn(tween(140, easing = LinearOutSlowInEasing), initialScale = .98f),
     fadeOut(tween(70, easing = FastOutLinearInEasing)),
     sizeTransform = null,
 )
