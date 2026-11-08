@@ -46,6 +46,7 @@ import java.util.UUID
     val hostEditor: HostEditorViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val editProfile = hostEditor.profile
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var hostEditorMode by rememberSaveable { mutableStateOf("full") }
     var settingsHostId by rememberSaveable { mutableStateOf<String?>(null) }
     val settingsHost = state.profiles.firstOrNull { it.id == settingsHostId }
     val settingsWorkspace = state.workspaces[settingsHostId] ?: HostWorkspace()
@@ -151,7 +152,8 @@ import java.util.UUID
     BackHandler(!showHome && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) { vm.navigateBack() }
 
     if (editProfile != null) HostEditor(hostEditor, vm, snackbar = snackbars,
-        backLabel = tr(if (settingsHostId == editProfile.id) R.string.ui_back_to_server_settings else R.string.ui_back_to_servers), onClose = hostEditor::close)
+        backLabel = tr(if (settingsHostId == editProfile.id) R.string.ui_back_to_server_settings else R.string.ui_back_to_servers),
+        overviewOnly = hostEditorMode == "overview", onClose = hostEditor::close)
     else if (showSettings) SettingsScreen(state.theme, state.profiles.size, state.backgroundKeepAlive, onBack = { showSettings = false },
         onTheme = vm::theme, onHosts = { showSettings = false; showHosts = true },
         onKeepAlive = { enabled -> runCatching {
@@ -164,12 +166,12 @@ import java.util.UUID
     else if (showHostList) HostsScreen(state.profiles, state.workspaces,
         onBack = { showHosts = false; settingsHostId = null; showSettings = true },
         onOpen = { settingsHostId = it.id; showHosts = false },
-        onAdd = { hostEditor.open(HostProfile()) }, snackbar = snackbars)
+        onAdd = { hostEditorMode = "full"; hostEditor.open(HostProfile()) }, snackbar = snackbars)
     else if (settingsHost != null) HostDetailsScreen(settingsHost, settingsWorkspace,
-        onBack = { settingsHostId = null; showHosts = true }, onEdit = { hostEditor.open(settingsHost) },
+        onBack = { settingsHostId = null; showHosts = true }, onEdit = { hostEditorMode = "overview"; hostEditor.open(settingsHost) },
         onConnect = { if (settingsWorkspace.needsBootstrap) bootstrapHost = settingsHost.id else vm.connect(settingsHost.id) },
         onDisconnect = { vm.disconnect(settingsHost.id) }, snackbar = snackbars,
-        onEditSection = { section -> hostEditor.open(settingsHost, section) })
+        onEditSection = { section -> hostEditorMode = "section"; hostEditor.open(settingsHost, section) })
     else GlassWorkbenchScaffold(
         glassEnabled = (showHome || showConversation) && state.workspace.connection == ConnectionStatus.ONLINE,
         snackbarHost = {

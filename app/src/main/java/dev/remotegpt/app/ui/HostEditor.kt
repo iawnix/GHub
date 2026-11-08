@@ -32,7 +32,7 @@ import dev.remotegpt.client.*
 import kotlinx.coroutines.*
 
 @Composable fun HostEditor(editor: HostEditorViewModel, vm: WorkbenchViewModel, snackbar: SnackbarHostState? = null,
-    backLabel: String = tr(R.string.ui_back_to_servers), onClose: () -> Unit) {
+    backLabel: String = tr(R.string.ui_back_to_servers), overviewOnly: Boolean = false, onClose: () -> Unit) {
     val profile = editor.profile ?: return
     var loadError by remember(profile.id) { mutableStateOf<String?>(null) }
     LaunchedEffect(profile.id) {
@@ -43,7 +43,7 @@ import kotlinx.coroutines.*
     val state by vm.state.collectAsStateWithLifecycle()
     HostEditorForm(editor, existing = state.profiles.any { it.id == profile.id },
         reconnect = state.workspaces[profile.id]?.connection?.let { it != ConnectionStatus.OFFLINE } == true,
-        loadError = loadError, snackbar = snackbar, backLabel = backLabel, onClose = onClose,
+        loadError = loadError, snackbar = snackbar, backLabel = backLabel, overviewOnly = overviewOnly, onClose = onClose,
         onSave = { value, secrets, done -> vm.saveProfile(value, secrets, done); Unit },
         onDelete = { vm.deleteProfile(profile); onClose() })
 }
@@ -51,7 +51,7 @@ import kotlinx.coroutines.*
 /** All sections edit one draft. The entry page owns Save, and Back retraces the actual navigation path. */
 @Composable fun HostEditorForm(editor: HostEditorViewModel, existing: Boolean = false, reconnect: Boolean = false,
     loadError: String? = null, snackbar: SnackbarHostState? = null,
-    backLabel: String = tr(R.string.ui_back_to_servers), onClose: () -> Unit,
+    backLabel: String = tr(R.string.ui_back_to_servers), overviewOnly: Boolean = false, onClose: () -> Unit,
     onSave: (HostProfile, Map<String, Credential>, (Boolean) -> Unit) -> Unit, onDelete: () -> Unit = {}) {
     val profile = editor.profile ?: return
     val section = editor.section
@@ -124,7 +124,7 @@ import kotlinx.coroutines.*
             if (success) onClose() else error = tr(R.string.ui_could_not_save_check_local_storage_and)
         }
     }
-    val title = tr(when (section) {
+    val title = tr(if (overviewOnly && section == HostEditorSection.BASIC) R.string.ui_connection_overview else when (section) {
         HostEditorSection.BASIC -> R.string.ui_server_connection
         HostEditorSection.AUTH, HostEditorSection.JUMP_AUTH -> R.string.ui_authentication
         HostEditorSection.PORT -> R.string.ui_port
@@ -158,14 +158,19 @@ import kotlinx.coroutines.*
                         DraftField(profile.name, { editor.updateProfile(profile.copy(name = it)) }, R.string.ui_connection_name,
                             "name", invalidField, enabled = !saving)
                         EndpointAddressFields(profile.endpoint, ::changeEndpoint, invalidField, enabled = !saving)
-                        Column {
-                            ServerSettingRow(tr(R.string.ui_port), WorkbenchIcons.Settings, profile.endpoint.port.toString(), enabled = !saving) { navigate(HostEditorSection.PORT) }
-                            ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key,
-                                authenticationSummary(profile.endpoint, editor.credentials[profile.endpoint.credentialId], editor.loading), enabled = !saving) { navigate(HostEditorSection.AUTH) }
-                            ServerSettingRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.Route,
-                                if (profile.jumps.isEmpty()) null else tr(R.string.ui_hops, profile.jumps.size), enabled = !saving) { navigate(HostEditorSection.JUMPS) }
-                            ServerSettingRow(tr(R.string.ui_remote_codex), WorkbenchIcons.Terminal,
-                                if (profile.codexPath == "codex" && profile.defaultCwd.isBlank() && profile.socketPath.isBlank()) null else tr(R.string.ui_custom_configuration), enabled = !saving) { navigate(HostEditorSection.REMOTE) }
+                        if (overviewOnly) {
+                            ServerSettingRow(tr(R.string.ui_advanced_connection), WorkbenchIcons.Settings,
+                                profile.endpoint.port.takeIf { it != 22 }?.toString(), enabled = !saving) { navigate(HostEditorSection.PORT) }
+                        } else {
+                            Column {
+                                ServerSettingRow(tr(R.string.ui_port), WorkbenchIcons.Settings, profile.endpoint.port.toString(), enabled = !saving) { navigate(HostEditorSection.PORT) }
+                                ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key,
+                                    authenticationSummary(profile.endpoint, editor.credentials[profile.endpoint.credentialId], editor.loading), enabled = !saving) { navigate(HostEditorSection.AUTH) }
+                                ServerSettingRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.Route,
+                                    if (profile.jumps.isEmpty()) null else tr(R.string.ui_hops, profile.jumps.size), enabled = !saving) { navigate(HostEditorSection.JUMPS) }
+                                ServerSettingRow(tr(R.string.ui_remote_codex), WorkbenchIcons.Terminal,
+                                    if (profile.codexPath == "codex" && profile.defaultCwd.isBlank() && profile.socketPath.isBlank()) null else tr(R.string.ui_custom_configuration), enabled = !saving) { navigate(HostEditorSection.REMOTE) }
+                            }
                         }
                         if (existing) TextButton(onClick = { deleting = true }, enabled = !saving) {
                             Icon(WorkbenchIcons.Trash, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)

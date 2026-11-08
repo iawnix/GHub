@@ -180,6 +180,7 @@
     <string name="ui_host_address" formatted="false">主机地址</string>
     <string name="ui_username" formatted="false">用户名</string>
     <string name="ui_port" formatted="false">端口</string>
+    <string name="ui_advanced_connection" formatted="false">高级连接参数</string>
     <string name="ui_private_key" formatted="false">私钥</string>
     <string name="ui_password" formatted="false">密码</string>
     <string name="ui_interactive_authentication" formatted="false">交互认证</string>

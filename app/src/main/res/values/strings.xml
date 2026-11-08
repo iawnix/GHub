@@ -183,6 +183,7 @@
     <string name="ui_host_address" formatted="false">Host address</string>
     <string name="ui_username" formatted="false">Username</string>
     <string name="ui_port" formatted="false">Port</string>
+    <string name="ui_advanced_connection" formatted="false">Advanced connection</string>
     <string name="ui_private_key" formatted="false">Private key</string>
     <string name="ui_password" formatted="false">Password</string>
     <string name="ui_interactive_authentication" formatted="false">Interactive authentication</string>
