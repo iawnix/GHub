@@ -19,7 +19,7 @@ ICONS = {
     'AttachFile': 'paperclip', 'AutoAwesome': 'sparkle', 'ChatBubbleOutline': 'chats',
     'TaskDone': 'check-circle', 'TaskError': 'x-circle', 'TaskPending': 'circle-dashed', 'Check': 'check',
     'Checklist': 'list-checks', 'ChevronRight': 'caret-right', 'Close': 'x',
-    'Connected': 'plug', 'Disconnected': 'plugs',
+    'Connected': 'link-simple', 'Disconnected': 'link-simple-break',
     'OutputLive': 'pulse', 'OutputSynced': 'checks', 'OutputPending': 'clock',
     'Description': 'file-text', 'Difference': 'git-diff', 'Dns': 'hard-drives',
     'Fullscreen': 'corners-out', 'Edit': 'pencil-simple', 'ExpandLess': 'caret-up', 'ExpandMore': 'caret-down',

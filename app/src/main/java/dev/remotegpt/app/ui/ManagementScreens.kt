@@ -256,7 +256,8 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
             } }
             item {
                 ServerSettingRow(tr(R.string.ui_connection_overview), WorkbenchIcons.Dns,
-                    "${profile.endpoint.username.ifBlank { tr(R.string.ui_not_configured) }} · ${tr(R.string.ui_port)} ${profile.endpoint.port}", onClick = onEdit)
+                    listOf(profile.name, profile.endpoint.host, profile.endpoint.username)
+                        .filter(String::isNotBlank).joinToString(" · "), onClick = onEdit)
                 ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key, authenticationSummary(profile.endpoint, null)) { onEditSection(HostEditorSection.AUTH) }
                 ServerSettingRow(tr(R.string.ui_jump_hosts), WorkbenchIcons.Route,
                     if (profile.jumps.isEmpty()) null else tr(R.string.ui_hops, profile.jumps.size)) { onEditSection(HostEditorSection.JUMPS) }
