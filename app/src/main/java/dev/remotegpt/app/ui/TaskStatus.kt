@@ -1,5 +1,7 @@
 package dev.remotegpt.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -74,18 +76,21 @@ internal fun taskStatusLabel(status: TaskStatus): String = tr(when (status) {
 /** A fixed footprint avoids row movement when the outcome changes. */
 @Composable internal fun TaskStatusIcon(status: TaskStatus, modifier: Modifier = Modifier, label: String? = taskStatusLabel(status)) {
     val motionScale = rememberCoroutineScope().coroutineContext[MotionDurationScale]?.scaleFactor ?: 1f
-    val tint = taskStatusColor(status)
+    val tint by animateColorAsState(taskStatusColor(status), Motion.short(), label = "task-status-tint")
     Box(modifier.size(16.dp).clearAndSetSemantics { if (label != null) contentDescription = label }, contentAlignment = Alignment.Center) {
-        if (status == TaskStatus.RUNNING && motionScale > 0f) {
-            CircularProgressIndicator(Modifier.size(16.dp), color = tint, strokeWidth = 1.5.dp)
-        } else Icon(when (status) {
-            TaskStatus.RUNNING, TaskStatus.UNKNOWN -> WorkbenchIcons.TaskPending
-            TaskStatus.COMPLETED -> WorkbenchIcons.TaskDone
-            TaskStatus.FAILED -> WorkbenchIcons.TaskError
-            TaskStatus.INTERRUPTED -> WorkbenchIcons.StopCircle
-            TaskStatus.APPROVAL -> WorkbenchIcons.FrontHand
-            TaskStatus.QUESTION -> WorkbenchIcons.ChatBubbleOutline
-        }, null, Modifier.size(16.dp), tint = tint)
+        // Running → done swaps the spinner for the outcome in place, so completion is seen.
+        AnimatedContent(status, transitionSpec = { swap() }, contentAlignment = Alignment.Center, label = "task-status") { shown ->
+            if (shown == TaskStatus.RUNNING && motionScale > 0f) {
+                CircularProgressIndicator(Modifier.size(16.dp), color = tint, strokeWidth = 1.5.dp)
+            } else Icon(when (shown) {
+                TaskStatus.RUNNING, TaskStatus.UNKNOWN -> WorkbenchIcons.TaskPending
+                TaskStatus.COMPLETED -> WorkbenchIcons.TaskDone
+                TaskStatus.FAILED -> WorkbenchIcons.TaskError
+                TaskStatus.INTERRUPTED -> WorkbenchIcons.StopCircle
+                TaskStatus.APPROVAL -> WorkbenchIcons.FrontHand
+                TaskStatus.QUESTION -> WorkbenchIcons.ChatBubbleOutline
+            }, null, Modifier.size(16.dp), tint = tint)
+        }
     }
 }
 

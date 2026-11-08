@@ -6,6 +6,7 @@ import dev.remotegpt.app.R
 
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
@@ -216,11 +217,14 @@ import dev.remotegpt.client.*
                 topInset = if (problem != null) 0.dp else LocalWorkbenchTopInset.current,
                 dock = {
                     if (archived) InfoCard(tr(R.string.ui_this_session_is_archived_restore_it_to), tr(R.string.ui_restore_session)) { vm.archive(thread, false) }
-                    if ((approvals.isNotEmpty() || blockingQuestions > 0) && !pendingInView) {
-                        PendingActionBanner(
-                            if (approvals.isNotEmpty()) trq(R.plurals.ui_approval_pending_banner, approvals.size)
-                            else trq(R.plurals.ui_question_pending_banner, blockingQuestions),
-                        ) {
+                    val bannerText = when {
+                        approvals.isNotEmpty() -> trq(R.plurals.ui_approval_pending_banner, approvals.size)
+                        blockingQuestions > 0 -> trq(R.plurals.ui_question_pending_banner, blockingQuestions)
+                        else -> null
+                    }
+                    val shownBanner = rememberLastNonNull(bannerText)
+                    RiseIn(bannerText != null && !pendingInView) {
+                        PendingActionBanner(shownBanner.orEmpty()) {
                             userScrolling = false
                             followingLatest = false
                             scope.launch { listState.animateScrollToItem(firstPendingIndex) }
@@ -266,9 +270,17 @@ import dev.remotegpt.client.*
                             revision = revision.takeIf { row.turnId == editableMessage?.turnId || row.turnId == draft.edit?.turnId },
                         )
                     }
-                    items(approvals, key = { "approval:${it.request.key}" }) { pending -> ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) } }
+                    // Blocking requests fade in and out; conversation rows stay unanimated because
+                    // streaming changes their height every frame and placement motion would shake.
+                    items(approvals, key = { "approval:${it.request.key}" }) { pending ->
+                        Box(Modifier.animateItem(fadeInSpec = tween(200), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
+                            ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) }
+                        }
+                    }
                     items(questions, key = { "question:${it.request.key}" }) { pending ->
-                        UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
+                        Box(Modifier.animateItem(fadeInSpec = tween(200), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
+                            UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
+                        }
                     }
                     val task = taskStatus(turnStatus, active = state.conversation?.activeTurn != null, approval = approvals.isNotEmpty(),
                         question = questions.any { it.request.isBlocking })
@@ -280,10 +292,10 @@ import dev.remotegpt.client.*
                         })
                     }
                 }
-                if (!followingLatest && !nearBottom && timeline.isNotEmpty()) {
+                RiseIn(!followingLatest && !nearBottom && timeline.isNotEmpty(),
+                    Modifier.align(Alignment.BottomEnd).padding(bottom = dockHeight).padding(12.dp)) {
                     FilledTonalButton(
                         onClick = { haptic(false); userScrolling = false; followingLatest = true },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = dockHeight).padding(12.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                     ) {
                         Icon(WorkbenchIcons.ExpandMore, null, Modifier.size(18.dp))
