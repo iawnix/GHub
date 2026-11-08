@@ -22,7 +22,6 @@ import java.util.UUID
 /** Actions belong to the finished answer, after its file summary. */
 @Composable internal fun ReplyActions(text: String, completed: Boolean = false) {
     val context = LocalContext.current
-    val haptic = rememberHaptic()
     var preparing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -33,7 +32,6 @@ import java.util.UUID
             } else true
         })
         ConversationActionButton(WorkbenchIcons.Share, tr(R.string.chat_share_reply), enabled = !preparing, onClick = {
-            haptic(false)
             preparing = true
             scope.launch {
                 try {

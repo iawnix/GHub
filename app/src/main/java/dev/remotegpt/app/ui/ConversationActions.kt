@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -27,13 +28,16 @@ import kotlinx.coroutines.delay
     enabled: Boolean = true,
     feedback: String? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptic = rememberHaptic()
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(feedback ?: label) } },
         state = rememberTooltipState(),
     ) {
-        IconButton(onClick = onClick, enabled = enabled,
-            modifier = modifier.size(48.dp).semantics {
+        IconButton(onClick = { haptic(false); onClick() }, enabled = enabled,
+            interactionSource = interactionSource,
+            modifier = modifier.size(48.dp).workbenchPressScale(enabled, interactionSource).semantics {
                 contentDescription = label
                 if (feedback != null) {
                     stateDescription = feedback
@@ -46,7 +50,7 @@ import kotlinx.coroutines.delay
             ),
         ) {
             // Compose respects the system animator duration scale, including zero.
-            Crossfade(icon, Modifier.size(20.dp), animationSpec = tween(300), label = "contentAction") {
+            Crossfade(icon, Modifier.size(20.dp), animationSpec = tween(Motion.ICON), label = "contentAction") {
                 Icon(it, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }
@@ -61,7 +65,6 @@ import kotlinx.coroutines.delay
     beforeCopy: () -> Boolean = { true },
 ) {
     val context = LocalContext.current
-    val haptic = rememberHaptic()
     var copied by remember(text) { mutableStateOf(false) }
     var request by remember(text) { mutableIntStateOf(0) }
     LaunchedEffect(text, request) {
@@ -77,7 +80,6 @@ import kotlinx.coroutines.delay
                     .setPrimaryClip(ClipData.newPlainText(label, text))
                 copied = true
                 request++
-                haptic(false)
             }
         },
     )

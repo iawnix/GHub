@@ -9,7 +9,10 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +43,7 @@ import dev.remotegpt.client.HostProfile
 
 @Composable fun ManagementPage(title: String, onBack: () -> Unit, bottom: @Composable () -> Unit = {}, snackbar: SnackbarHostState? = null, actions: @Composable RowScope.() -> Unit = {}, content: @Composable (PaddingValues) -> Unit) {
     BackHandler(onBack = onBack)
-    Scaffold(topBar = {
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
         TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, actions = actions,
             navigationIcon = { IconButton(onClick = onBack) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back)) } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
@@ -283,6 +287,13 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
 @Composable private fun HostConnectionButton(workspace: HostWorkspace, onConnect: () -> Unit, onDisconnect: () -> Unit) {
     val status = workspace.connection
     val canStop = status == ConnectionStatus.ONLINE || status.busy
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        if (pressed) .96f else 1f,
+        androidx.compose.animation.core.tween(Motion.PRESS, easing = Motion.EmphasizedAccelerate),
+        label = "connection-press-scale",
+    )
     val action = tr(when (status) {
         ConnectionStatus.ONLINE, ConnectionStatus.CHECKING, ConnectionStatus.SYNCING -> R.string.ui_disconnect
         ConnectionStatus.CONNECTING -> R.string.ui_cancel_connection
@@ -301,12 +312,15 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
     TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { PlainTooltip { Text("$state · $action") } }, state = rememberTooltipState()) {
         val haptic = rememberHaptic()
-        Box(Modifier.size(48.dp).clickable(onClick = {
+        Box(Modifier.size(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            onClick = {
             haptic(false)
             if (canStop) onDisconnect() else onConnect()
         }).semantics { contentDescription = action; stateDescription = state }, contentAlignment = Alignment.Center) {
             Box(Modifier.size(36.dp).border(1.dp, connectionColor(status), CircleShape), contentAlignment = Alignment.Center) {
-                Crossfade(icon, animationSpec = tween(150), label = "connectionAction") {
+                    Crossfade(icon, animationSpec = tween(Motion.STATE), label = "connectionAction") {
                     Icon(it, null, Modifier.size(16.dp), tint = connectionColor(status))
                 }
                 if (status.busy && status != ConnectionStatus.WAITING_NETWORK) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 1.5.dp, color = connectionColor(status))

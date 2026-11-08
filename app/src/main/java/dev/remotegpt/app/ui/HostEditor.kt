@@ -112,7 +112,9 @@ import kotlinx.coroutines.*
                 if (section != HostEditorSection.JUMPS) navigate(HostEditorSection.JUMPS)
                 navigate(HostEditorSection.JUMP, issue.endpointId)
                 if (issue.section == HostEditorSection.JUMP_AUTH) navigate(HostEditorSection.JUMP_AUTH, issue.endpointId)
-            } else navigate(issue.section)
+            } else if (!(overviewOnly && issue.section == HostEditorSection.PORT)) {
+                navigate(issue.section)
+            }
             invalidField = issue.field
             error = tr(issue.message)
             return
@@ -133,7 +135,8 @@ import kotlinx.coroutines.*
         HostEditorSection.REMOTE -> R.string.ui_remote_codex
     })
     BackHandler { back() }
-    Scaffold(modifier = Modifier.imePadding(), snackbarHost = { snackbar?.let { SnackbarHost(it) } }, topBar = {
+    Scaffold(modifier = Modifier.imePadding(), containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { snackbar?.let { SnackbarHost(it) } }, topBar = {
         TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = {
             IconButton(onClick = ::back, enabled = !saving) {
                 Icon(WorkbenchIcons.ArrowBack, if (editor.atEntryPage) backLabel else tr(R.string.ui_back))
@@ -157,11 +160,9 @@ import kotlinx.coroutines.*
                     HostEditorSection.BASIC -> {
                         DraftField(profile.name, { editor.updateProfile(profile.copy(name = it)) }, R.string.ui_connection_name,
                             "name", invalidField, enabled = !saving)
-                        EndpointAddressFields(profile.endpoint, ::changeEndpoint, invalidField, enabled = !saving)
-                        if (overviewOnly) {
-                            ServerSettingRow(tr(R.string.ui_advanced_connection), WorkbenchIcons.Settings,
-                                profile.endpoint.port.takeIf { it != 22 }?.toString(), enabled = !saving) { navigate(HostEditorSection.PORT) }
-                        } else {
+                        EndpointAddressFields(profile.endpoint, ::changeEndpoint, invalidField, enabled = !saving,
+                            showPort = overviewOnly)
+                        if (!overviewOnly) {
                             Column {
                                 ServerSettingRow(tr(R.string.ui_port), WorkbenchIcons.Settings, profile.endpoint.port.toString(), enabled = !saving) { navigate(HostEditorSection.PORT) }
                                 ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key,
@@ -269,8 +270,11 @@ internal fun validateHostDraft(profile: HostProfile, credentials: Map<String, Cr
     })
 }
 
-@Composable private fun EndpointAddressFields(endpoint: SshEndpoint, onEndpoint: (SshEndpoint) -> Unit, invalid: String?, enabled: Boolean = true) {
+@Composable private fun EndpointAddressFields(endpoint: SshEndpoint, onEndpoint: (SshEndpoint) -> Unit, invalid: String?, enabled: Boolean = true,
+    showPort: Boolean = false) {
     DraftField(endpoint.host, { onEndpoint(endpoint.copy(host = it.trim())) }, R.string.ui_host_address, "host", invalid, KeyboardType.Uri, enabled)
+    if (showPort) DraftField(if (endpoint.port == 0) "" else endpoint.port.toString(),
+        { onEndpoint(endpoint.copy(port = it.toIntOrNull() ?: 0)) }, R.string.ui_port, "port", invalid, KeyboardType.Number, enabled)
     DraftField(endpoint.username, { onEndpoint(endpoint.copy(username = it.trim())) }, R.string.ui_username, "username", invalid, enabled = enabled)
 }
 

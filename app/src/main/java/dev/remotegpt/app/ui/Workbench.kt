@@ -15,6 +15,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -165,7 +166,14 @@ import java.util.UUID
         settingsHost != null -> "host:${settingsHost.id}"
         else -> "main"
     }
-    AnimatedContent(page, transitionSpec = { sharedAxisX(forward = pageDepth(targetState) > pageDepth(initialState)) }, label = "page") { shown ->
+    AnimatedContent(
+        page,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        transitionSpec = { sharedAxisX(forward = pageDepth(targetState) > pageDepth(initialState)) },
+        label = "page",
+    ) { shown ->
     if (shown.startsWith("editor:")) {
         if (editProfile != null) HostEditor(hostEditor, vm, snackbar = snackbars,
             backLabel = tr(if (settingsHostId == editProfile.id) R.string.ui_back_to_server_settings else R.string.ui_back_to_servers),
@@ -242,7 +250,8 @@ import java.util.UUID
                     }
                 }
                 val contentKey = if (showHome) "${state.activeHost}:home" else "${state.activeHost}:${state.workspace.selectedProject}:${state.tab}:${state.workspace.selectedThread}"
-                AnimatedContent(contentKey, Modifier.weight(1f).fillMaxWidth(),
+                AnimatedContent(contentKey, Modifier.weight(1f).fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background),
                     transitionSpec = { workspaceTransition(initialState, targetState) }, label = "workspace-content") { view ->
                 // Only the current view and a leaving home list render: other views read the
                 // current selection, so a leaving copy would show the new one twice.
@@ -363,7 +372,7 @@ private fun workspaceTransition(from: String, to: String): ContentTransform {
     val toHome = to.endsWith(":home")
     val terminal = ":${WorkspaceTab.TERMINAL}:" in from || ":${WorkspaceTab.TERMINAL}:" in to
     return when {
-        terminal -> ContentTransform(fadeIn(tween(160, delayMillis = 40)), fadeOut(tween(80)), sizeTransform = null)
+        terminal -> ContentTransform(fadeIn(tween(Motion.CONTENT, delayMillis = 40)), fadeOut(tween(Motion.SHORT - 40)), sizeTransform = null)
         sameHost && fromHome != toHome -> sharedAxisX(forward = fromHome)
         else -> fadeThrough()
     }

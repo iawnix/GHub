@@ -22,6 +22,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -43,6 +45,12 @@ import androidx.compose.ui.unit.dp
  */
 internal object Motion {
     const val SHORT = 120
+    const val PRESS = 150
+    const val STATE = 150
+    const val ICON = 300
+    const val ENTER = 200
+    const val CONTENT = 160
+    const val EXIT = 90
     const val EXPAND = 180
     const val COLLAPSE = 120
     const val PAGE = 260
@@ -52,6 +60,21 @@ internal object Motion {
     val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
     fun <T> short(): FiniteAnimationSpec<T> = tween(SHORT, easing = Standard)
+}
+
+/** Shared press response for prominent icon actions. Material's indication still supplies
+ * the ripple; this adds the same restrained 0.96 scale everywhere this modifier is used. */
+@Composable internal fun Modifier.workbenchPressScale(
+    enabled: Boolean,
+    interactionSource: MutableInteractionSource,
+): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        if (enabled && pressed) .96f else 1f,
+        tween(Motion.PRESS, easing = Motion.EmphasizedAccelerate),
+        label = "press-scale",
+    )
+    return graphicsLayer { scaleX = scale; scaleY = scale }
 }
 
 /**
@@ -64,7 +87,7 @@ internal fun sharedAxisX(forward: Boolean): ContentTransform {
     // cleared as navigation completes, so a delayed fade-in would expose a blank frame.
     val enter = slideInHorizontally(tween(Motion.PAGE, easing = Motion.EmphasizedDecelerate)) { sign * it / 10 }
     val exit = slideOutHorizontally(tween(Motion.PAGE, easing = Motion.EmphasizedAccelerate)) { -sign * it / 10 } +
-        fadeOut(tween(90, easing = FastOutLinearInEasing))
+        fadeOut(tween(Motion.EXIT, easing = FastOutLinearInEasing))
     return ContentTransform(enter, exit, targetContentZIndex = if (forward) 1f else -1f, sizeTransform = null)
 }
 
@@ -90,7 +113,7 @@ internal fun swap(): ContentTransform = ContentTransform(
         visible = expanded,
         modifier = modifier,
         enter = expandVertically(tween(Motion.EXPAND, easing = Motion.Standard), expandFrom = Alignment.Top) + fadeIn(tween(Motion.SHORT)),
-        exit = shrinkVertically(tween(Motion.COLLAPSE, easing = Motion.Standard), shrinkTowards = Alignment.Top) + fadeOut(tween(90)),
+        exit = shrinkVertically(tween(Motion.COLLAPSE, easing = Motion.Standard), shrinkTowards = Alignment.Top) + fadeOut(tween(Motion.EXIT)),
     ) { content() }
 }
 
@@ -110,8 +133,8 @@ internal fun swap(): ContentTransform = ContentTransform(
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = slideInVertically(tween(200, easing = Motion.EmphasizedDecelerate)) { it / 3 } + fadeIn(tween(160)),
-        exit = slideOutVertically(tween(Motion.SHORT, easing = Motion.EmphasizedAccelerate)) { it / 3 } + fadeOut(tween(90)),
+        enter = slideInVertically(tween(Motion.ENTER, easing = Motion.EmphasizedDecelerate)) { it / 3 } + fadeIn(tween(Motion.CONTENT)),
+        exit = slideOutVertically(tween(Motion.SHORT, easing = Motion.EmphasizedAccelerate)) { it / 3 } + fadeOut(tween(Motion.EXIT)),
     ) { content() }
 }
 

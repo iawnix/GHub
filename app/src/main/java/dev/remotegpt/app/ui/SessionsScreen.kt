@@ -273,12 +273,12 @@ import dev.remotegpt.client.*
                     // Blocking requests fade in and out; conversation rows stay unanimated because
                     // streaming changes their height every frame and placement motion would shake.
                     items(approvals, key = { "approval:${it.request.key}" }) { pending ->
-                        Box(Modifier.animateItem(fadeInSpec = tween(200), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
+                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
                             ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) }
                         }
                     }
                     items(questions, key = { "question:${it.request.key}" }) { pending ->
-                        Box(Modifier.animateItem(fadeInSpec = tween(200), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
+                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
                             UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
                         }
                     }

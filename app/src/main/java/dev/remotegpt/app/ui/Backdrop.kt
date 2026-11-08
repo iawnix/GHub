@@ -43,7 +43,12 @@ internal val LocalComposerTextHeight = staticCompositionLocalOf { 144.dp }
 ) {
     val backdrop = rememberHazeState(blurEnabled = Build.VERSION.SDK_INT >= 31)
     CompositionLocalProvider(LocalWorkbenchBackdrop provides backdrop.takeIf { glassEnabled }) {
-        Scaffold(modifier = modifier, snackbarHost = snackbarHost, topBar = topBar) { padding ->
+        Scaffold(
+            modifier = modifier,
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = snackbarHost,
+            topBar = topBar,
+        ) { padding ->
             CompositionLocalProvider(LocalWorkbenchTopInset provides if (glassEnabled) padding.calculateTopPadding() else 0.dp) {
                 content(if (glassEnabled) PaddingValues(bottom = padding.calculateBottomPadding(),
                     start = padding.calculateStartPadding(androidx.compose.ui.platform.LocalLayoutDirection.current),

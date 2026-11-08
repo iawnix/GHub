@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalFocusManager
@@ -109,7 +110,7 @@ import dev.remotegpt.client.ModelOption
                                 }, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
                                     color = if (attachment.state == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            IconButton(onClick = { onRemoveAttachment(attachment.id) }, enabled = editable, modifier = Modifier.size(48.dp)) {
+                            IconButton(onClick = { haptic(false); onRemoveAttachment(attachment.id) }, enabled = editable, modifier = Modifier.size(48.dp)) {
                                 Icon(WorkbenchIcons.Close, tr(R.string.ui_remove_attachment, attachment.name), Modifier.size(16.dp))
                             }
                         }
@@ -140,11 +141,11 @@ import dev.remotegpt.client.ModelOption
                 val compact = maxWidth < 344.dp || LocalDensity.current.fontScale > 1.3f
                 val modelLabel = currentModel?.name ?: model ?: tr(R.string.ui_choose_model)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { focus.clearFocus(); attachmentsMenu = true }, enabled = editable, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = { haptic(false); focus.clearFocus(); attachmentsMenu = true }, enabled = editable, modifier = Modifier.size(48.dp)) {
                         Icon(WorkbenchIcons.Add, tr(R.string.ui_add_attachment), Modifier.size(22.dp))
                     }
                     if (compact) {
-                        TextButton(onClick = { focus.clearFocus(); optionsMenu = true }, enabled = editable,
+                        TextButton(onClick = { haptic(false); focus.clearFocus(); optionsMenu = true }, enabled = editable,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 .semantics { contentDescription = tr(R.string.ui_message_options_current, modelLabel, effortLabel(effort)) },
                             contentPadding = PaddingValues(horizontal = 4.dp),
@@ -154,20 +155,20 @@ import dev.remotegpt.client.ModelOption
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
                     } else {
-                        TextButton(onClick = { focus.clearFocus(); modelsMenu = true }, enabled = editable,
+                        TextButton(onClick = { haptic(false); focus.clearFocus(); modelsMenu = true }, enabled = editable,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = tr(R.string.ui_choose_model_current, modelLabel) },
                             contentPadding = PaddingValues(horizontal = 4.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             Text(modelLabel, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
-                        TextButton(onClick = { focus.clearFocus(); effortMenu = true }, enabled = editable,
+                        TextButton(onClick = { haptic(false); focus.clearFocus(); effortMenu = true }, enabled = editable,
                             modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = tr(R.string.ui_reasoning_level_current, effortLabel(effort)) },
                             contentPadding = PaddingValues(horizontal = 6.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             Text(effortLabel(effort), maxLines = 1, style = MaterialTheme.typography.labelMedium)
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
                     }
-                    IconButton(onClick = onVoice, enabled = editable, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = { haptic(false); onVoice() }, enabled = editable, modifier = Modifier.size(48.dp)) {
                         Icon(if (listening) WorkbenchIcons.StopCircle else WorkbenchIcons.MicNone,
                             tr(if (listening) R.string.ui_stop_voice_input else R.string.ui_voice_input), Modifier.size(20.dp),
                             tint = if (listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -180,8 +181,11 @@ import dev.remotegpt.client.ModelOption
                         edit != null -> R.string.ui_edit_and_resend
                         else -> R.string.ui_send_message
                     })
+                    val sendInteractionSource = remember { MutableInteractionSource() }
                     IconButton(onClick = { haptic(running); if (running) onStop() else onSend() }, enabled = enabled,
-                        modifier = Modifier.size(48.dp).semantics { contentDescription = sendLabel }) {
+                        interactionSource = sendInteractionSource,
+                        modifier = Modifier.size(48.dp).workbenchPressScale(enabled, sendInteractionSource)
+                            .semantics { contentDescription = sendLabel }) {
                         // Stop is destructive for the running turn, so it must not look like Send.
                         val container by animateColorAsState(when {
                             !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)

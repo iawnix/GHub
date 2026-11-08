@@ -300,7 +300,8 @@ import kotlin.math.roundToInt
 }
 
 @Composable private fun TerminalKey(label: String, description: String, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    TextButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
+    val haptic = rememberHaptic()
+    TextButton(onClick = { haptic(false); onClick() }, enabled = enabled, modifier = modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
         .semantics { contentDescription = description }, shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge)
     }
