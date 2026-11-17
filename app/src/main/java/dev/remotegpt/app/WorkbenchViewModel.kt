@@ -1963,7 +1963,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 cause.message?.contains("Row too big", ignoreCase = true) == true
         }
     }
-    fun clearCache() = launchStorage {
+    fun clearCache(onComplete: () -> Unit = {}) = launchStorage {
         imageGeneration++
         imageLoads.values.forEach { it.cancel() }; imageLoads.clear()
         mutable.update { all -> all.copy(previewImage = null, workspaces = all.workspaces.mapValues { (_, ws) ->
@@ -1985,6 +1985,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             runtimes.values.forEach { it.persistedThreads.clear() }
         }
         message(tr(R.string.ui_local_session_cache_cleared_drafts_are_preserved))
+        withContext(Dispatchers.Main.immediate) { onComplete() }
     }
     fun exportDiagnostics(uri: Uri) = viewModelScope.launch {
         try {

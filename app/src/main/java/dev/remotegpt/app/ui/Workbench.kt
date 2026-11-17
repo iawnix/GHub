@@ -187,7 +187,7 @@ import java.util.UUID
             else RemoteConnectionService.start(context)
         }
             .onFailure { vm.message(tr(R.string.ui_cannot_keep_the_connection_active_check_notification)) } },
-        onClearCache = { vm.clearCache() }, onExport = { export.launch("ghub-diagnostics.txt") }, onLegal = { showLegal = true }, snackbar = snackbars)
+        onClearCache = { onComplete -> vm.clearCache(onComplete) }, onExport = { export.launch("ghub-diagnostics.txt") }, onLegal = { showLegal = true }, snackbar = snackbars)
     else if (shown == "hosts") HostsScreen(state.profiles, state.workspaces,
         onBack = { showHosts = false; settingsHostId = null; showSettings = true },
         onOpen = { settingsHostId = it.id; showHosts = false },

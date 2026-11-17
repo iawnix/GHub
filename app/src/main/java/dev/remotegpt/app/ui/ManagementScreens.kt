@@ -39,7 +39,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.*
+import dev.remotegpt.app.data.StorageUsage
 import dev.remotegpt.client.HostProfile
+import java.util.Locale
 
 @Composable fun ManagementPage(title: String, onBack: () -> Unit, bottom: @Composable () -> Unit = {}, snackbar: SnackbarHostState? = null, actions: @Composable RowScope.() -> Unit = {}, content: @Composable (PaddingValues) -> Unit) {
     BackHandler(onBack = onBack)
@@ -83,7 +85,7 @@ import dev.remotegpt.client.HostProfile
 }
 
 @Composable fun SettingsScreen(theme: String, hostCount: Int, backgroundKeepAlive: Boolean, onBack: () -> Unit, onTheme: (String) -> Unit,
-    onHosts: () -> Unit, onKeepAlive: (Boolean) -> Unit, onClearCache: () -> Unit, onExport: () -> Unit, onLegal: () -> Unit, snackbar: SnackbarHostState? = null) {
+    onHosts: () -> Unit, onKeepAlive: (Boolean) -> Unit, onClearCache: ((() -> Unit) -> Unit), onExport: () -> Unit, onLegal: () -> Unit, snackbar: SnackbarHostState? = null) {
     var section by rememberSaveable { mutableStateOf<String?>(null) }
     when (section) {
         "appearance" -> AppearanceSettings(theme, onTheme, snackbar) { section = null }
@@ -180,11 +182,18 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
     }
 }
 
-@Composable private fun DataSettings(onClearCache: () -> Unit, onExport: () -> Unit, onLegal: () -> Unit, snackbar: SnackbarHostState?, onBack: () -> Unit) {
+@Composable private fun DataSettings(onClearCache: ((() -> Unit) -> Unit), onExport: () -> Unit, onLegal: () -> Unit, snackbar: SnackbarHostState?, onBack: () -> Unit) {
     var clear by rememberSaveable { mutableStateOf(false) }
+    var usageRefresh by rememberSaveable { mutableIntStateOf(0) }
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val usage by produceState<StorageUsage?>(initialValue = null, usageRefresh) {
+        value = StorageUsage.read(context)
+    }
     ManagementPage(tr(R.string.ui_data_and_diagnostics), onBack, snackbar = snackbar) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item { SectionLabel(tr(R.string.ui_local_data)) }
+            item { StorageUsageCard(usage) }
+            item { Spacer(Modifier.height(12.dp)) }
             item {
                 WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
                     PreferenceRow(tr(R.string.ui_clear_session_cache), WorkbenchIcons.Trash, description = tr(R.string.ui_keep_drafts_server_connections_and_remote_sessions), onClick = { clear = true })
@@ -202,8 +211,67 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
     }
     if (clear) AlertDialog(onDismissRequest = { clear = false }, title = { Text(tr(R.string.ui_clear_local_session_cache)) },
         text = { Text(tr(R.string.ui_drafts_connections_and_remote_sessions_are_kept)) },
-        confirmButton = { TextButton(onClick = { clear = false; onClearCache() }) { Text(tr(R.string.ui_clear_cache)) } },
+        confirmButton = { TextButton(onClick = { clear = false; onClearCache { usageRefresh++ } }) { Text(tr(R.string.ui_clear_cache)) } },
         dismissButton = { TextButton(onClick = { clear = false }) { Text(tr(R.string.ui_cancel)) } })
+}
+
+private data class StorageSegment(val label: String, val detail: String, val bytes: Long, val color: androidx.compose.ui.graphics.Color)
+
+@Composable private fun StorageUsageCard(usage: StorageUsage?) {
+    val colors = MaterialTheme.colorScheme
+    val segments = listOf(
+        StorageSegment(tr(R.string.ui_storage_database), tr(R.string.ui_storage_database_detail), usage?.databaseBytes ?: 0, colors.primary),
+        StorageSegment(tr(R.string.ui_storage_image_previews), tr(R.string.ui_storage_image_previews_detail), usage?.imagePreviewBytes ?: 0, LocalWorkbenchSemanticColors.current.success),
+        StorageSegment(tr(R.string.ui_storage_editor_drafts), tr(R.string.ui_storage_editor_drafts_detail), usage?.editorDraftBytes ?: 0, LocalWorkbenchSemanticColors.current.warning),
+        StorageSegment(tr(R.string.ui_storage_temporary_files), tr(R.string.ui_storage_temporary_files_detail), usage?.temporaryBytes ?: 0, colors.onSurfaceVariant),
+        StorageSegment(tr(R.string.ui_storage_diagnostics), tr(R.string.ui_storage_diagnostics_detail), usage?.diagnosticBytes ?: 0, colors.tertiary),
+    )
+    val total = usage?.totalBytes ?: 0
+    WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(tr(R.string.ui_storage_used), style = MaterialTheme.typography.titleMedium)
+                    Text(if (usage == null) tr(R.string.ui_storage_calculating) else formatStorageBytes(total),
+                        style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+                }
+                if (usage == null) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+            val visible = segments.filter { it.bytes > 0 }
+            Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(colors.surfaceContainerLow)) {
+                if (visible.isNotEmpty()) visible.forEach { segment ->
+                    Box(Modifier.weight(segment.bytes.toFloat()).fillMaxHeight().background(segment.color))
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                segments.forEach { segment ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(segment.color))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(segment.label, style = MaterialTheme.typography.bodyMedium)
+                            Text(segment.detail, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(if (usage == null) "—" else formatStorageBytes(segment.bytes), style = MaterialTheme.typography.labelMedium,
+                            color = colors.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatStorageBytes(bytes: Long): String {
+    if (bytes < 1024) return "${bytes} B"
+    val value = bytes.toDouble()
+    val units = arrayOf("KB", "MB", "GB", "TB")
+    var index = -1
+    var scaled = value
+    while (scaled >= 1024 && index < units.lastIndex) {
+        scaled /= 1024
+        index++
+    }
+    return String.format(Locale.getDefault(), "%.1f %s", scaled, units[index])
 }
 
 @Composable fun HostsScreen(profiles: List<HostProfile>, workspaces: Map<String, HostWorkspace>, onBack: () -> Unit,

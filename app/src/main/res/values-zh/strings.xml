@@ -218,6 +218,18 @@
     <string name="ui_cache_diagnostic_logs_and_licenses" formatted="false">缓存、诊断记录与开源许可</string>
     <string name="ui_theme" formatted="false">主题</string>
     <string name="ui_local_data" formatted="false">本地数据</string>
+    <string name="ui_storage_used" formatted="false">本地占用</string>
+    <string name="ui_storage_calculating" formatted="false">正在计算…</string>
+    <string name="ui_storage_database" formatted="false">本地数据库</string>
+    <string name="ui_storage_database_detail" formatted="false">会话、索引、服务器配置和草稿</string>
+    <string name="ui_storage_image_previews" formatted="false">图片预览</string>
+    <string name="ui_storage_image_previews_detail" formatted="false">已下载的远端图片</string>
+    <string name="ui_storage_editor_drafts" formatted="false">编辑草稿</string>
+    <string name="ui_storage_editor_drafts_detail" formatted="false">未保存的文件编辑内容</string>
+    <string name="ui_storage_temporary_files" formatted="false">临时文件</string>
+    <string name="ui_storage_temporary_files_detail" formatted="false">分享、拍照和上传文件</string>
+    <string name="ui_storage_diagnostics" formatted="false">诊断记录</string>
+    <string name="ui_storage_diagnostics_detail" formatted="false">最近一次崩溃记录</string>
     <string name="ui_clear_session_cache" formatted="false">清除会话缓存</string>
     <string name="ui_keep_drafts_server_connections_and_remote_sessions" formatted="false">保留草稿、主机配置和远端会话</string>
     <string name="ui_help_and_diagnostics" formatted="false">帮助与诊断</string>
