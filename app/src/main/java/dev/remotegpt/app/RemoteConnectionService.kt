@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -32,9 +33,12 @@ class RemoteConnectionService : Service() {
         super.onCreate()
         createChannel()
         val notification = notification(null)
-        if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        else if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        else startForeground(NOTIFICATION_ID, notification)
+        if (!promoteToForeground(notification)) {
+            // Android may recreate a START_STICKY service after the app has lost its
+            // foreground-start exemption. Stop quietly instead of crashing the process.
+            stopSelf()
+            return
+        }
         val workbench = (application as RemoteApplication).workbench()
         workbench.setBackgroundKeepAlive(true)
         // The ongoing notification doubles as a live summary of remote work.
@@ -43,6 +47,19 @@ class RemoteConnectionService : Service() {
                 refresh(summary)
             }
         }
+    }
+
+    private fun promoteToForeground(notification: Notification): Boolean = try {
+        if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        else if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        else startForeground(NOTIFICATION_ID, notification)
+        true
+    } catch (error: RuntimeException) {
+        // ForegroundServiceStartNotAllowedException is a RuntimeException on Android 12+
+        // and means the system rejected a background restart. SecurityException covers
+        // device policy and foreground-service permission failures with the same recovery.
+        Log.w(TAG, "Foreground connection service was not allowed to start", error)
+        false
     }
 
     /** Updates this service's own foreground notification; no new notification is created. */
@@ -74,7 +91,7 @@ class RemoteConnectionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) stopSelf()
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -94,6 +111,7 @@ class RemoteConnectionService : Service() {
     }
 
     companion object {
+        private const val TAG = "RemoteConnectionService"
         private const val CHANNEL_ID = "remote_connection"
         private const val NOTIFICATION_ID = 40
         private const val ACTION_STOP = "dev.remotegpt.app.STOP_BACKGROUND_CONNECTION"
