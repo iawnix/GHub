@@ -6,7 +6,6 @@ import dev.remotegpt.app.R
 
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
@@ -270,17 +269,15 @@ import dev.remotegpt.client.*
                             revision = revision.takeIf { row.turnId == editableMessage?.turnId || row.turnId == draft.edit?.turnId },
                         )
                     }
-                    // Blocking requests fade in and out; conversation rows stay unanimated because
-                    // streaming changes their height every frame and placement motion would shake.
+                    // Blocking cards can change height while their command/reason text is being
+                    // measured. Keep them as plain LazyColumn items so a remeasure moves the
+                    // following rows atomically instead of leaving an animated placement layer
+                    // at the old height.
                     items(approvals, key = { "approval:${it.request.key}" }) { pending ->
-                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
-                            ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) }
-                        }
+                        ApprovalCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.approve(pending.request, it) }
                     }
                     items(questions, key = { "question:${it.request.key}" }) { pending ->
-                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))) {
-                            UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
-                        }
+                        UserQuestionsCard(pending, enabled = ws.connection == ConnectionStatus.ONLINE) { vm.answerQuestions(pending.request, it) }
                     }
                     val task = taskStatus(turnStatus, active = state.conversation?.activeTurn != null, approval = approvals.isNotEmpty(),
                         question = questions.any { it.request.isBlocking })

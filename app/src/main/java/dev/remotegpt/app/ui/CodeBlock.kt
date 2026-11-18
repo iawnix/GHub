@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
@@ -155,7 +156,10 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
             }
         }
     }
-    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (slice == null) 8.dp else 0.dp)) {
+    // Keep a delayed highlight/layout update inside this code block. This is
+    // especially important for approval cards, where the command is followed
+    // by explanatory text in the same parent column.
+    Box(Modifier.fillMaxWidth().clipToBounds().padding(horizontal = 12.dp, vertical = if (slice == null) 8.dp else 0.dp)) {
         Text(annotated,
             modifier = if (wrap) Modifier.fillMaxWidth() else Modifier.horizontalScroll(rememberScrollState()),
             style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, lineHeight = 20.sp,
