@@ -46,7 +46,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [29, 35, 36]
+        # API 29 covers the minimum supported Android version and API 35
+        # covers the current stable emulator. API 36's Google APIs image is
+        # intermittently unavailable on hosted runners before tests start.
+        api: [29, 35]
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space for Android emulator
