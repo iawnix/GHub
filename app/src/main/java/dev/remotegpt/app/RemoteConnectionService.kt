@@ -29,17 +29,23 @@ import kotlinx.coroutines.launch
 class RemoteConnectionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    override fun onCreate() {
-        super.onCreate()
-        createChannel()
-        val notification = notification(null)
-        if (!promoteToForeground(notification)) {
-            // Android may recreate a START_STICKY service after the app has lost its
-            // foreground-start exemption. Stop quietly instead of crashing the process.
-            stopSelf()
-            return
+    private var running = false
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val app = application as RemoteApplication
+        if (intent?.action == ACTION_STOP) app.keepAliveRequested = false
+        if (!app.keepAliveRequested) {
+            stopSelf(startId)
+            return START_NOT_STICKY
         }
-        val workbench = (application as RemoteApplication).workbench()
+        if (running) return START_STICKY
+        createChannel()
+        if (!promoteToForeground(notification(null))) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        running = true
+        val workbench = app.workbench()
         workbench.setBackgroundKeepAlive(true)
         // The ongoing notification doubles as a live summary of remote work.
         scope.launch {
@@ -47,6 +53,7 @@ class RemoteConnectionService : Service() {
                 refresh(summary)
             }
         }
+        return START_STICKY
     }
 
     private fun promoteToForeground(notification: Notification): Boolean = try {
@@ -89,14 +96,9 @@ class RemoteConnectionService : Service() {
         return if (parts.isEmpty()) tr(R.string.ui_keep_remote_connection_active) else parts.joinToString(" · ")
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) stopSelf()
-        return START_NOT_STICKY
-    }
-
     override fun onDestroy() {
         scope.cancel()
-        (application as RemoteApplication).workbench().setBackgroundKeepAlive(false)
+        if (running) (application as RemoteApplication).workbench().setBackgroundKeepAlive(false)
         super.onDestroy()
     }
 
@@ -117,10 +119,16 @@ class RemoteConnectionService : Service() {
         private const val ACTION_STOP = "dev.remotegpt.app.STOP_BACKGROUND_CONNECTION"
 
         fun start(context: Context) {
+            (context.applicationContext as RemoteApplication).keepAliveRequested = true
+            requestStart(context)
+        }
+
+        internal fun requestStart(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, RemoteConnectionService::class.java))
         }
 
         fun stop(context: Context) {
+            (context.applicationContext as RemoteApplication).keepAliveRequested = false
             context.stopService(Intent(context, RemoteConnectionService::class.java))
         }
     }

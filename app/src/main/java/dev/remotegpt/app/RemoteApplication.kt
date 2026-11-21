@@ -5,6 +5,17 @@ import androidx.room.Room
 import dev.remotegpt.app.data.*
 
 class RemoteApplication : Application() {
+    private val servicePrefs by lazy { getSharedPreferences("connection_service", MODE_PRIVATE) }
+    private val keepAlivePreference by lazy {
+        androidx.compose.runtime.mutableStateOf(servicePrefs.getBoolean("keep_alive", false))
+    }
+    var keepAliveRequested: Boolean
+        get() = keepAlivePreference.value
+        set(value) {
+            servicePrefs.edit().putBoolean("keep_alive", value).apply()
+            keepAlivePreference.value = value
+        }
+
     val crashes by lazy { CrashDiagnostics(this) }
     @Volatile private var workbenchInstance: WorkbenchViewModel? = null
     override fun onCreate() { super.onCreate(); AppStrings.initialize(this); crashes.install() }

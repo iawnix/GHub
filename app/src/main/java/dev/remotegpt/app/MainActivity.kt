@@ -56,6 +56,13 @@ class MainActivity : AppCompatActivity() {
         // Consume once so a later recreation from history does not repeat the navigation.
         intent.removeExtra(TaskNotifier.EXTRA_HOST)
     }
-    override fun onStart() { super.onStart(); vm.onForeground() }
+    override fun onStart() {
+        super.onStart()
+        vm.onForeground()
+        if ((application as RemoteApplication).keepAliveRequested && !vm.state.value.backgroundKeepAlive) {
+            runCatching { RemoteConnectionService.requestStart(this) }
+                .onFailure { vm.message(tr(R.string.ui_cannot_keep_the_connection_active_check_notification)) }
+        }
+    }
     override fun onStop() { vm.onBackground(); super.onStop() }
 }

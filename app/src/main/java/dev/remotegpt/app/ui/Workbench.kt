@@ -179,7 +179,7 @@ import java.util.UUID
             backLabel = tr(if (settingsHostId == editProfile.id) R.string.ui_back_to_server_settings else R.string.ui_back_to_servers),
             overviewOnly = hostEditorMode == "overview", onClose = hostEditor::close)
     }
-    else if (shown == "settings") SettingsScreen(state.theme, state.profiles.size, state.backgroundKeepAlive, onBack = { showSettings = false },
+    else if (shown == "settings") SettingsScreen(state.theme, state.profiles.size, (context.applicationContext as RemoteApplication).keepAliveRequested, onBack = { showSettings = false },
         onTheme = vm::theme, onHosts = { showSettings = false; showHosts = true },
         onKeepAlive = { enabled -> runCatching {
             if (!enabled) RemoteConnectionService.stop(context)
