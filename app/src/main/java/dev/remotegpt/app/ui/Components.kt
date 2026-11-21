@@ -32,7 +32,6 @@ import com.mikepenz.markdown.model.NoOpImageTransformerImpl
 import com.mikepenz.markdown.model.markdownPadding
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
-import java.io.File
 
 @Composable fun EmptyPanel(icon: ImageVector, title: String, description: String, action: String? = null, onAction: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -126,39 +125,14 @@ import java.io.File
                         }
                     }
                     item.imagePaths.forEachIndexed { index, path ->
-                        val imageName = path.substringAfterLast('/').ifBlank { tr(R.string.ui_image) }
-                        val local = imagePreviews[path]
-                        if (local != null) {
-                            ImageThumbnail(
-                                File(local), imageName,
-                                Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 260.dp)
-                                    .clickable(role = Role.Button, onClickLabel = tr(R.string.ui_view_image, index + 1)) { preview(path) },
-                                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        key(path, index) {
+                            ConversationImage(
+                                path = path,
+                                local = imagePreviews[path],
+                                loading = path in imageLoading,
+                                onLoad = { onLoadImage(path) },
+                                onOpen = { preview(path) },
                             )
-                        } else {
-                            Surface(
-                                onClick = { if (path !in imageLoading) onLoadImage(path) },
-                                enabled = path !in imageLoading,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f)),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(
-                                    Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    if (path in imageLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    else Icon(WorkbenchIcons.Image, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(
-                                        if (path in imageLoading) tr(R.string.ui_image_preview_loading) else tr(R.string.ui_load_image_preview),
-                                        Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-                                    )
-                                    Text(imageName, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
                         }
                     }
                 }
