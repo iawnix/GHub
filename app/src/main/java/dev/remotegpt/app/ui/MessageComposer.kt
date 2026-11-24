@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import dev.remotegpt.app.composerDraft
 import androidx.compose.ui.graphics.SolidColor
@@ -264,6 +265,12 @@ import kotlin.math.roundToInt
     if (attachmentsMenu) ModalBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(tr(R.string.ui_input_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            // Keep the actions people use to add content at the top of the sheet.
+            // This is also important on short or narrow displays where the sheet
+            // cannot show every action without scrolling.
+            SheetAction(tr(R.string.ui_choose_image), WorkbenchIcons.Image, enabled = editable && online) { attachmentsMenu = false; onImage() }
+            SheetAction(tr(R.string.ui_take_photo), WorkbenchIcons.PhotoCamera, enabled = editable && online) { attachmentsMenu = false; onCamera() }
+            SheetAction(tr(R.string.ui_choose_file), WorkbenchIcons.AttachFile, enabled = editable && online) { attachmentsMenu = false; onFile() }
             SheetAction(tr(R.string.ui_mode_title), WorkbenchIcons.Checklist, enabled = editable,
                 supporting = tr(if (inputDraft.mode == "plan") R.string.ui_mode_plan else R.string.ui_mode_execute)) {
                 attachmentsMenu = false; onOpenModeMenu()
@@ -275,9 +282,6 @@ import kotlin.math.roundToInt
                 supporting = tr(if (permissions.approval == "on-request") R.string.ui_permission_ask else R.string.ui_permission_custom)) {
                 attachmentsMenu = false; onPermissions()
             }
-            SheetAction(tr(R.string.ui_choose_image), WorkbenchIcons.Image, enabled = editable && online) { attachmentsMenu = false; onImage() }
-            SheetAction(tr(R.string.ui_take_photo), WorkbenchIcons.PhotoCamera, enabled = editable && online) { attachmentsMenu = false; onCamera() }
-            SheetAction(tr(R.string.ui_choose_file), WorkbenchIcons.AttachFile, enabled = editable && online) { attachmentsMenu = false; onFile() }
         }
     }
     if (modeMenu) SelectionSheet(tr(R.string.ui_mode_title),
@@ -344,8 +348,14 @@ fun effortLabel(value: String?): String = when (value) {
                 }, valueRange = 0f..(values.lastIndex.toFloat()), steps = (values.size - 2).coerceAtLeast(0),
                     modifier = Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(effortLabel(values.first()), style = MaterialTheme.typography.labelSmall)
-                    Text(effortLabel(values.last()), style = MaterialTheme.typography.labelSmall)
+                    Text(effortLabel(values.first()), style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.clickable(enabled = !running) {
+                            onSelect(values.first()); onDismiss()
+                        })
+                    Text(effortLabel(values.last()), style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.clickable(enabled = !running) {
+                            onSelect(values.last()); onDismiss()
+                        })
                 }
             }
             TextButton(onClick = { onSelect(null); onDismiss() }, enabled = !running, modifier = Modifier.fillMaxWidth()) {
