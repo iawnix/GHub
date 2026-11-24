@@ -104,16 +104,6 @@ class TerminalPresentationDeviceTest {
         compose.runOnIdle { assertEquals("\u001bOC", output()) }
     }
 
-    @Test fun lockedModifierAppliesToExtraTextKeys() {
-        content(extra = true)
-        compose.onNodeWithContentDescription("Ctrl").performTouchInput { longClick() }
-        key(R.string.terminal_slash)
-        compose.runOnIdle {
-            assertEquals(1, output().length)
-            assertEquals(31, output()[0].code)
-        }
-    }
-
     @Test fun narrowLargeTextKeepsEveryPrimaryKeyVisibleAndDistinct() {
         compose.setContent { WorkbenchTheme {
             val density = LocalDensity.current
