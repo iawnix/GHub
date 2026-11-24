@@ -48,6 +48,7 @@ import dev.remotegpt.client.ModelOption
     onModel: (String?) -> Unit, onImage: () -> Unit, onFile: () -> Unit,
     onCamera: () -> Unit, onVoice: () -> Unit, onSend: () -> Unit,
     onQueue: () -> Unit = {},
+    onSteer: () -> Unit = {},
     running: Boolean = false, stopping: Boolean = false, onStop: () -> Unit = {}, modifier: Modifier = Modifier,
     modelOptions: List<ModelOption> = emptyList(), effort: String? = null,
     onEffort: (String?) -> Unit = {}, onReloadModels: () -> Unit = {},
@@ -198,6 +199,10 @@ import dev.remotegpt.client.ModelOption
                     }
                 },
             )
+            val steerable = running && hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
+            if (steerable) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onSteer, enabled = online) { Text(tr(R.string.ui_steer_task)) }
+            }
             // One solid outer capsule surface: no inner background seams while content scrolls behind it.
             BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
                 val compact = maxWidth < 344.dp || LocalDensity.current.fontScale > 1.3f

@@ -49,6 +49,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         var loadedAt = 0L
         var overviewReading = false
         var loadedReading = false
+        /** Null until the first queue probe; false means this older server lacks the API. */
+        var queueSupported: Boolean? = null
     }
     private val runtimes = mutableMapOf<String, Runtime>()
     /** SSH/SFTP remains usable while the optional Codex proxy is restarting. */
@@ -786,6 +788,9 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                         rt.syncWake.trySend(Unit)
                     }
+                    if (event.method == "thread/queue/changed" && thread != null) {
+                        viewModelScope.launch { syncRemoteQueue(host, rt, thread) }
+                    }
                     if (event.method == "serverRequest/resolved") update(host) { ws -> ws.copy(approvals = ws.approvals.filterNot { it.request.id == event.params["requestId"] },
                         pendingQuestions = ws.pendingQuestions.filterNot { it.request.id == event.params["requestId"] }) }
                     if (event.method == "thread/started") {
@@ -850,6 +855,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                                 catch (e: Exception) { record("history_sync_failed", e.javaClass.simpleName) }
                             }
                             drainQueued(host, rt, thread)
+                            viewModelScope.launch { syncRemoteQueue(host, rt, thread) }
                         }
                     }
                 }
@@ -860,7 +866,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 is RpcEvent.Request -> publication.flush()
                 is RpcEvent.Notification -> when (event.method) {
                     "item/started", "item/completed", "turn/started", "turn/completed",
-                    "thread/status/changed", "serverRequest/resolved", "error" -> publication.flush()
+                    "thread/status/changed", "thread/queue/changed", "serverRequest/resolved", "error" -> publication.flush()
                 }
                 else -> Unit
             }
@@ -1418,6 +1424,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } else rt.sessions.dirty(thread) // Archived threads have no live subscription.
             synchronizeHistory(host, thread, rt)
+            syncRemoteQueue(host, rt, thread)
             viewModelScope.launch { refreshGoal(host, thread, rt) }
             attentionRestored(host, thread, rt)
             if (runtimes[host] === rt) update(host) { it.copy(threadProblems = it.threadProblems - thread) }
@@ -1744,7 +1751,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     fun send() = perform { host, rt ->
         val thread = ui(host).selectedThread ?: return@perform
         if (ui(host).conversations[thread]?.activeTurn != null) {
-            queueDraft(host, thread)
+            queueDraft(host, rt, thread)
             return@perform
         }
         val draft = ui(host).drafts[thread] ?: return@perform
@@ -1771,8 +1778,39 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun resendInterruptedInput() = perform { host, rt -> sendInput(host, rt, edited = true) }
 
+    /** Inject the current composer input into the active turn through the official API. */
+    fun steer() = perform { host, rt ->
+        val thread = ui(host).selectedThread ?: return@perform
+        val turn = ui(host).conversations[thread]?.activeTurn ?: return@perform
+        val draft = ui(host).drafts[thread] ?: return@perform
+        if (draft.delivery != "draft" || draft.edit != null) return@perform
+        val input = draft.input()
+        if (input.attachments.any { it.state != "ready" } || (input.text.isBlank() && input.attachments.isEmpty())) return@perform
+        if (sessionCommand(input.text) != null) { message(tr(R.string.ui_steer_commands_not_supported)); return@perform }
+        val messageId = UUID.randomUUID().toString()
+        val text = (listOf(input.text) + input.attachments.filterNot { it.image }.map { tr(R.string.ui_attachment, it.remotePath) })
+            .filter { it.isNotBlank() }.joinToString("\n\n")
+        val images = input.attachments.filter { it.image }.map { it.remotePath }
+        updateDraft(host, thread) { it.copy(delivery = "sending", pendingId = messageId) }
+        try {
+            flushDraft(host, thread)
+            val response = rt.api.steer(thread, turn, text, images, messageId)
+            val acceptedTurn = response.string("turnId") ?: turn
+            updateDraft(host, thread) { it.acceptedSubmission(input, acceptedTurn, messageId, edited = false) }
+            flushDraft(host, thread)
+        } catch (e: Exception) {
+            updateDraft(host, thread) { it.copy(delivery = if (e is UncertainDelivery) "uncertain" else "draft",
+                pendingId = messageId.takeIf { e is UncertainDelivery }) }
+            withContext(NonCancellable) { flushDraft(host, thread) }
+            if (e is RpcException && e.code == -32601) {
+                message(tr(R.string.ui_steer_unavailable)); return@perform
+            }
+            throw e
+        }
+    }
+
     /** Add the current composer contents to the local FIFO while a turn is running. */
-    private fun queueDraft(host: String, thread: String) {
+    private suspend fun queueDraft(host: String, rt: Runtime, thread: String) {
         val draft = ui(host).drafts[thread] ?: return
         if (draft.delivery != "draft" || draft.edit != null) return
         val input = draft.input()
@@ -1780,7 +1818,23 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         if (sessionCommand(input.text) != null) {
             message(tr(R.string.ui_queue_commands_not_supported)); return
         }
-        val item = QueuedInput(UUID.randomUUID().toString(), input)
+        val itemId = UUID.randomUUID().toString()
+        val text = (listOf(input.text) + input.attachments.filterNot { it.image }.map { tr(R.string.ui_attachment, it.remotePath) })
+            .filter { it.isNotBlank() }.joinToString("\n\n")
+        val images = input.attachments.filter { it.image }.map { it.remotePath }
+        val remoteId = if (rt.queueSupported != false) {
+            try {
+                val response = rt.api.queueAdd(thread, text, images, itemId)
+                rt.queueSupported = true
+                response.obj("queuedSubmission").string("id")
+                    ?: throw IllegalStateException("Queued submission has no ID")
+            } catch (e: RpcException) {
+                if (!queueApiUnavailable(e)) throw e
+                rt.queueSupported = false
+                null
+            }
+        } else null
+        val item = QueuedInput(itemId, input, remoteId = remoteId)
         updateDraft(host, thread) { current ->
             current.copy(text = "", attachments = emptyList(), mode = null, queued = current.queued + item)
         }
@@ -1788,21 +1842,84 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun removeQueuedInput(id: String) {
-        val host = state.value.activeHost ?: return
-        val thread = ui(host).selectedThread ?: return
-        updateDraft(host, thread) { draft -> draft.copy(queued = draft.queued.filterNot { it.id == id }) }
+        val localHost = state.value.activeHost
+        val localThread = localHost?.let { ui(it).selectedThread }
+        val localItem = if (localHost != null && localThread != null) ui(localHost).drafts[localThread]?.queued?.firstOrNull { it.id == id } else null
+        if (localItem?.remoteId == null && localItem != null) {
+            updateDraft(localHost!!, localThread!!) { draft -> draft.copy(queued = draft.queued.filterNot { it.id == id }) }
+            return
+        }
+        perform { host, rt ->
+            val thread = ui(host).selectedThread ?: return@perform
+            val item = ui(host).drafts[thread]?.queued?.firstOrNull { it.id == id } ?: return@perform
+            item.remoteId?.let { rt.api.queueDelete(thread, it) }
+            updateDraft(host, thread) { draft -> draft.copy(queued = draft.queued.filterNot { it.id == id }) }
+        }
     }
 
     fun editQueuedInput(id: String) {
-        val host = state.value.activeHost ?: return
-        val thread = ui(host).selectedThread ?: return
-        val draft = ui(host).drafts[thread] ?: return
-        if (draft.delivery != "draft" || draft.edit != null || draft.text.isNotBlank() || draft.attachments.isNotEmpty()) return
-        val item = draft.queued.firstOrNull { it.id == id } ?: return
-        updateDraft(host, thread) { current -> current.copy(
-            text = item.input.text, attachments = item.input.attachments, model = item.input.model,
-            effort = item.input.effort, mode = item.input.mode,
-            queued = current.queued.filterNot { it.id == id })
+        val localHost = state.value.activeHost
+        val localThread = localHost?.let { ui(it).selectedThread }
+        val localDraft = if (localHost != null && localThread != null) ui(localHost).drafts[localThread] else null
+        val localItem = localDraft?.queued?.firstOrNull { it.id == id }
+        if (localItem?.remoteId == null && localItem != null) {
+            if (localDraft.delivery != "draft" || localDraft.edit != null || localDraft.text.isNotBlank() || localDraft.attachments.isNotEmpty()) return
+            updateDraft(localHost!!, localThread!!) { current -> current.copy(
+                text = localItem.input.text, attachments = localItem.input.attachments, model = localItem.input.model,
+                effort = localItem.input.effort, mode = localItem.input.mode,
+                queued = current.queued.filterNot { it.id == id })
+            }
+            return
+        }
+        perform { host, rt ->
+            val thread = ui(host).selectedThread ?: return@perform
+            val draft = ui(host).drafts[thread] ?: return@perform
+            if (draft.delivery != "draft" || draft.edit != null || draft.text.isNotBlank() || draft.attachments.isNotEmpty()) return@perform
+            val item = draft.queued.firstOrNull { it.id == id } ?: return@perform
+            item.remoteId?.let { rt.api.queueDelete(thread, it) }
+            updateDraft(host, thread) { current -> current.copy(
+                text = item.input.text, attachments = item.input.attachments, model = item.input.model,
+                effort = item.input.effort, mode = item.input.mode,
+                queued = current.queued.filterNot { it.id == id })
+            }
+        }
+    }
+
+    private fun queueApiUnavailable(error: RpcException): Boolean =
+        error.code == -32601 || error.message.orEmpty().contains("experimental", ignoreCase = true) ||
+            error.message.orEmpty().contains("queue", ignoreCase = true) &&
+            error.message.orEmpty().contains("unavailable", ignoreCase = true)
+
+    private fun parseQueuedInput(raw: JsonObject): QueuedInput? {
+        val id = raw.string("id") ?: return null
+        val elements = raw.array("input")
+        val text = elements.mapNotNull { element ->
+            element.jsonObject.takeIf { it.string("type") == "text" }?.string("text")
+        }.joinToString("\n\n")
+        val attachments = elements.mapIndexedNotNull { index, element ->
+            val input = element.jsonObject
+            if (input.string("type") != "localImage") return@mapIndexedNotNull null
+            val path = input.string("path") ?: return@mapIndexedNotNull null
+            Attachment("remote:$id:$index", path.substringAfterLast('/'), image = true, remotePath = path, state = "ready")
+        }
+        return QueuedInput(id, MessageInput(text, attachments), remoteId = id)
+    }
+
+    private suspend fun syncRemoteQueue(host: String, rt: Runtime, thread: String) {
+        if (rt.queueSupported == false || runtimes[host] !== rt || !rt.rpc.isConnected) return
+        try {
+            val remote = mutableListOf<QueuedInput>()
+            var cursor: String? = null
+            do {
+                val page = rt.api.queueList(thread, cursor)
+                rt.queueSupported = true
+                page.items.mapNotNullTo(remote) { it.obj("queuedSubmission").takeIf { obj -> obj.isNotEmpty() }?.let(::parseQueuedInput) ?: parseQueuedInput(it) }
+                cursor = page.nextCursor
+            } while (cursor != null)
+            updateDraft(host, thread) { draft -> draft.copy(queued = remote + draft.queued.filter { it.remoteId == null }) }
+            flushDraft(host, thread)
+        } catch (e: RpcException) {
+            if (queueApiUnavailable(e)) rt.queueSupported = false else record("queue_sync_failed", e.javaClass.simpleName)
         }
     }
 
@@ -1815,6 +1932,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         // Preserve anything the user started typing after queueing. It remains a
         // normal draft and can be queued or sent once the current queue drains.
         if (draft.delivery != "draft" || draft.edit != null || draft.text.isNotBlank() || draft.attachments.isNotEmpty()) return
+        if (draft.queued.any { it.remoteId != null }) return
         val item = draft.queued.firstOrNull() ?: return
         updateDraft(host, thread) { current -> current.copy(
             text = item.input.text, attachments = item.input.attachments,

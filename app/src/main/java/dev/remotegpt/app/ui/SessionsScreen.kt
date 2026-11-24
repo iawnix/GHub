@@ -282,6 +282,7 @@ import dev.remotegpt.client.*
                             if (draft.edit != null) vm.resendInterruptedInput() else vm.send()
                         },
                         onQueue = { vm.send() },
+                        onSteer = { vm.steer() },
                         revision = revision,
                         running = state.conversation?.activeTurn != null, stopping = thread in ws.stoppingTurns, onStop = { vm.interrupt() }, modifier = Modifier,
                     )

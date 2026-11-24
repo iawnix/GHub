@@ -41,6 +41,27 @@ class ProtocolTest {
         }
         rpc.close()
     }
+    @Test fun `official queue and steer methods use v2 protocol names and preconditions`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect(); val api = CodexApi(rpc)
+        val queued = async { api.queueAdd("thread", "follow up", listOf("/tmp/a.png"), "client-1") }
+        yield()
+        val add = t.sent.last()
+        assertEquals("thread/queue/add", add.string("method"))
+        assertEquals("client-1", add.obj("params").string("clientUserMessageId"))
+        assertEquals("localImage", add.obj("params").array("input")[1].jsonObject.string("type"))
+        t.respond(add, buildJsonObject { putJsonObject("queuedSubmission") { put("id", "queued-1") } })
+        assertEquals("queued-1", queued.await().obj("queuedSubmission").string("id"))
+
+        val steering = async { api.steer("thread", "turn-1", "change direction", emptyList(), "client-2") }
+        yield()
+        val steer = t.sent.last()
+        assertEquals("turn/steer", steer.string("method"))
+        assertEquals("turn-1", steer.obj("params").string("expectedTurnId"))
+        t.respond(steer, buildJsonObject { put("turnId", "turn-1") })
+        steering.await()
+        rpc.close()
+    }
+
     @Test fun `goal mutations carry user origin and do not start a turn`() = runTest {
         val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect(); val api = CodexApi(rpc)
         val setting = async { api.setGoal("thread", "Ship it", budget = 10000) }; yield()

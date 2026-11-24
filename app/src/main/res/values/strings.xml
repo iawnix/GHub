@@ -83,6 +83,9 @@
     <string name="ui_message_sent_restoring_session_state_please_do" formatted="false">Message sent. Restoring session state; please do not resend.</string>
     <string name="ui_message_queued" formatted="false">Message added to the queue.</string>
     <string name="ui_queue_commands_not_supported" formatted="false">Commands cannot be queued while a task is running.</string>
+    <string name="ui_steer_commands_not_supported" formatted="false">Commands cannot steer a running task.</string>
+    <string name="ui_steer_task" formatted="false">Guide task now</string>
+    <string name="ui_steer_unavailable" formatted="false">This server does not support steering active tasks.</string>
     <string name="ui_message_queue" formatted="false">Message queue</string>
     <string name="ui_queue_message" formatted="false">Queue message</string>
     <string name="ui_queued_message" formatted="false">Queued message</string>

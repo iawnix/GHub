@@ -80,6 +80,9 @@
     <string name="ui_message_sent_restoring_session_state_please_do" formatted="false">消息已发送，正在恢复会话状态，请勿重复发送。</string>
     <string name="ui_message_queued" formatted="false">消息已加入队列。</string>
     <string name="ui_queue_commands_not_supported" formatted="false">任务运行时不能将命令加入队列。</string>
+    <string name="ui_steer_commands_not_supported" formatted="false">不能用命令引导正在运行的任务。</string>
+    <string name="ui_steer_task" formatted="false">立即引导任务</string>
+    <string name="ui_steer_unavailable" formatted="false">当前服务器不支持引导正在运行的任务。</string>
     <string name="ui_message_queue" formatted="false">消息队列</string>
     <string name="ui_queue_message" formatted="false">将消息加入队列</string>
     <string name="ui_queued_message" formatted="false">排队中的消息</string>

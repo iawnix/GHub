@@ -14,7 +14,7 @@ enum class WorkspaceTab { SESSIONS, FILES, TERMINAL }
 
 @Serializable data class Attachment(val id: String, val name: String, val localUri: String = "", val image: Boolean = false,
     val remotePath: String = "", val state: String = "uploading", val error: String? = null)
-@Serializable data class QueuedInput(val id: String, val input: MessageInput, val error: String? = null)
+@Serializable data class QueuedInput(val id: String, val input: MessageInput, val error: String? = null, val remoteId: String? = null)
 @Serializable data class Draft(val text: String = "", val attachments: List<Attachment> = emptyList(), val delivery: String = "draft", val pendingId: String? = null,
     val model: String? = null, val effort: String? = null,
     val mode: String? = null,
