@@ -42,6 +42,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         var ancillary: Job? = null
         var loadedThreads: Set<String> = emptySet()
         val statusVersions = mutableMapOf<String, Long>()
+        var goalVersion = 0L
         var overviewVersion = 0L
         val syncWake = Channel<Unit>(Channel.CONFLATED)
         var overviewAt = 0L
@@ -470,6 +471,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                     error = null, reconnectAttempt = 0, loadingHistory = it.selectedThread != null) }
                 viewModelScope.launch { consume(host, rt) }
                 launchStorage { app.settings.reconnect(host, true) }
+                update(host) { it.copy(collaborationModes = emptySet(), goalSupported = null, goalBusy = emptySet()) }
                 stage = "synchronize"
                 val restoreStarted = SystemClock.elapsedRealtime()
                 coroutineScope {
@@ -747,6 +749,11 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 is RpcEvent.Notification -> {
                     val thread = event.params.string("threadId")
+                    if (thread != null && event.method in setOf("thread/goal/updated", "thread/goal/cleared")) {
+                        rt.goalVersion++
+                        val goal = parseThreadGoal(event.params["goal"])
+                        update(host) { it.copy(goalSupported = true, goals = if (goal == null) it.goals - thread else it.goals + (thread to goal)) }
+                    }
                     if (event.method in setOf("turn/started", "turn/completed", "thread/status/changed", "thread/started", "thread/archived", "thread/unarchived", "thread/name/updated")) {
                         val changed = thread ?: event.params.obj("thread").string("id")
                         changed?.let { rt.statusVersions[it] = (rt.statusVersions[it] ?: 0) + 1 }
@@ -958,6 +965,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         else tr(R.string.ui_run_codex_login_on_the_server_first)
                     if (runtimes[host] === rt) update(host) { it.copy(account = label) }
                 } }
+                launch { optional("modes_sync_failed") {
+                    val modes = rt.api.collaborationModes()
+                    if (runtimes[host] === rt) update(host) { it.copy(collaborationModes = modes) }
+                } }
                 launch { optional("models_sync_failed") {
                     val models = rt.api.models()
                     if (runtimes[host] === rt) update(host) { it.copy(models = models.map { model -> model.id to model.name }, modelOptions = models) }
@@ -1074,6 +1085,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             if (runtimes[host] === rt) changedRows.forEach { rt.persistedThreads[it.id] = it }
         }
         observeResults(host, rt, page.items)
+        ui(host).selectedThread?.let { refreshGoal(host, it, rt) }
     }
 
     private suspend fun observeResults(host: String, rt: Runtime, summaries: List<ThreadSummary>) {
@@ -1331,6 +1343,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } else rt.sessions.dirty(thread) // Archived threads have no live subscription.
             synchronizeHistory(host, thread, rt)
+            viewModelScope.launch { refreshGoal(host, thread, rt) }
             attentionRestored(host, thread, rt)
             if (runtimes[host] === rt) update(host) { it.copy(threadProblems = it.threadProblems - thread) }
         } catch (e: ThreadUnavailable) {
@@ -1510,6 +1523,79 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         }
         archive(undo.thread, false, host = undo.host, restoreSummary = undo.summary)
     }
+    private suspend fun refreshGoal(host: String, thread: String, rt: Runtime) {
+        if (ui(host).goalSupported == false || thread in ui(host).goalBusy) return
+        val version = rt.goalVersion
+        try {
+            val goal = withTimeout(8_000) { rt.api.goal(thread) }
+            if (runtimes[host] === rt && rt.goalVersion == version) update(host) {
+                it.copy(goalSupported = true, goals = if (goal == null) it.goals - thread else it.goals + (thread to goal))
+            }
+        } catch (e: RpcException) {
+            if (runtimes[host] === rt && e.code == -32601) update(host) { it.copy(goalSupported = false) }
+        } catch (e: TimeoutCancellationException) { record("goal_sync_failed", "timeout") }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { record("goal_sync_failed", e.javaClass.simpleName) }
+    }
+    fun executePlan() = perform { host, rt ->
+        val thread = ui(host).selectedThread ?: return@perform
+        val draft = ui(host).drafts[thread] ?: return@perform
+        if (draft.mode != "plan" || draft.edit != null || draft.delivery != "draft" ||
+            draft.text.isNotBlank() || draft.attachments.isNotEmpty() || ui(host).conversations[thread]?.activeTurn != null) return@perform
+        val conversation = ui(host).conversations[thread] ?: return@perform
+        val latestTurn = conversation.items.lastOrNull()?.turnId
+        if (ui(host).results[thread]?.status != "completed" || conversation.items.none {
+            it.turnId == latestTurn && it.kind == "plan" && it.complete
+        }) return@perform
+        if ("default" !in ui(host).collaborationModes) { message(tr(R.string.ui_mode_unavailable)); return@perform }
+        updateDraft(host, thread) { it.copy(mode = "default", text = tr(R.string.ui_plan_execute_prompt)) }
+        sendInput(host, rt, edited = false)
+    }
+    fun showModePicker(show: Boolean = true) {
+        val host = state.value.activeHost ?: return
+        update(host) { it.copy(modePickerThread = if (show) it.selectedThread else null) }
+    }
+    fun selectMode(mode: String) {
+        val host = state.value.activeHost ?: return
+        val thread = ui(host).selectedThread ?: return
+        if (mode !in ui(host).collaborationModes) { message(tr(R.string.ui_mode_unavailable)); return }
+        updateMessageInput(host, thread, ui(host).drafts[thread]?.edit?.id) { it.copy(mode = mode) }
+    }
+    fun showGoalEditor(show: Boolean = true) {
+        val host = state.value.activeHost ?: return
+        update(host) { it.copy(goalEditorThread = if (show) it.selectedThread else null) }
+        if (show) {
+            val thread = ui(host).selectedThread ?: return
+            val rt = runtimes[host] ?: return
+            viewModelScope.launch { refreshGoal(host, thread, rt) }
+        }
+    }
+    fun changeGoal(thread: String, objective: String? = null, status: String? = null, clear: Boolean = false, budget: Long? = null) = perform { host, rt ->
+        val ws = ui(host)
+        if (thread != ws.selectedThread || thread in ws.goalBusy || summary(host, thread)?.archived == true) return@perform
+        if (ws.goalSupported != true) { message(tr(R.string.ui_goal_unavailable)); return@perform }
+        if (objective != null && objective.isBlank()) return@perform
+        val originalText = ws.drafts[thread]?.text
+        rt.goalVersion++
+        update(host) { it.copy(goalBusy = it.goalBusy + thread) }
+        try {
+            val version = rt.goalVersion
+            val goal = if (clear) { rt.api.clearGoal(thread); null } else rt.api.setGoal(thread, objective, status, budget)
+            if (runtimes[host] === rt) update(host) { it.copy(
+                goals = if (rt.goalVersion != version) it.goals else if (goal == null) it.goals - thread else it.goals + (thread to goal),
+                goalEditorThread = null) }
+            if (runtimes[host] === rt && objective != null && originalText != null && sessionCommand(originalText)?.name == "/goal") {
+                updateDraft(host, thread) { if (it.text == originalText) it.copy(text = "") else it }
+            }
+        } finally {
+            if (runtimes[host] === rt) {
+                rt.goalVersion++
+                update(host) { it.copy(goalBusy = it.goalBusy - thread) }
+                refreshGoal(host, thread, rt)
+            }
+        }
+    }
+
     fun selectModel(model: String?) {
         val host = state.value.activeHost ?: return
         val thread = ui(host).selectedThread ?: return
@@ -1571,7 +1657,30 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             else if (draft.delivery == "uncertain") draft.copy(delivery = "draft", pendingId = null) else draft
         }
     }
-    fun send() = perform { host, rt -> sendInput(host, rt, edited = false) }
+    fun send() = perform { host, rt ->
+        val thread = ui(host).selectedThread ?: return@perform
+        val draft = ui(host).drafts[thread] ?: return@perform
+        if (draft.delivery != "draft" || draft.edit != null) return@perform
+        val command = sessionCommand(draft.text)
+        if (command != null) {
+            when (command.name) {
+                "/goal" -> {
+                    showGoalEditor()
+                    return@perform
+                }
+                "/plan" -> {
+                    if (command.argument.isBlank()) {
+                        updateDraft(host, thread) { it.copy(text = "") }
+                        showModePicker()
+                        return@perform
+                    }
+                    if ("plan" !in ui(host).collaborationModes) { message(tr(R.string.ui_mode_unavailable)); return@perform }
+                    updateDraft(host, thread) { it.copy(mode = "plan", text = command.argument) }
+                }
+            }
+        }
+        sendInput(host, rt, edited = false)
+    }
     fun resendInterruptedInput() = perform { host, rt -> sendInput(host, rt, edited = true) }
 
     private suspend fun sendInput(host: String, rt: Runtime, edited: Boolean) {
@@ -1588,6 +1697,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             message(tr(R.string.ui_edit_task_changed)); return
         }
         val input = if (edited) edit!!.input else draft.input()
+        if (edited && sessionCommand(input.text) != null) { message(tr(R.string.ui_edit_command_hint)); return }
+        if (input.mode != null && input.mode !in ws.collaborationModes) { message(tr(R.string.ui_mode_unavailable)); return }
         if (input.attachments.any { it.state != "ready" } || (input.text.isBlank() && input.attachments.isEmpty())) return
         val firstMessage = summary(host, thread)?.awaitingFirstMessage == true
         val messageId = UUID.randomUUID().toString()
@@ -1596,6 +1707,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         require(effort == null || option?.efforts?.contains(effort) == true) { tr(R.string.ui_the_current_model_does_not_support_this) }
         val submitted = input.copy(model = input.model ?: summary(host, thread)?.model ?: option?.id,
             effort = effort ?: summary(host, thread)?.reasoningEffort)
+        if (input.mode != null && submitted.model.isNullOrBlank()) { message(tr(R.string.ui_choose_model)); return }
         updateDraft(host, thread) {
             if (edited) it.copy(edit = edit!!.copy(delivery = "sending", pendingId = messageId, error = null))
             else it.copy(delivery = "sending", pendingId = messageId)
@@ -1623,7 +1735,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             }
             val text = (listOf(input.text) + input.attachments.filterNot { it.image }.map { tr(R.string.ui_attachment, it.remotePath) })
                 .filter { it.isNotBlank() }.joinToString("\n\n")
-            rt.api.send(thread, text, input.attachments.filter { it.image }.map { it.remotePath }, input.model, messageId, effort)
+            rt.api.send(thread, text, input.attachments.filter { it.image }.map { it.remotePath },
+                if (input.mode != null) submitted.model else input.model, messageId, if (input.mode != null) submitted.effort else effort, input.mode)
         } catch (e: Exception) {
             updateDraft(host, thread) {
                 val delivery = if (e is UncertainDelivery) "uncertain" else "draft"

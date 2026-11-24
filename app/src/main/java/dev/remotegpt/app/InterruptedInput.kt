@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class MessageInput(
     val text: String = "", val attachments: List<Attachment> = emptyList(),
-    val model: String? = null, val effort: String? = null,
+    val model: String? = null, val effort: String? = null, val mode: String? = null,
 )
 @Serializable data class SubmittedInput(val turnId: String, val clientMessageId: String, val input: MessageInput)
 @Serializable data class InterruptedInputEdit(
@@ -13,14 +13,14 @@ import kotlinx.serialization.Serializable
     val delivery: String = "draft", val pendingId: String? = null, val error: String? = null,
 )
 
-internal fun Draft.input() = MessageInput(text, attachments, model, effort)
+internal fun Draft.input() = MessageInput(text, attachments, model, effort, mode)
 internal fun Draft.withInput(input: MessageInput) = copy(text = input.text, attachments = input.attachments,
-    model = input.model, effort = input.effort)
+    model = input.model, effort = input.effort, mode = input.mode)
 
 /** Display the active editor without changing the separately persisted ordinary draft. */
 internal fun Draft.composerDraft(): Draft = edit?.let {
     Draft(text = it.input.text, attachments = it.input.attachments, model = it.input.model,
-        effort = it.input.effort, delivery = it.delivery, pendingId = it.pendingId)
+        effort = it.input.effort, mode = it.input.mode, delivery = it.delivery, pendingId = it.pendingId)
 } ?: this
 
 /** Only the original prompt of the latest confirmed interrupted turn can be revised. */
@@ -49,7 +49,7 @@ internal fun inputForInterruptedMessage(ws: HostWorkspace, thread: String, item:
 internal fun Draft.acceptedSubmission(input: MessageInput, turnId: String, clientMessageId: String, edited: Boolean): Draft {
     val submission = SubmittedInput(turnId, clientMessageId, input)
     return if (edited) copy(edit = null, lastSubmission = submission)
-    else Draft(model = model, effort = effort, lastSubmission = submission)
+    else Draft(model = model, effort = effort, mode = mode, lastSubmission = submission)
 }
 
 internal fun Draft.restored(): Draft {

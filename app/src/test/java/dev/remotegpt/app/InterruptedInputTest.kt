@@ -6,6 +6,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class InterruptedInputTest {
+    @Test fun modeSurvivesSubmissionStorageAndInterruptedEditing() {
+        val draft = Draft(text = "Plan this", mode = "plan")
+        val sent = draft.acceptedSubmission(draft.input(), "turn", "id", edited = false)
+        val restored = wireJson.decodeFromString<Draft>(wireJson.encodeToString(sent))
+        assertEquals("plan", restored.mode)
+        assertEquals("plan", restored.lastSubmission!!.input.mode)
+        val edited = restored.copy(edit = InterruptedInputEdit("edit", "turn", "item", restored.lastSubmission!!.input.copy(mode = "default")))
+        assertEquals("default", edited.composerDraft().mode)
+        assertEquals("plan", edited.mode)
+        assertNull(wireJson.decodeFromString<Draft>("{}").mode)
+    }
+
     private val prompt = TimelineItem("prompt", "turn", "userMessage", "original", true)
     private val photo = Attachment("photo", "photo.png", image = true, remotePath = "/tmp/photo.png", state = "ready")
     private val file = Attachment("file", "note.txt", remotePath = "/tmp/note.txt", state = "ready")

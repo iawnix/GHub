@@ -80,9 +80,10 @@ class CodexApi(val rpc: RpcClient) {
         }, mutation = true))
     }
 
-    suspend fun send(thread: String, text: String, images: List<String>, model: String?, clientMessageId: String, effort: String? = null): JsonObject {
+    suspend fun send(thread: String, text: String, images: List<String>, model: String?, clientMessageId: String, effort: String? = null, mode: String? = null): JsonObject {
         return rpc.request("turn/start", buildJsonObject {
             put("threadId", thread); put("clientUserMessageId", clientMessageId)
+            mode?.let { put("collaborationMode", collaborationSettings(it, requireNotNull(model), effort)) }
             model?.let { put("model", it) }
             effort?.let { put("effort", it) }
             putJsonArray("input") {
@@ -91,6 +92,20 @@ class CodexApi(val rpc: RpcClient) {
             }
         }, mutation = true)
     }
+
+    suspend fun collaborationModes(): Set<String> = rpc.request("collaborationMode/list").array("data")
+        .mapNotNull { (it as? JsonObject)?.string("mode") }.toSet()
+    suspend fun goal(thread: String): ThreadGoal? = parseThreadGoal(rpc.request("thread/goal/get",
+        buildJsonObject { put("threadId", thread) })["goal"])
+    suspend fun setGoal(thread: String, objective: String? = null, status: String? = null, budget: Long? = null): ThreadGoal? =
+        parseThreadGoal(rpc.request("thread/goal/set", buildJsonObject {
+            put("threadId", thread); put("origin", "user")
+            objective?.let { put("objective", it) }; status?.let { put("status", it) }
+            budget?.let { require(it > 0); put("tokenBudget", it) }
+        }, mutation = true)["goal"])
+    suspend fun clearGoal(thread: String) { rpc.request("thread/goal/clear", buildJsonObject {
+        put("threadId", thread); put("origin", "user")
+    }, mutation = true) }
 
     suspend fun interrupt(thread: String, turn: String) = rpc.request("turn/interrupt", jsonObject("threadId" to str(thread), "turnId" to str(turn)), true)
     suspend fun rename(thread: String, name: String) = rpc.request("thread/name/set", jsonObject("threadId" to str(thread), "name" to str(name)), true)

@@ -83,8 +83,8 @@ import dev.remotegpt.client.*
     }
     val user = item.kind == "userMessage"
     val questionReply = remember(item.kind, item.text) { if (user) UserQuestions.parseReply(item.text) else null }
-    val tool = item.kind !in setOf("userMessage", "agentMessage")
-    // Tool output is secondary context. Keep command results, plans, reasoning and
+    val tool = item.kind !in setOf("userMessage", "agentMessage", "plan")
+    // Tool output is secondary context. Keep command results, reasoning and
     // failures compact by default; the final assistant answer stays open.
     var expanded by rememberSaveable(item.identityKey) { mutableStateOf(!tool || item.kind == "imageView") }
     Column(Modifier.fillMaxWidth().padding(start = if (user) 32.dp else 0.dp), horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
@@ -113,7 +113,7 @@ import dev.remotegpt.client.*
                     else if (item.kind == "dynamicToolCall") DynamicToolCallContent(item)
                     else if (questionReply != null) QuestionReplyContent(questionReply)
                     else SelectionContainer {
-                        if (item.kind == "agentMessage") key(item.identityKey) { StyledMarkdown(item.text.ifBlank { "…" }, item.complete) }
+                        if (item.kind in setOf("agentMessage", "plan")) key(item.identityKey) { StyledMarkdown(item.text.ifBlank { "…" }, item.complete) }
                         else Text(item.text.ifBlank { if (item.imagePaths.isEmpty()) tr(R.string.ui_running) else tr(R.string.ui_image_attachment) }, style = if (tool) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
                             fontFamily = if (tool) FontFamily.Monospace else FontFamily.Default,
                             modifier = Modifier.padding(bottom = if (tool) 14.dp else 0.dp))

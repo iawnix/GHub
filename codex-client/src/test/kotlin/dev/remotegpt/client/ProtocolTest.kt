@@ -21,6 +21,48 @@ private class FixtureTransport : MessageTransport {
 }
 
 class ProtocolTest {
+    @Test fun `plan and execute turns carry real mode settings while ordinary turns inherit`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect(); val api = CodexApi(rpc)
+        for (mode in listOf(null, "plan", "default")) {
+            val response = async { api.send("thread", "hello", emptyList(), "model", "id", "high", mode) }
+            yield()
+            val request = t.sent.last()
+            assertEquals("turn/start", request.string("method"))
+            val params = request.obj("params")
+            if (mode == null) assertFalse(params.containsKey("collaborationMode"))
+            else {
+                assertEquals(mode, params.obj("collaborationMode").string("mode"))
+                assertEquals("model", params.obj("collaborationMode").obj("settings").string("model"))
+                assertEquals("high", params.obj("collaborationMode").obj("settings").string("reasoning_effort"))
+                assertEquals(JsonNull, params.obj("collaborationMode").obj("settings")["developer_instructions"])
+            }
+            t.respond(request, buildJsonObject { }); response.await()
+        }
+        rpc.close()
+    }
+    @Test fun `goal mutations carry user origin and do not start a turn`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect(); val api = CodexApi(rpc)
+        val setting = async { api.setGoal("thread", "Ship it", budget = 10000) }; yield()
+        val set = t.sent.last()
+        assertEquals("thread/goal/set", set.string("method"))
+        assertEquals("user", set.obj("params").string("origin"))
+        assertEquals(10000, set.obj("params")["tokenBudget"]?.jsonPrimitive?.int)
+        t.respond(set, buildJsonObject { putJsonObject("goal") { put("objective", "Ship it"); put("status", "active"); put("tokensUsed", 42) } })
+        assertEquals(42L, setting.await()?.tokensUsed)
+        val pause = async { api.setGoal("thread", status = "paused") }; yield()
+        val pauseRequest = t.sent.last()
+        assertFalse(pauseRequest.obj("params").containsKey("objective"))
+        assertFalse(pauseRequest.obj("params").containsKey("tokenBudget"))
+        assertEquals("paused", pauseRequest.obj("params").string("status"))
+        t.respond(pauseRequest, buildJsonObject { put("goal", JsonNull) }); pause.await()
+        val clearing = async { api.clearGoal("thread") }; yield()
+        assertEquals("thread/goal/clear", t.sent.last().string("method"))
+        assertEquals("user", t.sent.last().obj("params").string("origin"))
+        t.respond(t.sent.last(), buildJsonObject { }); clearing.await()
+        assertTrue(t.sent.none { it.string("method") == "turn/start" })
+        rpc.close()
+    }
+
     @Test fun `traffic sizes match UTF8 without exposing message contents`() = runTest {
         val texts = listOf("plain", "中文😀", "\uD800", "\uDC00", "a\uD800b")
         texts.forEach { assertEquals(it.toByteArray(Charsets.UTF_8).size.toLong(), utf8Size(it)) }
@@ -109,11 +151,11 @@ class ProtocolTest {
         rpc.close()
     }
 
-    @Test fun `initialization uses official framing and declares stable capabilities`() = runTest {
+    @Test fun `initialization uses official framing and opts into collaboration mode APIs`() = runTest {
         val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect()
         assertEquals(listOf("initialize", "initialized"), t.sent.map { it.string("method") })
         assertFalse(t.sent.first().containsKey("jsonrpc"))
-        assertEquals(false, t.sent.first().obj("params").obj("capabilities")["experimentalApi"]?.jsonPrimitive?.boolean)
+        assertEquals(true, t.sent.first().obj("params").obj("capabilities")["experimentalApi"]?.jsonPrimitive?.boolean)
         rpc.close()
     }
 

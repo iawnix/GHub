@@ -79,7 +79,7 @@ internal fun buildConversationRows(
         items.filter { it.kind == "agentMessage" && it.questions.isNotEmpty() }
             .forEach { add(ConversationRow.Question(it)) }
 
-        val assistantItems = items.filter { it.kind == "agentMessage" && it.questions.isEmpty() }
+        val assistantItems = items.filter { it.kind in setOf("agentMessage", "plan") && it.questions.isEmpty() }
         assistantItems.forEachIndexed { assistantIndex, item ->
             val showSync = assistantIndex == assistantItems.lastIndex
             val blocks = markdownBlocks[item.identityKey]
@@ -88,7 +88,7 @@ internal fun buildConversationRows(
         }
 
         val steps = items.filter {
-            it.kind != "userMessage" && it.kind != "agentMessage" &&
+            it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "plan" &&
                 it.kind != "fileChange" && it.kind != "imageView" && it.questions.isEmpty()
         }
         if (steps.isNotEmpty() || activeTurn == turnId) {
@@ -99,8 +99,8 @@ internal fun buildConversationRows(
         val files = items.filter { it.kind == "fileChange" }
         if (files.isNotEmpty()) add(ConversationRow.Files(turnId, files))
 
-        // Reply actions belong to the final complete assistant message only.
-        val answer = items.lastOrNull { it.kind == "agentMessage" && it.questions.isEmpty() }
+        // Reply actions belong to the final complete assistant message or proposed plan.
+        val answer = items.lastOrNull { it.kind in setOf("agentMessage", "plan") && it.questions.isEmpty() }
         if (answer?.complete == true && activeTurn != turnId) {
             add(ConversationRow.Reply(turnId, answer, completed = turnStatus == "completed" && completedTurn == turnId))
         }

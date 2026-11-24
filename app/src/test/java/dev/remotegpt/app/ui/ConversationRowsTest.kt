@@ -6,6 +6,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConversationRowsTest {
+    @Test fun planBlocksStayVisibleOutsideExecutionSummary() {
+        val plan = TimelineItem("plan", "turn", "plan", "Step one", complete = true)
+        val tool = TimelineItem("tool", "turn", "commandExecution", "ls", complete = true)
+        val rows = buildConversationRows(listOf(java.util.AbstractMap.SimpleEntry("turn", listOf(plan, tool))),
+            mapOf(plan.identityKey to listOf("Step one", "Step two")), null, "turn", "completed")
+        assertEquals(listOf("Step one", "Step two"), rows.filterIsInstance<ConversationRow.AssistantBlock>().map { it.source })
+        assertEquals(listOf(tool), rows.filterIsInstance<ConversationRow.Execution>().single().items)
+    }
+
     @Test fun allAssistantMessagesRemainVisibleWhenLaterMessageArrives() {
         val first = TimelineItem("a1", "turn", "agentMessage", "I will inspect the project.", complete = true)
         val second = TimelineItem("a2", "turn", "agentMessage", "The issue is fixed.", complete = false)

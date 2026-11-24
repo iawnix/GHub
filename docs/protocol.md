@@ -31,12 +31,14 @@ proxy 通道使用原始字节流，无 PTY；stderr 单独读取。终端功能
 | 状态核对 | `thread/turns/list(limit=1, sortDirection=desc, itemsView=notLoaded)` |
 | 归档与恢复 | `thread/archive`、`thread/unarchive` |
 | 对话与中断 | `turn/start`、`turn/interrupt` |
+| 计划模式 | `collaborationMode/list`、`turn/start.collaborationMode` |
+| 会话目标 | `thread/goal/get`、`thread/goal/set`、`thread/goal/clear`、`thread/goal/updated`、`thread/goal/cleared` |
 | 流式状态 | `thread/status/changed`、`turn/*`、`item/*` |
 | 命令与文件审批 | `item/commandExecution/requestApproval`、`item/fileChange/requestApproval` |
 | 用户提问与回答 | `item/tool/requestUserInput`，通过原请求 ID 返回 `answers` |
 | 审批与提问同步 | `serverRequest/resolved` |
 
-枚举沿用实际 schema，例如 `approvalPolicy: on-request`、`sandbox: workspace-write`。扩展字段可被忽略，未知时间线类型显示占位内容；暂未接入的服务端交互请求返回协议错误，用户可转到 CLI 处理。默认连接使用常规 API。
+枚举沿用实际 schema，例如 `approvalPolicy: on-request`、`sandbox: workspace-write`。扩展字段可被忽略，未知时间线类型显示占位内容；暂未接入的服务端交互请求返回协议错误，用户可转到 CLI 处理。握手声明 `experimentalApi: true`，以使用计划模式接口；可选能力按连接探测，不支持时保留普通会话功能。
 
 ### 用户问答
 
@@ -113,3 +115,13 @@ CLI 和手机共享同一个用户、配置目录及 daemon 时，可订阅同�
 发送前校验远程附件可读性和最新轮次状态；会话已被其他客户端推进时，保留编辑稿并阻止重发。发送中锁定输入，交付不确定或应用在发送中退出后，需刷新历史并确认后才能解锁。服务端核对和 `turn/start` 是两次请求，不能保证跨客户端的原子比较与发送；服务端的活动轮次约束仍是最后一道检查。
 
 会话页的渲染条目按用户消息、助手 Markdown 块、执行摘要、图片、文件摘要和回复操作拆分，外层列表直接测量这些条目。流式回复新增助手消息时，已有助手消息保持原顺序和可见性；命令、推理和工具事件继续集中在可展开的执行摘要中。Markdown 块的边界在后台解析，未变化的块保留稳定 key，自动跟随以最后一个真实条目为目标，不再依赖末尾占位条目。
+
+### 计划模式与目标
+
+依据本机 Codex 0.170.0 `generate-ts --experimental` 导出的协议接入。连接后通过 `collaborationMode/list` 获取支持的模式；单独输入 `/plan` 打开「执行 / 计划」选择面板，与输入选项和计划标识共用入口，不发送消息、不自动切换模式，保留附件。`/plan 内容` 则切换到计划模式并发送该内容。切回执行通过模式面板或「开始执行」完成，不提供 `/default` 命令；`default` 仅为内部协议值。模式随每个会话的草稿和提交快照持久化，编辑中断消息保留原模式。发送使用 `collaborationMode: {mode, settings: {model, reasoning_effort, developer_instructions: null}}`，不使用提示词模拟。未主动选择模式时省略该字段，保持原有继承行为。
+
+计划条目与助手正文一样按 Markdown 块显示，不再折入工具摘要。计划模式下，已有完成计划且输入框为空时显示「开始执行」，点击后切换执行模式并发送明确的执行请求。
+
+`/goal [目标内容]` 打开目标面板，带参数时预填内容，由用户保存。目标读写使用独立接口，不自动发送聊天消息；显式操作携带 `origin: user`。支持目标内容、可选正整数 token 预算、暂停、启用和清除。预算留空不修改已有预算；暂停目标不等于中断当前轮次。目标正文和状态以远端为准，不从本地缓存推断运行状态。
+
+打开目标面板、恢复会话及周期性发现时读取目标，实时消费更新和清除通知；连接实例与版本检查防止旧读取覆盖新通知。旧服务器不支持接口时提示不可用，普通对话继续工作。未知斜杠文字与文件路径仍按普通文本处理，只有完整匹配的 `/plan`、`/goal` 被解释为客户端命令。

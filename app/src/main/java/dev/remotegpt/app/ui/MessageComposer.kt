@@ -46,6 +46,10 @@ import dev.remotegpt.client.ModelOption
     modelOptions: List<ModelOption> = emptyList(), effort: String? = null,
     onEffort: (String?) -> Unit = {}, onReloadModels: () -> Unit = {},
     revision: MessageRevisionActions? = null,
+    modes: Set<String> = emptySet(), onMode: (String) -> Unit = {},
+    modeMenu: Boolean = false, onOpenModeMenu: () -> Unit = {}, onDismissModeMenu: () -> Unit = {},
+    goal: dev.remotegpt.client.ThreadGoal? = null, onGoal: () -> Unit = {},
+    canExecutePlan: Boolean = false, onExecutePlan: () -> Unit = {},
 ) {
     val edit = draft.edit
     val inputDraft = draft.composerDraft()
@@ -78,6 +82,23 @@ import dev.remotegpt.client.ModelOption
         tonalElevation = 1.dp,
     ) {
         Column {
+            if (inputDraft.mode == "plan" || goal != null) Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (inputDraft.mode == "plan") TextButton(onClick = { onOpenModeMenu() }, enabled = editable) {
+                    Icon(WorkbenchIcons.Checklist, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp)); Text(tr(R.string.ui_mode_plan))
+                }
+                if (canExecutePlan) TextButton(onClick = onExecutePlan, enabled = editable && online && !running) {
+                    Text(tr(R.string.ui_plan_execute))
+                }
+                if (goal != null) TextButton(onClick = onGoal, modifier = Modifier.weight(1f)) {
+                    Text(goal.objective, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.width(6.dp)); Text(goalStatusLabel(goal.status), style = MaterialTheme.typography.labelSmall)
+                }
+            }
             if (edit != null) Row(
                 Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -241,11 +262,22 @@ import dev.remotegpt.client.ModelOption
     if (attachmentsMenu) ModalBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(tr(R.string.ui_input_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            SheetAction(tr(R.string.ui_mode_title), WorkbenchIcons.Checklist, enabled = editable,
+                supporting = tr(if (inputDraft.mode == "plan") R.string.ui_mode_plan else R.string.ui_mode_execute)) {
+                attachmentsMenu = false; onOpenModeMenu()
+            }
+            SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.AutoAwesome, enabled = online && !archived && edit == null) {
+                attachmentsMenu = false; onGoal()
+            }
             SheetAction(tr(R.string.ui_choose_image), WorkbenchIcons.Image, enabled = editable && online) { attachmentsMenu = false; onImage() }
             SheetAction(tr(R.string.ui_take_photo), WorkbenchIcons.PhotoCamera, enabled = editable && online) { attachmentsMenu = false; onCamera() }
             SheetAction(tr(R.string.ui_choose_file), WorkbenchIcons.AttachFile, enabled = editable && online) { attachmentsMenu = false; onFile() }
         }
     }
+    if (modeMenu) SelectionSheet(tr(R.string.ui_mode_title),
+        listOf(SelectionOption("default", tr(R.string.ui_mode_execute)), SelectionOption("plan", tr(R.string.ui_mode_plan))),
+        inputDraft.mode ?: "default", onSelect = { onMode(it); onDismissModeMenu() }, onDismiss = onDismissModeMenu,
+        hint = if (modes.isEmpty()) tr(R.string.ui_mode_unavailable) else tr(R.string.ui_mode_hint))
     if (modelsMenu) ModelPickerSheet(models, inputDraft.model, running, online, onReloadModels,
         onSelect = { onModel(it); modelsMenu = false }, onDismiss = { modelsMenu = false })
     if (effortMenu) EffortPickerSheet(currentModel?.efforts.orEmpty(), inputDraft.effort, inputDraft.model == null, running,

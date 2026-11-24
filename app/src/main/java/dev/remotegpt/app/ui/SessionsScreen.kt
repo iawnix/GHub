@@ -47,7 +47,7 @@ import dev.remotegpt.client.*
     val markdownParsers = remember { mutableMapOf<String, ChatMarkdownParser>() }
     var markdownBlocks by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
     LaunchedEffect(timeline) {
-        val assistantItems = timeline.filter { it.kind == "agentMessage" && it.questions.isEmpty() }
+        val assistantItems = timeline.filter { it.kind in setOf("agentMessage", "plan") && it.questions.isEmpty() }
         val parsers = assistantItems.associate { item ->
             item.identityKey to markdownParsers.getOrPut(item.identityKey) { ChatMarkdownParser() }
         }
@@ -179,6 +179,15 @@ import dev.remotegpt.client.*
         onCancel = { if (listening) onVoice(); vm.cancelInterruptedEdit() },
         onRefresh = { vm.refreshConversation() }, onResolveUncertain = { confirmRetry = true },
     )
+    if (ws.goalEditorThread == thread) GoalEditorSheet(
+        goal = ws.goals[thread], initialObjective = dev.remotegpt.client.sessionCommand(draft.text)
+            ?.takeIf { it.name == "/goal" }?.argument.orEmpty(),
+        supported = ws.goalSupported == true, busy = thread in ws.goalBusy,
+        enabled = ws.connection == ConnectionStatus.ONLINE && !archived,
+        onDismiss = { vm.showGoalEditor(false) },
+        onSave = { objective, budget -> vm.changeGoal(thread, objective = objective, budget = budget) },
+        onStatus = { vm.changeGoal(thread, status = it) }, onClear = { vm.changeGoal(thread, clear = true) },
+    )
     val showEmpty = problem == null && timeline.isEmpty() && !ws.loadingHistory && ws.connection == ConnectionStatus.ONLINE
     val firstPendingIndex = (if (state.conversation?.nextCursor != null) 1 else 0) + (if (showEmpty) 1 else 0) + rows.size
     val blockingQuestions = questions.count { it.request.isBlocking }
@@ -237,6 +246,15 @@ import dev.remotegpt.client.*
                     MessageComposer(
                         draft = draft, models = ws.models, model = composerDraft.model ?: state.thread?.model,
                         modelOptions = ws.modelOptions, effort = composerDraft.effort ?: if (composerDraft.model != null) ws.modelOptions.firstOrNull { it.id == composerDraft.model }?.defaultEffort else state.thread?.reasoningEffort,
+                        canExecutePlan = composerDraft.mode == "plan" && composerDraft.text.isBlank() && composerDraft.attachments.isEmpty() &&
+                            draft.edit == null && turnStatus == "completed" && timeline.any {
+                                it.kind == "plan" && it.complete && it.turnId == timeline.lastOrNull()?.turnId
+                            },
+                        onExecutePlan = { vm.executePlan() },
+                        modes = ws.collaborationModes, onMode = vm::selectMode,
+                        modeMenu = ws.modePickerThread == thread,
+                        onOpenModeMenu = { vm.showModePicker() }, onDismissModeMenu = { vm.showModePicker(false) },
+                        goal = ws.goals[thread], onGoal = { vm.showGoalEditor() },
                         onEffort = vm::selectEffort, onReloadModels = { vm.reloadModels() },
                         online = ws.connection == ConnectionStatus.ONLINE && problem == null && !ws.loadingHistory, archived = archived, listening = listening,
                         onText = vm::draftText, onRemoveAttachment = vm::removeAttachment, onModel = vm::selectModel,

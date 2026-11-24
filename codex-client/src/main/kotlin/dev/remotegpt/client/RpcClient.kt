@@ -35,7 +35,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         transport.connect(::receive, ::disconnected)
         val initialized = request("initialize", buildJsonObject {
             putJsonObject("clientInfo") { put("name", "remote_gpt_android"); put("title", "GHub"); put("version", "0.1.0") }
-            putJsonObject("capabilities") { put("experimentalApi", false) }
+            putJsonObject("capabilities") { put("experimentalApi", true) }
         })
         send(buildJsonObject { put("method", "initialized"); putJsonObject("params") {} }.toString())
         return initialized
