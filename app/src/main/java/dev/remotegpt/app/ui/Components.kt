@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -33,6 +34,9 @@ import com.mikepenz.markdown.model.markdownPadding
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
 
+/** All lightweight feedback uses the workbench snackbar instead of platform toasts. */
+internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> { {} }
+
 @Composable fun EmptyPanel(icon: ImageVector, title: String, description: String, action: String? = null, onAction: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer) { Icon(icon, null, Modifier.padding(18.dp).size(28.dp), tint = MaterialTheme.colorScheme.primary) }
@@ -48,6 +52,82 @@ import dev.remotegpt.client.*
     ConnectionStatus.CONNECTING, ConnectionStatus.CHECKING, ConnectionStatus.WAITING_NETWORK, ConnectionStatus.RECONNECTING, ConnectionStatus.SYNCING -> accentColor(WorkbenchAccent.BLUE)
     ConnectionStatus.ERROR -> MaterialTheme.colorScheme.error
     ConnectionStatus.OFFLINE -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+/** One snackbar treatment shared by the workbench, settings, editors and dialogs. */
+@Composable internal fun WorkbenchSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
+    SnackbarHost(hostState, modifier) { data ->
+        val queued = data.visuals.message == tr(R.string.ui_message_queued)
+        Surface(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().widthIn(max = 560.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+            tonalElevation = 3.dp,
+            shadowElevation = 4.dp,
+        ) {
+            Column(Modifier.padding(start = 12.dp, top = 10.dp, end = 8.dp, bottom = if (data.visuals.actionLabel != null) 4.dp else 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (queued) WorkbenchIcons.OutputPending else WorkbenchIcons.Description,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.inverseOnSurface,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(data.visuals.message, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    if (data.visuals.withDismissAction) {
+                        IconButton(onClick = { data.dismiss() }, modifier = Modifier.size(40.dp)) {
+                            Icon(WorkbenchIcons.Close, tr(R.string.ui_close), Modifier.size(18.dp))
+                        }
+                    }
+                }
+                data.visuals.actionLabel?.let { label ->
+                    TextButton(
+                        onClick = { data.performAction() },
+                        modifier = Modifier.align(Alignment.End),
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.inversePrimary),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    ) { Text(label) }
+                }
+            }
+        }
+    }
+}
+
+/** A single connection notice layout for reconnecting, offline and setup states. */
+@Composable internal fun ConnectionNotice(
+    status: ConnectionStatus,
+    detail: String,
+    action: String? = null,
+    onAction: () -> Unit = {},
+) {
+    val tint = connectionColor(status)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, tint.copy(alpha = .28f)),
+    ) {
+        Column(Modifier.padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = if (action == null) 14.dp else 6.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(32.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center,
+                ) { ConnectionIndicator(status, showLabel = false) }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(connectionLabel(status), style = MaterialTheme.typography.titleSmall)
+                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            action?.let {
+                TextButton(onClick = onAction, modifier = Modifier.align(Alignment.End), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text(it)
+                }
+            }
+        }
+    }
 }
 
 @Composable fun InfoCard(text: String, action: String? = null, onAction: () -> Unit = {}) {

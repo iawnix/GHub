@@ -4,7 +4,6 @@ package dev.remotegpt.app.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -70,6 +69,7 @@ internal const val MAX_CLIPBOARD_CHARS = 100_000
     beforeCopy: () -> Boolean = { true },
 ) {
     val context = LocalContext.current
+    val reportMessage = LocalWorkbenchMessage.current
     var copied by remember(text) { mutableStateOf(false) }
     var request by remember(text) { mutableIntStateOf(0) }
     LaunchedEffect(text, request) {
@@ -82,7 +82,7 @@ internal const val MAX_CLIPBOARD_CHARS = 100_000
         onClick = {
             if (beforeCopy()) {
                 if (text.length > MAX_CLIPBOARD_CHARS) {
-                    Toast.makeText(context, tr(tooLongMessage), Toast.LENGTH_SHORT).show()
+                    reportMessage(tr(tooLongMessage))
                 } else {
                     runCatching {
                         (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
@@ -91,7 +91,7 @@ internal const val MAX_CLIPBOARD_CHARS = 100_000
                         copied = true
                         request++
                     }.onFailure {
-                        Toast.makeText(context, tr(tooLongMessage), Toast.LENGTH_SHORT).show()
+                        reportMessage(tr(tooLongMessage))
                     }
                 }
             }

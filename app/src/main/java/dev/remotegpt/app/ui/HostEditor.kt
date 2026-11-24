@@ -141,7 +141,7 @@ import kotlinx.coroutines.*
     })
     BackHandler { back() }
     Scaffold(modifier = Modifier.imePadding(), containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { snackbar?.let { SnackbarHost(it) } }, topBar = {
+        snackbarHost = { snackbar?.let { WorkbenchSnackbarHost(it) } }, topBar = {
         TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, navigationIcon = {
             IconButton(onClick = ::back, enabled = !saving) {
                 Icon(WorkbenchIcons.ArrowBack, if (editor.atEntryPage) backLabel else tr(R.string.ui_back))

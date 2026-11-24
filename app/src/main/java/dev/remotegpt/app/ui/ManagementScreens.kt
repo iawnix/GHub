@@ -49,7 +49,7 @@ import java.util.Locale
         TopAppBar(title = { Text(title, style = MaterialTheme.typography.titleLarge) }, actions = actions,
             navigationIcon = { IconButton(onClick = onBack) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back)) } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
-    }, bottomBar = bottom, snackbarHost = { snackbar?.let { SnackbarHost(it, Modifier.imePadding()) } }, content = content)
+    }, bottomBar = bottom, snackbarHost = { snackbar?.let { WorkbenchSnackbarHost(it, Modifier.imePadding()) } }, content = content)
 }
 
 @Composable private fun SectionLabel(label: String) {

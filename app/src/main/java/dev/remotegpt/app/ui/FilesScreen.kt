@@ -113,7 +113,7 @@ import dev.remotegpt.client.*
         val close = { if (dirty) discard = true else vm.closeEditor() }
         Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Scaffold(
-                snackbarHost = { snackbar?.let { SnackbarHost(it) } },
+                snackbarHost = { snackbar?.let { WorkbenchSnackbarHost(it) } },
                 topBar = {
                     TopAppBar(
                         title = {

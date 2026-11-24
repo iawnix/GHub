@@ -3,7 +3,6 @@ package dev.remotegpt.app.ui
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +21,7 @@ import java.util.UUID
 /** Actions belong to the finished answer, after its file summary. */
 @Composable internal fun ReplyActions(text: String, completed: Boolean = false) {
     val context = LocalContext.current
+    val reportMessage = LocalWorkbenchMessage.current
     var preparing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -33,7 +33,7 @@ import java.util.UUID
                     context.startActivity(Intent.createChooser(replyShareIntent(context, text), tr(R.string.chat_share_reply)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) {
-                    Toast.makeText(context, tr(R.string.chat_share_unavailable), Toast.LENGTH_SHORT).show()
+                    reportMessage(tr(R.string.chat_share_unavailable))
                 } finally { preparing = false }
             }
         })

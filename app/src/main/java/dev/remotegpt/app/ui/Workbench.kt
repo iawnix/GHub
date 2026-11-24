@@ -182,6 +182,7 @@ import java.util.UUID
         settingsHost != null -> "host:${settingsHost.id}"
         else -> "main"
     }
+    CompositionLocalProvider(LocalWorkbenchMessage provides vm::message) {
     AnimatedContent(
         page,
         modifier = Modifier
@@ -217,7 +218,7 @@ import java.util.UUID
         glassEnabled = (showHome || showConversation) && state.workspace.connection == ConnectionStatus.ONLINE,
         snackbarHost = {
             if (state.tab != WorkspaceTab.FILES || state.workspace.editor == null) {
-                SnackbarHost(snackbars, if (bottomControls > 0) Modifier.padding(bottom = with(LocalDensity.current) { bottomControls.toDp() }) else Modifier.imePadding())
+                WorkbenchSnackbarHost(snackbars, if (bottomControls > 0) Modifier.padding(bottom = with(LocalDensity.current) { bottomControls.toDp() }) else Modifier.imePadding())
             }
         },
         topBar = {
@@ -263,20 +264,29 @@ import java.util.UUID
                 Box(Modifier.weight(1f)) { EmptyPanel(WorkbenchIcons.Lan, tr(R.string.ui_connect_your_development_machine), tr(R.string.ui_continue_codex_sessions_and_browse_files_and), tr(R.string.ui_open_settings), { showSettings = true }) }
             } else {
                 if (state.tab != WorkspaceTab.TERMINAL && state.workspace.connection.recovering) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (state.workspace.reconnectAttempt >= 3) state.workspace.error ?: tr(R.string.ui_still_reconnecting_remote_tasks_are_not_interrupted)
-                            else connectionLabel(state.workspace.connection) + "…", Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (state.workspace.reconnectAttempt >= 3 || state.workspace.connection == ConnectionStatus.WAITING_NETWORK)
-                            TextButton(onClick = { vm.connect() }) { Text(tr(R.string.ui_retry_now)) }
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        ConnectionNotice(
+                            status = state.workspace.connection,
+                            detail = if (state.workspace.reconnectAttempt >= 3) state.workspace.error
+                                ?: tr(R.string.ui_still_reconnecting_remote_tasks_are_not_interrupted)
+                            else connectionLabel(state.workspace.connection) + "…",
+                            action = if (state.workspace.reconnectAttempt >= 3 || state.workspace.connection == ConnectionStatus.WAITING_NETWORK) tr(R.string.ui_retry_now) else null,
+                            onAction = vm::connect,
+                        )
                     }
                 } else if (state.tab != WorkspaceTab.TERMINAL && state.workspace.connection != ConnectionStatus.ONLINE) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                        InfoCard(state.workspace.error ?: if (state.workspace.connection == ConnectionStatus.CONNECTING) tr(R.string.ui_establishing_a_secure_connection) else tr(R.string.ui_connect_to_continue_local_drafts_are_preserved),
-                            if (state.workspace.connection == ConnectionStatus.CONNECTING) tr(R.string.ui_cancel_connection) else if (state.workspace.needsBootstrap) tr(R.string.ui_set_up_background_service) else tr(R.string.ui_connect)) {
-                            if (state.workspace.connection == ConnectionStatus.CONNECTING) vm.disconnect()
-                            else if (state.workspace.needsBootstrap) bootstrapHost = state.activeHost else vm.connect()
-                        }
+                        ConnectionNotice(
+                            status = state.workspace.connection,
+                            detail = state.workspace.error ?: if (state.workspace.connection == ConnectionStatus.CONNECTING) tr(R.string.ui_establishing_a_secure_connection)
+                            else tr(R.string.ui_connect_to_continue_local_drafts_are_preserved),
+                            action = if (state.workspace.connection == ConnectionStatus.CONNECTING) tr(R.string.ui_cancel_connection)
+                            else if (state.workspace.needsBootstrap) tr(R.string.ui_set_up_background_service) else tr(R.string.ui_connect),
+                            onAction = {
+                                if (state.workspace.connection == ConnectionStatus.CONNECTING) vm.disconnect()
+                                else if (state.workspace.needsBootstrap) bootstrapHost = state.activeHost else vm.connect()
+                            },
+                        )
                     }
                 }
                 val contentKey = if (showHome) "${state.activeHost}:home" else "${state.activeHost}:${state.workspace.selectedProject}:${state.tab}:${state.workspace.selectedThread}"
@@ -318,6 +328,7 @@ import java.util.UUID
         }
     }
     Unit // The page chain is a statement, not the lambda's value.
+    }
     }
 
     if (showHostSwitcher) HostSwitcherSheet(
