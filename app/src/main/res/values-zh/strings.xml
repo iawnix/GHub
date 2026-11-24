@@ -83,7 +83,15 @@
     <string name="ui_steer_commands_not_supported" formatted="false">不能用命令引导正在运行的任务。</string>
     <string name="ui_steer_task" formatted="false">立即引导任务</string>
     <string name="ui_steer_unavailable" formatted="false">当前服务器不支持引导正在运行的任务。</string>
+    <string name="ui_slash_commands" formatted="false">斜杠指令</string>
+    <string name="ui_slash_plan_description" formatted="false">下一条消息使用计划模式</string>
+    <string name="ui_slash_goal_description" formatted="false">编辑当前会话目标</string>
+    <string name="ui_run_slash_command" formatted="false">执行斜杠指令</string>
     <string name="ui_message_queue" formatted="false">消息队列</string>
+    <string name="ui_queue_count" formatted="false">%1$d 条待发送</string>
+    <string name="ui_queue_waiting" formatted="false">当前任务结束后，消息会按顺序发送。</string>
+    <string name="ui_queue_next" formatted="false">下一条</string>
+    <string name="ui_queue_attachments" formatted="false">%1$d 个附件</string>
     <string name="ui_queue_message" formatted="false">将消息加入队列</string>
     <string name="ui_queued_message" formatted="false">排队中的消息</string>
     <string name="ui_edit_queued_message" formatted="false">编辑排队消息</string>

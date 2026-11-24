@@ -86,7 +86,15 @@
     <string name="ui_steer_commands_not_supported" formatted="false">Commands cannot steer a running task.</string>
     <string name="ui_steer_task" formatted="false">Guide task now</string>
     <string name="ui_steer_unavailable" formatted="false">This server does not support steering active tasks.</string>
+    <string name="ui_slash_commands" formatted="false">Commands</string>
+    <string name="ui_slash_plan_description" formatted="false">Use plan mode for the next message</string>
+    <string name="ui_slash_goal_description" formatted="false">Edit this session's goal</string>
+    <string name="ui_run_slash_command" formatted="false">Run slash command</string>
     <string name="ui_message_queue" formatted="false">Message queue</string>
+    <string name="ui_queue_count" formatted="false">%1$d queued</string>
+    <string name="ui_queue_waiting" formatted="false">Messages send in order after the current task finishes.</string>
+    <string name="ui_queue_next" formatted="false">Next</string>
+    <string name="ui_queue_attachments" formatted="false">%1$d attachments</string>
     <string name="ui_queue_message" formatted="false">Queue message</string>
     <string name="ui_queued_message" formatted="false">Queued message</string>
     <string name="ui_edit_queued_message" formatted="false">Edit queued message</string>

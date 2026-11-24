@@ -1750,10 +1750,6 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun send() = perform { host, rt ->
         val thread = ui(host).selectedThread ?: return@perform
-        if (ui(host).conversations[thread]?.activeTurn != null) {
-            queueDraft(host, rt, thread)
-            return@perform
-        }
         val draft = ui(host).drafts[thread] ?: return@perform
         if (draft.delivery != "draft" || draft.edit != null) return@perform
         val command = sessionCommand(draft.text)
@@ -1773,6 +1769,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                     updateDraft(host, thread) { it.copy(mode = "plan", text = command.argument) }
                 }
             }
+        }
+        if (ui(host).conversations[thread]?.activeTurn != null) {
+            queueDraft(host, rt, thread)
+            return@perform
         }
         sendInput(host, rt, edited = false)
     }

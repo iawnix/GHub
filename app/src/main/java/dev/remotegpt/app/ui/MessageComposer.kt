@@ -41,6 +41,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.Draft
 import dev.remotegpt.client.ModelOption
+import dev.remotegpt.client.sessionCommand
+import dev.remotegpt.client.sessionCommandSuggestions
 
 @Composable fun MessageComposer(
     draft: Draft, models: List<Pair<String, String>>, model: String?, online: Boolean, archived: Boolean,
@@ -58,6 +60,7 @@ import dev.remotegpt.client.ModelOption
     goal: dev.remotegpt.client.ThreadGoal? = null, onGoal: () -> Unit = {},
     permissions: dev.remotegpt.app.PermissionSettings = dev.remotegpt.app.PermissionSettings(), onPermissions: () -> Unit = {},
     canExecutePlan: Boolean = false, onExecutePlan: () -> Unit = {},
+    onCommand: (String) -> Unit = { command -> onText("$command ") },
 ) {
     val edit = draft.edit
     val inputDraft = draft.composerDraft()
@@ -199,7 +202,10 @@ import dev.remotegpt.client.ModelOption
                     }
                 },
             )
-            val steerable = running && hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
+            val command = sessionCommand(inputDraft.text)
+            val commandSuggestions = if (editable) sessionCommandSuggestions(inputDraft.text) else emptyList()
+            if (commandSuggestions.isNotEmpty()) SlashCommandSuggestions(commandSuggestions, onCommand)
+            val steerable = running && command == null && hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
             if (steerable) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onSteer, enabled = online) { Text(tr(R.string.ui_steer_task)) }
             }
@@ -240,11 +246,13 @@ import dev.remotegpt.client.ModelOption
                             tr(if (listening) R.string.ui_stop_voice_input else R.string.ui_voice_input), Modifier.size(20.dp),
                             tint = if (listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    val commandAction = command != null
                     val queueable = hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
-                    val queueAction = running && queueable
+                    val queueAction = running && queueable && !commandAction
                     val enabled = if (running) online && !stopping else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
                     val sendLabel = tr(when {
                         stopping -> R.string.ui_stopping_task
+                        commandAction -> R.string.ui_run_slash_command
                         queueAction -> R.string.ui_queue_message
                         running -> R.string.ui_stop_task
                         inputDraft.delivery == "sending" -> R.string.ui_resending_input
@@ -252,25 +260,25 @@ import dev.remotegpt.client.ModelOption
                         else -> R.string.ui_send_message
                     })
                     val sendInteractionSource = remember { MutableInteractionSource() }
-                    IconButton(onClick = { haptic(running && !queueAction); if (queueAction) onQueue() else if (running) onStop() else onSend() }, enabled = enabled,
+                    IconButton(onClick = { haptic(running && !queueAction && !commandAction); if (commandAction) onSend() else if (queueAction) onQueue() else if (running) onStop() else onSend() }, enabled = enabled,
                         interactionSource = sendInteractionSource,
                         modifier = Modifier.size(48.dp).workbenchPressScale(enabled, sendInteractionSource)
                             .semantics { contentDescription = sendLabel }) {
                         // Stop is destructive for the running turn, so it must not look like Send.
                         val container by animateColorAsState(when {
                             !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)
-                            running && !queueAction -> MaterialTheme.colorScheme.error
+                            running && !queueAction && !commandAction -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.onSurface
                         }, Motion.short(), label = "send-container")
                         Box(Modifier.size(34.dp).background(container, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
                             val tint by animateColorAsState(when {
                                 !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                                running && !queueAction -> MaterialTheme.colorScheme.onError
+                                running && !queueAction && !commandAction -> MaterialTheme.colorScheme.onError
                                 else -> MaterialTheme.colorScheme.surface
                             }, Motion.short(), label = "send-tint")
                             val glyph = when {
                                 inputDraft.delivery == "sending" && !running -> 2
-                                running && !queueAction -> 1
+                                running && !queueAction && !commandAction -> 1
                                 else -> 0
                             }
                             AnimatedContent(glyph, transitionSpec = { swap() }, contentAlignment = Alignment.Center, label = "send-glyph") { target ->
@@ -338,6 +346,37 @@ import dev.remotegpt.client.ModelOption
         onSelect = { onModel(it); modelsMenu = false }, onDismiss = { modelsMenu = false })
     if (effortMenu) EffortPickerSheet(currentModel?.efforts.orEmpty(), inputDraft.effort, inputDraft.model == null, running,
         onSelect = { onEffort(it); effortMenu = false }, onDismiss = { effortMenu = false })
+}
+
+@Composable private fun SlashCommandSuggestions(commands: List<String>, onCommand: (String) -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .7f)),
+    ) {
+        Column(Modifier.padding(vertical = 4.dp)) {
+            Text(tr(R.string.ui_slash_commands), Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            commands.forEach { command ->
+                val description = tr(if (command == "/plan") R.string.ui_slash_plan_description else R.string.ui_slash_goal_description)
+                Surface(
+                    onClick = { onCommand(command) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    color = Color.Transparent,
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(command, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Text(description, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable internal fun PermissionPickerSheet(current: dev.remotegpt.app.PermissionSettings, onApply: (String, String) -> Unit, onDismiss: () -> Unit) {

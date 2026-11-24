@@ -8,6 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -260,6 +262,11 @@ import dev.remotegpt.client.*
                     }
                     if (thread in ws.stoppingTurns) Text(tr(R.string.ui_stopping_task),
                         Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
+                    if (draft.queued.isNotEmpty()) QueuedMessages(
+                        items = draft.queued,
+                        onEdit = vm::editQueuedInput,
+                        onRemove = vm::removeQueuedInput,
+                    )
                     MessageComposer(
                         draft = draft, models = ws.models, model = composerDraft.model ?: state.thread?.model,
                         modelOptions = ws.modelOptions, effort = composerDraft.effort ?: if (composerDraft.model != null) ws.modelOptions.firstOrNull { it.id == composerDraft.model }?.defaultEffort else state.thread?.reasoningEffort,
@@ -285,11 +292,6 @@ import dev.remotegpt.client.*
                         onSteer = { vm.steer() },
                         revision = revision,
                         running = state.conversation?.activeTurn != null, stopping = thread in ws.stoppingTurns, onStop = { vm.interrupt() }, modifier = Modifier,
-                    )
-                    if (draft.queued.isNotEmpty()) QueuedMessages(
-                        items = draft.queued,
-                        onEdit = vm::editQueuedInput,
-                        onRemove = vm::removeQueuedInput,
                     )
                     if (ws.permissionEditorThread == thread) PermissionPickerSheet(ws.permissions[thread] ?: PermissionSettings(),
                         onApply = { approval, sandbox -> vm.applyPermissions(approval, sandbox) }, onDismiss = { vm.showPermissionEditor(false) })
@@ -370,18 +372,65 @@ import dev.remotegpt.client.*
 
 @Composable private fun QueuedMessages(items: List<QueuedInput>, onEdit: (String) -> Unit, onRemove: (String) -> Unit) {
     Card(
-        modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+        modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+            .heightIn(max = 184.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text(tr(R.string.ui_message_queue), style = MaterialTheme.typography.labelLarge)
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(WorkbenchIcons.TaskPending, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text(tr(R.string.ui_message_queue), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                    Text(tr(R.string.ui_queue_count, items.size), Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+            Text(tr(R.string.ui_queue_waiting), Modifier.padding(start = 26.dp, top = 2.dp, bottom = 6.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             items.forEachIndexed { index, item ->
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${index + 1}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.width(24.dp))
-                    Text(item.input.text.ifBlank { item.input.attachments.joinToString { it.name }.ifBlank { tr(R.string.ui_queued_message) } },
-                        modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall)
+                val preview = item.input.text.ifBlank {
+                    item.input.attachments.joinToString { it.name }.ifBlank { tr(R.string.ui_queued_message) }
+                }
+                val selected = index == 0
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = CircleShape,
+                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.size(28.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("${index + 1}", style = MaterialTheme.typography.labelMedium,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f).padding(vertical = 2.dp)) {
+                        Text(preview, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
+                            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (selected) {
+                                Icon(WorkbenchIcons.OutputPending, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(4.dp)); Text(tr(R.string.ui_queue_next), style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
+                            if (item.input.attachments.isNotEmpty()) {
+                                if (selected) Spacer(Modifier.width(8.dp))
+                                Icon(WorkbenchIcons.AttachFile, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(3.dp)); Text(tr(R.string.ui_queue_attachments, item.input.attachments.size),
+                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item.error?.let { error ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(WorkbenchIcons.TaskError, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.width(4.dp))
+                                Text(error, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
                     IconButton(onClick = { onEdit(item.id) }, modifier = Modifier.size(40.dp)) {
                         Icon(WorkbenchIcons.Edit, tr(R.string.ui_edit_queued_message), Modifier.size(18.dp))
                     }
@@ -389,7 +438,7 @@ import dev.remotegpt.client.*
                         Icon(WorkbenchIcons.Close, tr(R.string.ui_remove_queued_message), Modifier.size(18.dp))
                     }
                 }
-                item.error?.let { Text(it, Modifier.padding(start = 24.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                if (index != items.lastIndex) HorizontalDivider(Modifier.padding(start = 36.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
             }
         }
     }
