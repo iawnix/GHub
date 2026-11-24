@@ -248,10 +248,20 @@ import kotlin.math.roundToInt
                         onKeyboard = ::keyboard,
                         sendText = { text ->
                             if (inputEnabled) {
-                                view?.let { terminal ->
-                                    haptic(false)
-                                    terminal.requestFocus()
-                                    terminal.sendText(text)
+                                haptic(false)
+                                view?.requestFocus()
+                                var index = 0
+                                while (index < text.length) {
+                                    val first = text[index]
+                                    val codePoint = if (Character.isHighSurrogate(first) && index + 1 < text.length &&
+                                        Character.isLowSurrogate(text[index + 1])) {
+                                        Character.toCodePoint(first, text[index + 1])
+                                    } else first.code
+                                    val shifted = if (modifiers.shift.active) Character.toUpperCase(codePoint) else codePoint
+                                    val output = if (modifiers.ctrl.active) controlCodePoint(shifted) else shifted
+                                    selected.session.writeCodePoint(modifiers.alt.active, output)
+                                    modifiers.consume()
+                                    index += Character.charCount(codePoint)
                                 }
                             }
                         },
@@ -290,6 +300,19 @@ import kotlin.math.roundToInt
         text = { Text(tr(R.string.ui_programs_in_a_regular_shell_may_stop)) },
         confirmButton = { TextButton(onClick = { onClose(id); closing = null }) { Text(tr(R.string.ui_close_terminal_339)) } },
         dismissButton = { TextButton(onClick = { closing = null }) { Text(tr(R.string.ui_cancel)) } }) }
+}
+
+private fun controlCodePoint(codePoint: Int): Int = when {
+    codePoint in 'a'.code..'z'.code -> codePoint - 'a'.code + 1
+    codePoint in 'A'.code..'Z'.code -> codePoint - 'A'.code + 1
+    codePoint == ' '.code || codePoint == '2'.code -> 0
+    codePoint == '['.code || codePoint == '3'.code -> 27
+    codePoint == '\\'.code || codePoint == '4'.code -> 28
+    codePoint == ']'.code || codePoint == '5'.code -> 29
+    codePoint == '^'.code || codePoint == '6'.code -> 30
+    codePoint == '_'.code || codePoint == '7'.code || codePoint == '/'.code -> 31
+    codePoint == '8'.code -> 127
+    else -> codePoint
 }
 
 @Composable internal fun TerminalKeyBar(modifiers: TerminalModifiers, expanded: Boolean, enabled: Boolean, send: (Int) -> Unit, paste: () -> Unit,
