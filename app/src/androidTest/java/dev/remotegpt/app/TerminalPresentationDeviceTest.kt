@@ -108,7 +108,10 @@ class TerminalPresentationDeviceTest {
         content(extra = true)
         compose.onNodeWithContentDescription("Ctrl").performTouchInput { longClick() }
         key(R.string.terminal_slash)
-        compose.runOnIdle { assertEquals("\u001f", output()) }
+        compose.runOnIdle {
+            assertEquals(1, output().length)
+            assertEquals(31, output()[0].code)
+        }
     }
 
     @Test fun narrowLargeTextKeepsEveryPrimaryKeyVisibleAndDistinct() {
