@@ -14,10 +14,12 @@ enum class WorkspaceTab { SESSIONS, FILES, TERMINAL }
 
 @Serializable data class Attachment(val id: String, val name: String, val localUri: String = "", val image: Boolean = false,
     val remotePath: String = "", val state: String = "uploading", val error: String? = null)
+@Serializable data class QueuedInput(val id: String, val input: MessageInput, val error: String? = null)
 @Serializable data class Draft(val text: String = "", val attachments: List<Attachment> = emptyList(), val delivery: String = "draft", val pendingId: String? = null,
     val model: String? = null, val effort: String? = null,
     val mode: String? = null,
-    val lastSubmission: SubmittedInput? = null, val edit: InterruptedInputEdit? = null)
+    val lastSubmission: SubmittedInput? = null, val edit: InterruptedInputEdit? = null,
+    val queued: List<QueuedInput> = emptyList())
 data class PendingQuestions(val request: ServerRequest, val submitted: Boolean = false)
 data class PendingApproval(val request: ServerRequest, val submitted: Boolean = false)
 data class PermissionSettings(val approval: String = "on-request", val sandbox: String = "workspace-write")
@@ -82,7 +84,7 @@ fun canRemoveEmptyRecord(ws: HostWorkspace, thread: String): Boolean {
         conversation?.nextCursor == null && ws.results[thread]?.turnId.isNullOrEmpty() &&
         ws.results[thread]?.completedTurnId == null &&
         draft.text.isEmpty() && draft.attachments.isEmpty() && draft.delivery == "draft" && draft.pendingId == null &&
-        draft.edit == null && draft.lastSubmission == null
+        draft.edit == null && draft.lastSubmission == null && draft.queued.isEmpty()
 }
 
 sealed interface ConnectionPrompt {

@@ -47,6 +47,7 @@ import dev.remotegpt.client.ModelOption
     listening: Boolean, onText: (String) -> Unit, onRemoveAttachment: (String) -> Unit,
     onModel: (String?) -> Unit, onImage: () -> Unit, onFile: () -> Unit,
     onCamera: () -> Unit, onVoice: () -> Unit, onSend: () -> Unit,
+    onQueue: () -> Unit = {},
     running: Boolean = false, stopping: Boolean = false, onStop: () -> Unit = {}, modifier: Modifier = Modifier,
     modelOptions: List<ModelOption> = emptyList(), effort: String? = null,
     onEffort: (String?) -> Unit = {}, onReloadModels: () -> Unit = {},
@@ -234,34 +235,37 @@ import dev.remotegpt.client.ModelOption
                             tr(if (listening) R.string.ui_stop_voice_input else R.string.ui_voice_input), Modifier.size(20.dp),
                             tint = if (listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    val enabled = if (running) online && !stopping else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
+                    val queueable = hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
+                    val queueAction = running && queueable
+                    val enabled = if (running) online && !stopping && (queueable || !hasContent) else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
                     val sendLabel = tr(when {
                         stopping -> R.string.ui_stopping_task
+                        queueAction -> R.string.ui_queue_message
                         running -> R.string.ui_stop_task
                         inputDraft.delivery == "sending" -> R.string.ui_resending_input
                         edit != null -> R.string.ui_edit_and_resend
                         else -> R.string.ui_send_message
                     })
                     val sendInteractionSource = remember { MutableInteractionSource() }
-                    IconButton(onClick = { haptic(running); if (running) onStop() else onSend() }, enabled = enabled,
+                    IconButton(onClick = { haptic(running && !queueAction); if (queueAction) onQueue() else if (running) onStop() else onSend() }, enabled = enabled,
                         interactionSource = sendInteractionSource,
                         modifier = Modifier.size(48.dp).workbenchPressScale(enabled, sendInteractionSource)
                             .semantics { contentDescription = sendLabel }) {
                         // Stop is destructive for the running turn, so it must not look like Send.
                         val container by animateColorAsState(when {
                             !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)
-                            running -> MaterialTheme.colorScheme.error
+                            running && !queueAction -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.onSurface
                         }, Motion.short(), label = "send-container")
                         Box(Modifier.size(34.dp).background(container, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
                             val tint by animateColorAsState(when {
                                 !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                                running -> MaterialTheme.colorScheme.onError
+                                running && !queueAction -> MaterialTheme.colorScheme.onError
                                 else -> MaterialTheme.colorScheme.surface
                             }, Motion.short(), label = "send-tint")
                             val glyph = when {
                                 inputDraft.delivery == "sending" && !running -> 2
-                                running -> 1
+                                running && !queueAction -> 1
                                 else -> 0
                             }
                             AnimatedContent(glyph, transitionSpec = { swap() }, contentAlignment = Alignment.Center, label = "send-glyph") { target ->

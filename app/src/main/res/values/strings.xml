@@ -81,6 +81,13 @@
     <string name="ui_attachment">Attachment: %1$s</string>
     <string name="ui_the_current_model_does_not_support_this" formatted="false">The current model does not support this reasoning level. Select another level.</string>
     <string name="ui_message_sent_restoring_session_state_please_do" formatted="false">Message sent. Restoring session state; please do not resend.</string>
+    <string name="ui_message_queued" formatted="false">Message added to the queue.</string>
+    <string name="ui_queue_commands_not_supported" formatted="false">Commands cannot be queued while a task is running.</string>
+    <string name="ui_message_queue" formatted="false">Message queue</string>
+    <string name="ui_queue_message" formatted="false">Queue message</string>
+    <string name="ui_queued_message" formatted="false">Queued message</string>
+    <string name="ui_edit_queued_message" formatted="false">Edit queued message</string>
+    <string name="ui_remove_queued_message" formatted="false">Remove queued message</string>
     <string name="ui_file_saved" formatted="false">File saved</string>
     <string name="ui_choose_a_session_first" formatted="false">Choose a session first</string>
     <string name="ui_select_a_session_first" formatted="false">Select a session first</string>

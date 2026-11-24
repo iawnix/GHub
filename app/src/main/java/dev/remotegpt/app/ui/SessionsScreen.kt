@@ -19,6 +19,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -280,8 +281,14 @@ import dev.remotegpt.client.*
                             userScrolling = false; followingLatest = true
                             if (draft.edit != null) vm.resendInterruptedInput() else vm.send()
                         },
+                        onQueue = { vm.send() },
                         revision = revision,
                         running = state.conversation?.activeTurn != null, stopping = thread in ws.stoppingTurns, onStop = { vm.interrupt() }, modifier = Modifier,
+                    )
+                    if (draft.queued.isNotEmpty()) QueuedMessages(
+                        items = draft.queued,
+                        onEdit = vm::editQueuedInput,
+                        onRemove = vm::removeQueuedInput,
                     )
                     if (ws.permissionEditorThread == thread) PermissionPickerSheet(ws.permissions[thread] ?: PermissionSettings(),
                         onApply = { approval, sandbox -> vm.applyPermissions(approval, sandbox) }, onDismiss = { vm.showPermissionEditor(false) })
@@ -361,6 +368,33 @@ import dev.remotegpt.client.*
 
     if (rename) TextPrompt(tr(R.string.ui_rename_session), tr(R.string.ui_name), state.thread?.title?.ifBlank { tr(R.string.ui_new_session) }.orEmpty(), onDismiss = { rename = false }, onConfirm = { vm.rename(thread, it); rename = false })
     if (confirmRetry) AlertDialog(onDismissRequest = { confirmRetry = false }, title = { Text(tr(R.string.ui_have_you_checked_the_remote_history)) }, text = { Text(tr(R.string.ui_unlocking_only_restores_draft_editing_it_does)) }, confirmButton = { TextButton(onClick = { vm.resolveUncertain(); confirmRetry = false }) { Text(tr(R.string.ui_unlock_draft)) } }, dismissButton = { TextButton(onClick = { confirmRetry = false }) { Text(tr(R.string.ui_cancel)) } })
+}
+
+@Composable private fun QueuedMessages(items: List<QueuedInput>, onEdit: (String) -> Unit, onRemove: (String) -> Unit) {
+    Card(
+        modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(tr(R.string.ui_message_queue), style = MaterialTheme.typography.labelLarge)
+            items.forEachIndexed { index, item ->
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${index + 1}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.width(24.dp))
+                    Text(item.input.text.ifBlank { item.input.attachments.joinToString { it.name }.ifBlank { tr(R.string.ui_queued_message) } },
+                        modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall)
+                    IconButton(onClick = { onEdit(item.id) }, modifier = Modifier.size(40.dp)) {
+                        Icon(WorkbenchIcons.Edit, tr(R.string.ui_edit_queued_message), Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = { onRemove(item.id) }, modifier = Modifier.size(40.dp)) {
+                        Icon(WorkbenchIcons.Close, tr(R.string.ui_remove_queued_message), Modifier.size(18.dp))
+                    }
+                }
+                item.error?.let { Text(it, Modifier.padding(start = 24.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+    }
 }
 
 /** Shared by the actual conversation and the offline design gallery. */

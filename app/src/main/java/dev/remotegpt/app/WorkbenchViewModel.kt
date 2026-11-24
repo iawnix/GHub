@@ -69,6 +69,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     private val persistence = mutableMapOf<String, Job>()
     private val imageLoads = mutableMapOf<String, Job>()
     private val terminalOpenings = mutableMapOf<Pair<String, String>, Job>()
+    private val queueDrains = mutableMapOf<Pair<String, String>, Job>()
     private val terminalCounters = mutableMapOf<String, Int>()
     private val editorDrafts = EditorDraftStore(File(app.filesDir, "editor-drafts"))
     private val imageCache = RemoteImageCache(File(app.cacheDir, "remote-images"))
@@ -842,12 +843,14 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                                 renderPending[host] = it to SystemClock.elapsedRealtime()
                             }
                         }
-                        if (event.method == "turn/completed" && ui(host).selectedThread == thread)
-                            viewModelScope.launch {
+                        if (event.method == "turn/completed") {
+                            if (ui(host).selectedThread == thread) viewModelScope.launch {
                                 try { synchronizeHistory(host, thread, rt) }
                                 catch (e: CancellationException) { throw e }
                                 catch (e: Exception) { record("history_sync_failed", e.javaClass.simpleName) }
                             }
+                            drainQueued(host, rt, thread)
+                        }
                     }
                 }
             }
@@ -1197,6 +1200,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                             activeTurn = if (status == "inProgress") turnId else null, status = status, stateRevision = conversation.stateRevision + 1)) else ws.conversations)
                 }
                 if (receipt != before) persistResults(host)
+                if (status == "completed" && changed) drainQueued(host, rt, id)
                 // Full message history is fetched only for the selected session,
                 // including when polling repairs a missed completion notification.
                 if (ui(host).selectedThread == id && !ui(host).loadingHistory && !rt.sessions.isCurrent(id))
@@ -1441,7 +1445,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             val saved = listOfNotNull(cached, dao.conversation(host, thread)?.let { wireJson.decodeFromString<Conversation>(it.json) })
             val draft = dao.draft(host, thread)?.let { wireJson.decodeFromString<Draft>(it.json) } ?: Draft()
             saved.all { it.items.isEmpty() && it.activeTurn == null && it.nextCursor == null } &&
-                draft.text.isEmpty() && draft.attachments.isEmpty() && draft.delivery == "draft" && draft.pendingId == null
+                draft.text.isEmpty() && draft.attachments.isEmpty() && draft.delivery == "draft" && draft.pendingId == null && draft.queued.isEmpty()
         }.getOrElse { error ->
             if (error is CancellationException) throw error
             message(tr(R.string.ui_cannot_verify_that_the_local_record_is))
@@ -1739,6 +1743,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun send() = perform { host, rt ->
         val thread = ui(host).selectedThread ?: return@perform
+        if (ui(host).conversations[thread]?.activeTurn != null) {
+            queueDraft(host, thread)
+            return@perform
+        }
         val draft = ui(host).drafts[thread] ?: return@perform
         if (draft.delivery != "draft" || draft.edit != null) return@perform
         val command = sessionCommand(draft.text)
@@ -1762,6 +1770,79 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         sendInput(host, rt, edited = false)
     }
     fun resendInterruptedInput() = perform { host, rt -> sendInput(host, rt, edited = true) }
+
+    /** Add the current composer contents to the local FIFO while a turn is running. */
+    private fun queueDraft(host: String, thread: String) {
+        val draft = ui(host).drafts[thread] ?: return
+        if (draft.delivery != "draft" || draft.edit != null) return
+        val input = draft.input()
+        if (input.attachments.any { it.state != "ready" } || (input.text.isBlank() && input.attachments.isEmpty())) return
+        if (sessionCommand(input.text) != null) {
+            message(tr(R.string.ui_queue_commands_not_supported)); return
+        }
+        val item = QueuedInput(UUID.randomUUID().toString(), input)
+        updateDraft(host, thread) { current ->
+            current.copy(text = "", attachments = emptyList(), mode = null, queued = current.queued + item)
+        }
+        message(tr(R.string.ui_message_queued))
+    }
+
+    fun removeQueuedInput(id: String) {
+        val host = state.value.activeHost ?: return
+        val thread = ui(host).selectedThread ?: return
+        updateDraft(host, thread) { draft -> draft.copy(queued = draft.queued.filterNot { it.id == id }) }
+    }
+
+    fun editQueuedInput(id: String) {
+        val host = state.value.activeHost ?: return
+        val thread = ui(host).selectedThread ?: return
+        val draft = ui(host).drafts[thread] ?: return
+        if (draft.delivery != "draft" || draft.edit != null || draft.text.isNotBlank() || draft.attachments.isNotEmpty()) return
+        val item = draft.queued.firstOrNull { it.id == id } ?: return
+        updateDraft(host, thread) { current -> current.copy(
+            text = item.input.text, attachments = item.input.attachments, model = item.input.model,
+            effort = item.input.effort, mode = item.input.mode,
+            queued = current.queued.filterNot { it.id == id })
+        }
+    }
+
+    /** Send the next queued item after a normal turn completion. */
+    private fun drainQueued(host: String, rt: Runtime, thread: String) {
+        val key = host to thread
+        if (queueDrains[key]?.isActive == true) return
+        if (ui(host).conversations[thread]?.activeTurn != null || thread in ui(host).stoppingTurns) return
+        val draft = ui(host).drafts[thread] ?: return
+        // Preserve anything the user started typing after queueing. It remains a
+        // normal draft and can be queued or sent once the current queue drains.
+        if (draft.delivery != "draft" || draft.edit != null || draft.text.isNotBlank() || draft.attachments.isNotEmpty()) return
+        val item = draft.queued.firstOrNull() ?: return
+        updateDraft(host, thread) { current -> current.copy(
+            text = item.input.text, attachments = item.input.attachments,
+            model = item.input.model, effort = item.input.effort, mode = item.input.mode,
+            queued = current.queued.drop(1))
+        }
+        val job = viewModelScope.launch {
+            try {
+                sendInput(host, rt, edited = false)
+                val current = ui(host).drafts[thread]
+                if (current?.delivery == "draft" && current.input() == item.input) {
+                    updateDraft(host, thread) { draft -> draft.copy(text = "", attachments = emptyList(), queued = listOf(item) + draft.queued) }
+                    flushDraft(host, thread)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // sendInput restores the composer draft. Put the failed item back so
+                // reconnecting or editing can retry it without losing the queue.
+                updateDraft(host, thread) { current -> current.copy(text = "", attachments = emptyList(), delivery = "draft",
+                    pendingId = null, queued = listOf(item.copy(error = errorText(e))) + current.queued) }
+                flushDraft(host, thread)
+            } finally {
+                queueDrains.remove(key)
+            }
+        }
+        queueDrains[key] = job
+    }
 
     private suspend fun sendInput(host: String, rt: Runtime, edited: Boolean) {
         val thread = ui(host).selectedThread ?: return
