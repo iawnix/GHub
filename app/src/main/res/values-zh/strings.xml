@@ -78,6 +78,13 @@
     <string name="ui_attachment">附件：%1$s</string>
     <string name="ui_the_current_model_does_not_support_this" formatted="false">当前模型不支持此思考级别，请重新选择。</string>
     <string name="ui_message_sent_restoring_session_state_please_do" formatted="false">消息已发送，正在恢复会话状态，请勿重复发送。</string>
+    <string name="ui_message_queued" formatted="false">消息已加入队列。</string>
+    <string name="ui_queue_commands_not_supported" formatted="false">任务运行时不能将命令加入队列。</string>
+    <string name="ui_message_queue" formatted="false">消息队列</string>
+    <string name="ui_queue_message" formatted="false">将消息加入队列</string>
+    <string name="ui_queued_message" formatted="false">排队中的消息</string>
+    <string name="ui_edit_queued_message" formatted="false">编辑排队消息</string>
+    <string name="ui_remove_queued_message" formatted="false">移除排队消息</string>
     <string name="ui_file_saved" formatted="false">文件已保存</string>
     <string name="ui_choose_a_session_first" formatted="false">请先选择一个会话</string>
     <string name="ui_select_a_session_first" formatted="false">请先选择会话</string>
