@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package dev.remotegpt.app.ui
 
 import dev.remotegpt.app.tr
@@ -10,7 +10,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -27,17 +30,17 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import dev.remotegpt.app.composerDraft
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.Draft
 import dev.remotegpt.client.ModelOption
-import kotlin.math.roundToInt
 
 @Composable fun MessageComposer(
     draft: Draft, models: List<Pair<String, String>>, model: String?, online: Boolean, archived: Boolean,
@@ -73,37 +76,71 @@ import kotlin.math.roundToInt
     val focus = LocalFocusManager.current
     val haptic = rememberHaptic()
     val editable = !archived && inputDraft.delivery == "draft"
+    val riskyPermissions = permissions.sandbox == "danger-full-access" || permissions.approval == "never"
+    val customPermissions = permissions.sandbox != "workspace-write" || permissions.approval != "on-request"
+    val permissionSummary = when {
+        permissions.sandbox == "danger-full-access" && permissions.approval == "never" ->
+            "${tr(R.string.ui_permission_full)} · ${tr(R.string.ui_permission_auto)}"
+        permissions.sandbox == "danger-full-access" -> tr(R.string.ui_permission_full)
+        permissions.approval == "never" -> tr(R.string.ui_permission_auto)
+        permissions.sandbox == "read-only" -> tr(R.string.ui_permission_read_only)
+        permissions.approval == "untrusted" -> tr(R.string.ui_permission_untrusted)
+        else -> tr(R.string.ui_permission_ask)
+    }
     val composerShape = RoundedCornerShape(22.dp)
     Surface(
         // ConversationViewport owns IME insets; typing never starts a separate layout animation.
         modifier = modifier.widthIn(max = 760.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
             .shadow(6.dp, composerShape, ambientColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = .06f),
                 spotColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = .08f)),
-        color = Color.Transparent,
+        color = MaterialTheme.colorScheme.surface,
         shape = composerShape,
         border = BorderStroke(1.dp, if (focused) MaterialTheme.colorScheme.primary else interactiveOutlineColor()),
         tonalElevation = 1.dp,
     ) {
         Column {
-            if (inputDraft.mode == "plan" || goal != null) Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (inputDraft.mode == "plan") TextButton(onClick = { onOpenModeMenu() }, enabled = editable) {
-                    Icon(WorkbenchIcons.Checklist, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp)); Text(tr(R.string.ui_mode_plan))
-                }
-                if (canExecutePlan) TextButton(onClick = onExecutePlan, enabled = editable && online && !running) {
-                    Text(tr(R.string.ui_plan_execute))
-                }
-                if (goal != null) TextButton(onClick = onGoal, modifier = Modifier.weight(1f)) {
-                    Text(goal.objective, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.width(6.dp)); Text(goalStatusLabel(goal.status), style = MaterialTheme.typography.labelSmall)
+            if (inputDraft.mode == "plan" || customPermissions || goal != null) {
+                Column(Modifier.fillMaxWidth()) {
+                    if (inputDraft.mode == "plan" || canExecutePlan || customPermissions) {
+                        FlowRow(
+                            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            if (inputDraft.mode == "plan") TextButton(onClick = { onOpenModeMenu() }, enabled = editable) {
+                                Icon(WorkbenchIcons.Checklist, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp)); Text(tr(R.string.ui_mode_plan))
+                            }
+                            if (canExecutePlan) TextButton(onClick = onExecutePlan, enabled = editable && online && !running) {
+                                Text(tr(R.string.ui_plan_execute))
+                            }
+                            if (customPermissions) {
+                                val badgeColor = if (riskyPermissions) LocalWorkbenchSemanticColors.current.warning
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                TextButton(
+                                    onClick = onPermissions,
+                                    enabled = online && !archived && edit == null,
+                                    colors = ButtonDefaults.textButtonColors(contentColor = badgeColor),
+                                ) {
+                                    Icon(if (riskyPermissions) WorkbenchIcons.FrontHand else WorkbenchIcons.Key, null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(permissionSummary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                    if (goal != null) {
+                        TextButton(onClick = onGoal, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                            Text(goal.objective, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.labelMedium)
+                            Spacer(Modifier.width(6.dp)); Text(goalStatusLabel(goal.status), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
                 }
             }
             if (edit != null) Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 4.dp),
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -116,7 +153,7 @@ import kotlin.math.roundToInt
             }
             if (inputDraft.attachments.isNotEmpty()) LazyRow(
                 contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 items(inputDraft.attachments, key = { it.id }) { attachment ->
                     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(12.dp), modifier = Modifier.width(248.dp)) {
@@ -144,7 +181,7 @@ import kotlin.math.roundToInt
             val hasContent = inputDraft.text.isNotBlank() || inputDraft.attachments.isNotEmpty()
             BasicTextField(
                 value = inputDraft.text, onValueChange = onText, enabled = editable, minLines = 1, maxLines = 5,
-                modifier = Modifier.weight(1f, fill = false).fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+                modifier = Modifier.weight(1f, fill = false).fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp)
                     .heightIn(min = 28.dp, max = LocalComposerTextHeight.current)
                     .focusRequester(textFocus)
@@ -160,8 +197,8 @@ import kotlin.math.roundToInt
                     }
                 },
             )
-            // Same solid surface as the text area: one capsule, no seam while content scrolls behind it.
-            BoxWithConstraints(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp, vertical = 2.dp)) {
+            // One solid outer capsule surface: no inner background seams while content scrolls behind it.
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
                 val compact = maxWidth < 344.dp || LocalDensity.current.fontScale > 1.3f
                 val modelLabel = currentModel?.name ?: model ?: tr(R.string.ui_choose_model)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -239,7 +276,7 @@ import kotlin.math.roundToInt
                 }
             }
             if (edit != null && (edit.error != null || edit.delivery == "uncertain" || (edit.delivery == "draft" && revision?.canResend != true))) {
-                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     edit.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                     if (edit.delivery == "uncertain") {
                         Text(tr(R.string.ui_your_last_message_has_an_unconfirmed_delivery), style = MaterialTheme.typography.bodySmall)
@@ -279,7 +316,7 @@ import kotlin.math.roundToInt
                 attachmentsMenu = false; onGoal()
             }
             SheetAction(tr(R.string.ui_permissions), WorkbenchIcons.Key, enabled = online && !archived && edit == null,
-                supporting = tr(if (permissions.approval == "on-request") R.string.ui_permission_ask else R.string.ui_permission_custom)) {
+                supporting = permissionSummary) {
                 attachmentsMenu = false; onPermissions()
             }
         }
@@ -292,25 +329,84 @@ import kotlin.math.roundToInt
         onSelect = { onModel(it); modelsMenu = false }, onDismiss = { modelsMenu = false })
     if (effortMenu) EffortPickerSheet(currentModel?.efforts.orEmpty(), inputDraft.effort, inputDraft.model == null, running,
         onSelect = { onEffort(it); effortMenu = false }, onDismiss = { effortMenu = false })
-
-
 }
 
 @Composable internal fun PermissionPickerSheet(current: dev.remotegpt.app.PermissionSettings, onApply: (String, String) -> Unit, onDismiss: () -> Unit) {
     var approval by remember(current) { mutableStateOf(current.approval) }
     var sandbox by remember(current) { mutableStateOf(current.sandbox) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(tr(R.string.ui_permissions), style = MaterialTheme.typography.titleLarge)
-            Text(tr(R.string.ui_permission_scope), style = MaterialTheme.typography.labelLarge)
-            listOf("read-only" to R.string.ui_permission_read_only, "workspace-write" to R.string.ui_permission_workspace, "danger-full-access" to R.string.ui_permission_full).forEach { (value, label) ->
-                FilterChip(selected = sandbox == value, onClick = { sandbox = value }, label = { Text(tr(label)) }, modifier = Modifier.fillMaxWidth())
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(tr(R.string.ui_permissions), Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge)
+            Text(tr(R.string.ui_permission_scope), Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.selectableGroup()) {
+                listOf(
+                    Triple("read-only", R.string.ui_permission_read_only, R.string.ui_permission_read_only_detail),
+                    Triple("workspace-write", R.string.ui_permission_workspace, R.string.ui_permission_workspace_detail),
+                    Triple("danger-full-access", R.string.ui_permission_full, R.string.ui_permission_full_detail),
+                ).forEach { (value, label, detail) ->
+                    PermissionOptionRow(tr(label), tr(detail), selected = sandbox == value, risky = value == "danger-full-access") {
+                        sandbox = value
+                    }
+                }
             }
-            Text(tr(R.string.ui_permission_approval), style = MaterialTheme.typography.labelLarge)
-            listOf("on-request" to R.string.ui_permission_ask, "never" to R.string.ui_permission_auto, "untrusted" to R.string.ui_permission_untrusted).forEach { (value, label) ->
-                FilterChip(selected = approval == value, onClick = { approval = value }, label = { Text(tr(label)) }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            Text(tr(R.string.ui_permission_approval), Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.selectableGroup()) {
+                listOf(
+                    Triple("on-request", R.string.ui_permission_ask, R.string.ui_permission_ask_detail),
+                    Triple("untrusted", R.string.ui_permission_untrusted, R.string.ui_permission_untrusted_detail),
+                    Triple("never", R.string.ui_permission_auto, R.string.ui_permission_auto_detail),
+                ).forEach { (value, label, detail) ->
+                    PermissionOptionRow(tr(label), tr(detail), selected = approval == value, risky = value == "never") {
+                        approval = value
+                    }
+                }
             }
-            Button(onClick = { onApply(approval, sandbox); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text(tr(R.string.ui_save)) }
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = { onApply(approval, sandbox); onDismiss() },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).heightIn(min = 48.dp),
+            ) {
+                Text(tr(R.string.ui_save))
+            }
+        }
+    }
+}
+
+@Composable private fun PermissionOptionRow(label: String, detail: String, selected: Boolean, risky: Boolean, onClick: () -> Unit) {
+    val haptic = rememberHaptic()
+    val detailColor = when {
+        risky && selected -> LocalWorkbenchSemanticColors.current.warning
+        selected -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .86f) else Color.Transparent)
+            .selectable(selected, role = Role.RadioButton, onClick = { haptic(false); onClick() })
+            .heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = detailColor)
+        }
+        Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+            if (selected) Icon(WorkbenchIcons.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }
@@ -334,33 +430,18 @@ fun effortLabel(value: String?): String = when (value) {
 
 @Composable internal fun EffortPickerSheet(efforts: List<String>, selected: String?, followsSession: Boolean,
     running: Boolean, onSelect: (String?) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(tr(R.string.ui_reasoning_level), style = MaterialTheme.typography.titleLarge)
-            val values = efforts.distinct()
-            if (values.isEmpty()) Text(tr(R.string.ui_this_model_does_not_offer_adjustable_reasoning)) else {
-                val index = values.indexOf(selected).coerceAtLeast(0)
-                var position by remember(selected, values) { mutableFloatStateOf(index.toFloat()) }
-                Text(effortLabel(values[position.roundToInt()]), style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary)
-                Slider(value = position, onValueChange = { position = it }, onValueChangeFinished = {
-                    onSelect(values[position.roundToInt()])
-                }, valueRange = 0f..(values.lastIndex.toFloat()), steps = (values.size - 2).coerceAtLeast(0),
-                    modifier = Modifier.fillMaxWidth())
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(effortLabel(values.first()), style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.clickable(enabled = !running) {
-                            onSelect(values.first()); onDismiss()
-                        })
-                    Text(effortLabel(values.last()), style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.clickable(enabled = !running) {
-                            onSelect(values.last()); onDismiss()
-                        })
-                }
-            }
-            TextButton(onClick = { onSelect(null); onDismiss() }, enabled = !running, modifier = Modifier.fillMaxWidth()) {
-                Text(tr(if (followsSession) R.string.ui_use_session_settings else R.string.ui_model_default))
-            }
-        }
-    }
+    val values = efforts.distinct()
+    val defaultOption = SelectionOption("inherit", tr(if (followsSession) R.string.ui_use_session_settings else R.string.ui_model_default))
+    SelectionSheet(
+        title = tr(R.string.ui_reasoning_level),
+        options = if (values.isEmpty()) listOf(defaultOption) else listOf(defaultOption) + values.map { SelectionOption("effort:$it", effortLabel(it)) },
+        selected = selected?.let { "effort:$it" } ?: "inherit",
+        onSelect = { choice ->
+            onSelect(if (choice == "inherit") null else choice.removePrefix("effort:"))
+            onDismiss()
+        },
+        onDismiss = onDismiss,
+        hint = if (running) tr(R.string.ui_next_message_only) else null,
+        emptyText = if (values.isEmpty()) tr(R.string.ui_this_model_does_not_offer_adjustable_reasoning) else null,
+    )
 }

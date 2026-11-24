@@ -1228,7 +1228,30 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         persistResults(host)
     }
 
-    fun showArchived(value: Boolean) { state.value.activeHost?.let { id -> update(id) { it.copy(archived = value, search = "") }; refreshThreads(id) } }
+    private val searchJobs = HashMap<String, Job>()
+
+    fun showArchived(value: Boolean) {
+        state.value.activeHost?.let { id ->
+            searchJobs.remove(id)?.cancel()
+            update(id) { it.copy(archived = value, search = "") }
+            refreshThreads(id)
+        }
+    }
+
+    fun searchThreads(query: String) {
+        val host = state.value.activeHost ?: return
+        if (ui(host).search == query) return
+        update(host) { it.copy(search = query) }
+        searchJobs.remove(host)?.cancel()
+        if (query.isBlank()) {
+            refreshThreads(host)
+        } else {
+            searchJobs[host] = viewModelScope.launch {
+                delay(280)
+                refreshThreads(host)
+            }
+        }
+    }
     fun createThread(cwd: String) = viewModelScope.launch {
         val host = state.value.activeHost ?: return@launch
         val root = projectPath(cwd.trim())

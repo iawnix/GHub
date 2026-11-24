@@ -630,6 +630,23 @@
     <string name="ui_permission_auto">Allow automatically</string>
     <string name="ui_permission_untrusted">Untrusted commands only</string>
     <string name="ui_permission_custom">Custom</string>
+    <string name="ui_permission_read_only_detail" formatted="false">Inspect files and run read-only checks</string>
+    <string name="ui_permission_workspace_detail" formatted="false">Edit files inside the current project</string>
+    <string name="ui_permission_full_detail" formatted="false">Unrestricted filesystem and network access</string>
+    <string name="ui_permission_ask_detail" formatted="false">Prompt before running commands outside safe rules</string>
+    <string name="ui_permission_auto_detail" formatted="false">Run commands without asking for confirmation</string>
+    <string name="ui_permission_untrusted_detail" formatted="false">Ask only before untrusted commands</string>
+    <string name="ui_search_sessions" formatted="false">Search sessions</string>
+    <string name="ui_clear_search" formatted="false">Clear search</string>
+    <string name="ui_no_matching_sessions" formatted="false">No matching sessions</string>
+    <string name="ui_switch_workspace" formatted="false">Switch workspace view</string>
+    <string name="ui_unsaved_changes" formatted="false">Unsaved</string>
+    <string name="ui_editor_line_count">%1$d lines</string>
+    <string name="terminal_page_up" formatted="false">Page up</string>
+    <string name="terminal_page_down" formatted="false">Page down</string>
+    <string name="terminal_slash" formatted="false">Slash</string>
+    <string name="terminal_dash" formatted="false">Hyphen</string>
+    <string name="terminal_pipe" formatted="false">Pipe</string>
     <string name="ui_copy_too_long">This content is too long for the clipboard.</string>
     <string name="ui_unsupported_timeline_item">Unsupported item type: %1$s</string>
     <string name="ui_host_key_rejected_error">Host fingerprint was not confirmed. Verify it and reconnect manually.</string>

@@ -42,6 +42,7 @@ import kotlin.math.roundToInt
         onBack = vm::navigateBack, onWorkspace = onWorkspace, onSelect = vm::selectTerminal,
         onNew = { vm.newTerminal() }, onClose = vm::closeTerminal, onConnect = { vm.connect() },
         onFontSize = vm::terminalFontSize, onExtraKeys = vm::terminalExtraKeys, onBottomControls = onBottomControls,
+        onFiles = if (ws.selectedProject?.startsWith('/') == true) ({ vm.selectTab(WorkspaceTab.FILES) }) else null,
     )
 }
 
@@ -52,6 +53,7 @@ import kotlin.math.roundToInt
     onBack: () -> Unit, onWorkspace: () -> Unit, onSelect: (String) -> Unit,
     onNew: () -> Unit, onClose: (String) -> Unit, onConnect: () -> Unit,
     onFontSize: (Float) -> Unit, onExtraKeys: (Boolean) -> Unit, onBottomControls: (Int) -> Unit = {},
+    onFiles: (() -> Unit)? = null,
 ) {
     val selected = terminals.firstOrNull { it.id == selectedId } ?: terminals.firstOrNull()
     var switching by rememberSaveable { mutableStateOf(false) }
@@ -115,6 +117,21 @@ import kotlin.math.roundToInt
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(selected?.name ?: tr(R.string.ui_terminal_290), Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (terminals.size > 1 && selected != null) {
+                            val index = terminals.indexOfFirst { it.id == selected.id } + 1
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.padding(start = 6.dp),
+                            ) {
+                                Text(
+                                    "$index/${terminals.size}",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
+                        }
                         ConnectionIndicator(connection, showLabel = false)
                         Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 4.dp).size(16.dp))
                     }
@@ -122,6 +139,9 @@ import kotlin.math.roundToInt
             }, navigationIcon = {
                 IconButton(onClick = onBack) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back_to_session)) }
             }, actions = {
+                onFiles?.let {
+                    IconButton(onClick = it) { Icon(WorkbenchIcons.FolderOpen, tr(R.string.ui_files), Modifier.size(20.dp)) }
+                }
                 IconButton(onClick = ::keyboard, enabled = inputEnabled) {
                     Icon(WorkbenchIcons.Keyboard, tr(if (imeVisible) R.string.terminal_hide_keyboard else R.string.ui_show_keyboard), Modifier.size(20.dp))
                 }
@@ -218,8 +238,21 @@ import kotlin.math.roundToInt
                             Text(tr(if (connection == ConnectionStatus.ONLINE) R.string.ui_new_terminal else R.string.ui_connect))
                         }
                     }
-                    TerminalKeyBar(modifiers, extraKeys && !compactInput, inputEnabled, ::sendKey,
-                        { selected.session.onPasteTextFromClipboard() }, compactInput, ::keyboard)
+                    TerminalKeyBar(
+                        modifiers = modifiers,
+                        expanded = extraKeys && !compactInput,
+                        enabled = inputEnabled,
+                        send = ::sendKey,
+                        paste = { selected.session.onPasteTextFromClipboard() },
+                        keyboardToggle = compactInput,
+                        onKeyboard = ::keyboard,
+                        sendText = { text ->
+                            if (inputEnabled) {
+                                view?.requestFocus()
+                                selected.session.write(text)
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -257,7 +290,7 @@ import kotlin.math.roundToInt
 }
 
 @Composable internal fun TerminalKeyBar(modifiers: TerminalModifiers, expanded: Boolean, enabled: Boolean, send: (Int) -> Unit, paste: () -> Unit,
-    keyboardToggle: Boolean = false, onKeyboard: () -> Unit = {}) {
+    keyboardToggle: Boolean = false, onKeyboard: () -> Unit = {}, sendText: (String) -> Unit = {}) {
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
         val keyWidth = (48.dp * LocalDensity.current.fontScale).coerceAtLeast(48.dp)
         // The modifier hint teaches a gesture once; after the first modifier use it only costs a row.
@@ -284,13 +317,20 @@ import kotlin.math.roundToInt
         Column {
             if (singleRow) Row(Modifier.fillMaxWidth()) { primary(); arrows() }
             else { Row(Modifier.fillMaxWidth(), content = primary); Row(Modifier.fillMaxWidth(), content = arrows) }
-            if (expanded || modifiers.alt.active || modifiers.shift.active) FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                ModifierKey("Alt", modifiers.alt, enabled, Modifier.widthIn(min = keyWidth), { modifiers.alt = modifiers.alt.tap() }, { modifiers.alt = modifiers.alt.lock() })
-                ModifierKey("Shift", modifiers.shift, enabled, Modifier.widthIn(min = keyWidth), { modifiers.shift = modifiers.shift.tap() }, { modifiers.shift = modifiers.shift.lock() })
-                if (expanded) {
-                    TerminalKey("Home", tr(R.string.terminal_home), enabled) { send(KeyEvent.KEYCODE_MOVE_HOME) }
-                    TerminalKey("End", tr(R.string.terminal_end), enabled) { send(KeyEvent.KEYCODE_MOVE_END) }
-                    TerminalKey(tr(R.string.ui_paste), tr(R.string.ui_paste), enabled, onClick = paste)
+            if (expanded || modifiers.alt.active || modifiers.shift.active) {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ModifierKey("Alt", modifiers.alt, enabled, Modifier.widthIn(min = keyWidth), { modifiers.alt = modifiers.alt.tap() }, { modifiers.alt = modifiers.alt.lock() })
+                    ModifierKey("Shift", modifiers.shift, enabled, Modifier.widthIn(min = keyWidth), { modifiers.shift = modifiers.shift.tap() }, { modifiers.shift = modifiers.shift.lock() })
+                    if (expanded) {
+                        TerminalKey("Home", tr(R.string.terminal_home), enabled) { send(KeyEvent.KEYCODE_MOVE_HOME) }
+                        TerminalKey("End", tr(R.string.terminal_end), enabled) { send(KeyEvent.KEYCODE_MOVE_END) }
+                        TerminalKey("PgUp", tr(R.string.terminal_page_up), enabled) { send(KeyEvent.KEYCODE_PAGE_UP) }
+                        TerminalKey("PgDn", tr(R.string.terminal_page_down), enabled) { send(KeyEvent.KEYCODE_PAGE_DOWN) }
+                        TerminalKey("/", tr(R.string.terminal_slash), enabled) { sendText("/") }
+                        TerminalKey("-", tr(R.string.terminal_dash), enabled) { sendText("-") }
+                        TerminalKey("|", tr(R.string.terminal_pipe), enabled) { sendText("|") }
+                        TerminalKey(tr(R.string.ui_paste), tr(R.string.ui_paste), enabled, onClick = paste)
+                    }
                 }
             }
             if (expanded && !hintDone) Text(tr(R.string.terminal_modifier_hint), Modifier.padding(horizontal = 6.dp, vertical = 4.dp),

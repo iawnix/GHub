@@ -27,6 +27,25 @@ class ConversationRowsTest {
         val assistants = rows.filterIsInstance<ConversationRow.AssistantBlock>()
         assertEquals(listOf("I will inspect the project.", "The issue is fixed."), assistants.map { it.source })
         assertTrue(rows.any { it is ConversationRow.Execution && it.items.single().id == "cmd" })
+        assertEquals(
+            listOf("assistant:${first.identityKey}:0", "execution:turn", "assistant:${second.identityKey}:0"),
+            rows.map { it.key },
+        )
+    }
+
+    @Test fun executionSummaryPrecedesFinalAnswerWhenToolsRunBeforeReply() {
+        val user = TimelineItem("u1", "turn", "userMessage", "Fix it", complete = true)
+        val command = TimelineItem("cmd", "turn", "commandExecution", "./gradlew test", complete = true)
+        val finalReply = TimelineItem("a1", "turn", "agentMessage", "All tests pass.", complete = true)
+        val rows = buildConversationRows(
+            listOf(java.util.AbstractMap.SimpleEntry("turn", listOf(user, command, finalReply))),
+            mapOf(finalReply.identityKey to listOf(finalReply.text)),
+            activeTurn = null, completedTurn = "turn", turnStatus = "completed",
+        )
+        assertEquals(
+            listOf("user:${user.identityKey}", "execution:turn", "assistant:${finalReply.identityKey}:0", "reply:turn"),
+            rows.map { it.key },
+        )
     }
 
     @Test fun completedReplyActionsAttachOnlyToFinalAssistantMessage() {

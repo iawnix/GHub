@@ -61,6 +61,8 @@ import java.util.UUID
     var showLegal by rememberSaveable { mutableStateOf(false) }
     var showProjectEditor by rememberSaveable { mutableStateOf(false) }
     var showWorkspace by rememberSaveable { mutableStateOf(false) }
+    var showSearch by rememberSaveable(state.activeHost) { mutableStateOf(false) }
+    val searchActive = showSearch || state.workspace.search.isNotEmpty()
     var bootstrapHost by rememberSaveable { mutableStateOf<String?>(null) }
     var handledNotification by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(state.notificationNavigationId) {
@@ -162,6 +164,14 @@ import java.util.UUID
         scrollBehavior.state.contentOffset = 0f
     }
     BackHandler(!showHome && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) { vm.navigateBack() }
+    BackHandler(showHome && (searchActive || state.workspace.archived) && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) {
+        if (searchActive) {
+            showSearch = false
+            vm.searchThreads("")
+        } else if (state.workspace.archived) {
+            vm.showArchived(false)
+        }
+    }
 
     // Pages are keyed by identity only, so data updates never restart a transition. A page
     // that is leaving renders only while its data still exists; otherwise it leaves blank.
@@ -229,6 +239,20 @@ import java.util.UUID
                 onAdd = if (showHome && state.profile != null) ({ showProjectEditor = true }) else null,
                 onArchive = if (showHome && state.profile != null) ({ vm.showArchived(!state.workspace.archived) }) else null,
                 archiveLabel = tr(if (state.workspace.archived) R.string.ui_back_to_recent else R.string.ui_archived),
+                archived = state.workspace.archived,
+                onSearch = if (showHome && state.profile != null) ({
+                    if (searchActive) {
+                        showSearch = false
+                        vm.searchThreads("")
+                    } else showSearch = true
+                }) else null,
+                searching = searchActive,
+                workspaceTab = state.tab,
+                hasConversation = state.workspace.selectedThread != null,
+                onSelectTab = if (!showHome && state.workspace.selectedProject?.startsWith('/') == true) ({ tab ->
+                    if (tab == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(tab)
+                }) else null,
+                onWorkspaceSheet = if (showConversation && state.workspace.selectedProject?.startsWith('/') == true) ({ showWorkspace = true }) else null,
                 backLabel = if (state.tab != WorkspaceTab.SESSIONS) tr(R.string.ui_back_to_session) else tr(R.string.ui_back_to_projects),
             )
         },
@@ -266,7 +290,10 @@ import java.util.UUID
                     if (view.endsWith(":home")) ProjectsScreen(state.workspace, onAdd = { showProjectEditor = true },
                         onRefresh = { vm.refreshThreads() }, onMore = { vm.refreshThreads(more = true) }, onContinue = vm::openThread,
                         onCreate = { vm.createThread(it) }, onProjectMenu = { menuProject = it },
-                        onArchive = { vm.archive(it, true, host = state.activeHost, allowUndo = true) })
+                        onArchive = { vm.archive(it, true, host = state.activeHost, allowUndo = true) },
+                        searching = searchActive, onSearchChange = vm::searchThreads,
+                        onCloseSearch = { showSearch = false; vm.searchThreads("") },
+                        onExitArchive = { vm.showArchived(false) })
                     else when (state.tab) {
                         WorkspaceTab.SESSIONS -> ChatScreen(state, vm, listening,
                             onImage = { imagePicker.launch(arrayOf("image/*")) }, onFile = { filePicker.launch(arrayOf("*/*")) },

@@ -114,9 +114,18 @@ private fun buildConversationRowsFromPreparsed(
         items.filter { it.kind == "agentMessage" && it.questions.isNotEmpty() }
             .forEach { add(ConversationRow.Question(it)) }
 
-        val assistantItems = items.filter { it.kind in setOf("agentMessage", "plan") && it.questions.isEmpty() }
-        assistantItems.forEachIndexed { assistantIndex, item ->
-            val showSync = assistantIndex == assistantItems.lastIndex
+        val steps = items.filter {
+            it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "plan" &&
+                it.kind != "fileChange" && it.kind != "imageView" && it.questions.isEmpty()
+        }
+        val stepKeys = steps.mapTo(HashSet()) { it.identityKey }
+        val lastStepIndex = items.indexOfLast { it.identityKey in stepKeys }
+        val assistantIndexed = items.mapIndexedNotNull { itemIndex, item ->
+            if (item.kind in setOf("agentMessage", "plan") && item.questions.isEmpty()) itemIndex to item else null
+        }
+        val lastAssistantItem = assistantIndexed.lastOrNull()?.second
+        fun emitAssistant(item: TimelineItem) {
+            val showSync = item === lastAssistantItem
             val blocks = markdownBlocks[item.identityKey]
             if (blocks.isNullOrEmpty()) add(ConversationRow.AssistantFallback(item, showSync))
             else blocks.forEachIndexed { index, (source, preparsed) ->
@@ -124,14 +133,17 @@ private fun buildConversationRowsFromPreparsed(
                     isLastBlock = index == blocks.lastIndex, preparsed = preparsed))
             }
         }
-
-        val steps = items.filter {
-            it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "plan" &&
-                it.kind != "fileChange" && it.kind != "imageView" && it.questions.isEmpty()
-        }
-        if (steps.isNotEmpty() || activeTurn == turnId) {
+        if (lastStepIndex >= 0) {
+            assistantIndexed.filter { (idx, _) -> idx < lastStepIndex }.forEach { (_, item) -> emitAssistant(item) }
             add(ConversationRow.Execution(turnId, steps, activeTurn == turnId,
                 items.count { it.kind == "fileChange" }, items.count { it.kind == "imageView" }))
+            assistantIndexed.filter { (idx, _) -> idx > lastStepIndex }.forEach { (_, item) -> emitAssistant(item) }
+        } else {
+            assistantIndexed.forEach { (_, item) -> emitAssistant(item) }
+            if (activeTurn == turnId) {
+                add(ConversationRow.Execution(turnId, steps, true,
+                    items.count { it.kind == "fileChange" }, items.count { it.kind == "imageView" }))
+            }
         }
         items.filter { it.kind == "imageView" }.forEach { add(ConversationRow.Image(it)) }
         val files = items.filter { it.kind == "fileChange" }

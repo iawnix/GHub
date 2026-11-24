@@ -616,6 +616,23 @@
     <string name="ui_permission_auto">自动允许</string>
     <string name="ui_permission_untrusted">仅不受信任命令询问</string>
     <string name="ui_permission_custom">自定义</string>
+    <string name="ui_permission_read_only_detail" formatted="false">仅读取文件与执行只读检查</string>
+    <string name="ui_permission_workspace_detail" formatted="false">允许修改当前项目目录内的文件</string>
+    <string name="ui_permission_full_detail" formatted="false">无沙箱限制的文件系统与网络访问</string>
+    <string name="ui_permission_ask_detail" formatted="false">运行受控范围外的命令前先询问</string>
+    <string name="ui_permission_auto_detail" formatted="false">自动批准命令，不再弹窗确认</string>
+    <string name="ui_permission_untrusted_detail" formatted="false">仅在运行不受信任命令前询问</string>
+    <string name="ui_search_sessions" formatted="false">搜索会话</string>
+    <string name="ui_clear_search" formatted="false">清除搜索</string>
+    <string name="ui_no_matching_sessions" formatted="false">未找到匹配的会话</string>
+    <string name="ui_switch_workspace" formatted="false">切换工作区视图</string>
+    <string name="ui_unsaved_changes" formatted="false">未保存</string>
+    <string name="ui_editor_line_count">%1$d 行</string>
+    <string name="terminal_page_up" formatted="false">上一页</string>
+    <string name="terminal_page_down" formatted="false">下一页</string>
+    <string name="terminal_slash" formatted="false">斜杠</string>
+    <string name="terminal_dash" formatted="false">连字符</string>
+    <string name="terminal_pipe" formatted="false">管道符</string>
     <string name="ui_copy_too_long">内容过长，无法直接复制到剪贴板。</string>
     <string name="ui_unsupported_timeline_item">此类型暂未完整显示：%1$s</string>
     <string name="ui_host_key_rejected_error">主机指纹未获确认，请核对后手动连接。</string>

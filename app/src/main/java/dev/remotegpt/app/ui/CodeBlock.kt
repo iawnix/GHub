@@ -2,11 +2,13 @@
 package dev.remotegpt.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -89,7 +91,7 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
                         WorkbenchIcons.Fullscreen, tr(R.string.ui_view_full_content), { full = true })
                 }
             } else {
-                CodeToolbar(title, source, copyLabel, wrap, { wrap = !wrap },
+                CodeToolbar(title, source, copyLabel, wrap, initiallyWrapped, { wrap = !wrap },
                     onExpand = if (document?.shortened == true || overflow) ({ full = true }) else null)
                 code(Modifier.fillMaxWidth())
             }
@@ -98,32 +100,47 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
     if (framed) Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.small,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f)), content = content)
     else content()
-    if (full) FullCodeDialog(source, language, title, copyLabel, wrap, { wrap = !wrap }) { full = false }
+    if (full) FullCodeDialog(source, language, title, copyLabel, wrap, initiallyWrapped, { wrap = !wrap }) { full = false }
 }
 
-@Composable private fun CodeToolbar(title: String, source: String, copyLabel: String, wrap: Boolean,
+@Composable private fun CodeToolbar(title: String, source: String, copyLabel: String, wrap: Boolean, defaultWrap: Boolean,
     onWrap: () -> Unit, onExpand: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
-        WrapControl(wrap, onWrap)
+        WrapControl(wrap, defaultWrap, onWrap)
         if (onExpand != null) ConversationActionButton(WorkbenchIcons.Fullscreen, tr(R.string.ui_view_full_content), onExpand)
         ConversationCopyButton(source, copyLabel)
     }
 }
 
-/** An icon toggle reads as a state at a glance; the tinted container marks "on". */
-@Composable private fun WrapControl(wrap: Boolean, onWrap: () -> Unit) {
+/** Resting default stays visually quiet; a compact pill appears only when toggled away from default. */
+@Composable private fun WrapControl(wrap: Boolean, defaultWrap: Boolean, onWrap: () -> Unit) {
+    val customized = wrap != defaultWrap
     IconToggleButton(checked = wrap, onCheckedChange = { onWrap() },
         modifier = Modifier.semantics {
             stateDescription = if (wrap) tr(R.string.ui_wrap_enabled) else tr(R.string.ui_wrap_disabled)
         },
         colors = IconButtonDefaults.iconToggleButtonColors(
+            containerColor = Color.Transparent,
+            checkedContainerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            checkedContentColor = if (customized) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
         )) {
-        Icon(WorkbenchIcons.WrapText, tr(R.string.ui_wrap_lines), Modifier.size(18.dp))
+        Box(
+            modifier = Modifier.size(30.dp).background(
+                if (customized) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                RoundedCornerShape(8.dp),
+            ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                WorkbenchIcons.WrapText,
+                tr(R.string.ui_wrap_lines),
+                Modifier.size(18.dp),
+                tint = if (customized) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -174,13 +191,13 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
 }
 
 @Composable private fun FullCodeDialog(source: String, language: String, title: String, copyLabel: String,
-    wrap: Boolean, onWrap: () -> Unit, onClose: () -> Unit) {
+    wrap: Boolean, defaultWrap: Boolean, onWrap: () -> Unit, onClose: () -> Unit) {
     val document = rememberCodeDocument(source, language, full = true)
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(topBar = {
             TopAppBar(title = { Text(title) }, navigationIcon = {
                 IconButton(onClick = onClose) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back_to_session)) }
-            }, actions = { WrapControl(wrap, onWrap); ConversationCopyButton(source, copyLabel) })
+            }, actions = { WrapControl(wrap, defaultWrap, onWrap); ConversationCopyButton(source, copyLabel) })
         }) { padding ->
             val current = document
             if (current == null) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -201,40 +218,49 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
         CodeBlock(item.text, title = tr(R.string.ui_original_record), copyLabel = tr(R.string.ui_copy_record))
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            TaskStatusLabel(itemTaskStatus(item))
-            // Exit code 0 restates "completed"; only a non-zero code adds information.
-            details.exitCode?.takeIf { it != 0 }?.let { Text(tr(R.string.ui_exit_code, it), style = MaterialTheme.typography.bodySmall) }
-            details.durationMs?.let { ms ->
-                val duration = durationText(ms)
-                Text(tr(duration.id, *duration.args.toTypedArray()),
-                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        details.workingDirectory?.takeIf { it.isNotBlank() }?.let {
-            SelectionContainer { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.small,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))) {
-            Column {
-                details.command?.let { command ->
-                    CodeBlock(command, "sh", tr(R.string.ui_output_command_short), tr(R.string.ui_copy_command), framed = false,
-                        inlineControls = true)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLowest, shape = MaterialTheme.shapes.small,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))) {
+        Column {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = .65f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TaskStatusLabel(itemTaskStatus(item))
+                    // Exit code 0 restates "completed"; only a non-zero code adds information.
+                    details.exitCode?.takeIf { it != 0 }?.let { Text(tr(R.string.ui_exit_code, it), style = MaterialTheme.typography.bodySmall) }
+                    details.durationMs?.let { ms ->
+                        val duration = durationText(ms)
+                        Text(tr(duration.id, *duration.args.toTypedArray()),
+                            style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                if (details.outputTruncated) Text(tr(R.string.ui_cached_output_tail), Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.text.isNotEmpty()) CodeBlock(item.text, "output", tr(R.string.ui_command_output), tr(R.string.ui_copy_output), framed = false)
-                else Text(tr(if (item.complete) R.string.ui_no_command_output else R.string.ui_waiting_command_output),
-                    Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                details.workingDirectory?.takeIf { it.isNotBlank() }?.let {
+                    SelectionContainer {
+                        Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                    }
+                }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
+            details.command?.let { command ->
+                CodeBlock(command, "sh", tr(R.string.ui_output_command_short), tr(R.string.ui_copy_command), framed = false,
+                    inlineControls = true)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
+            }
+            if (details.outputTruncated) Text(tr(R.string.ui_cached_output_tail), Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (item.text.isNotEmpty()) CodeBlock(item.text, "output", tr(R.string.ui_command_output), tr(R.string.ui_copy_output), framed = false)
+            else Text(tr(if (item.complete) R.string.ui_no_command_output else R.string.ui_waiting_command_output),
+                Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-internal data class DurationText(@androidx.annotation.StringRes val id: Int, val args: List<Any>)
+internal data class DurationText(@param:androidx.annotation.StringRes val id: Int, val args: List<Any>)
 
 /** 850 ms · 2.1 s · 1 min 12 s; tenths are truncated so 59 999 ms never reads as 60.0 s. */
 internal fun durationText(ms: Long): DurationText {
