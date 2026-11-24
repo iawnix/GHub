@@ -88,7 +88,7 @@
     <string name="ui_steer_unavailable" formatted="false">This server does not support steering active tasks.</string>
     <string name="ui_slash_commands" formatted="false">Commands</string>
     <string name="ui_slash_plan_description" formatted="false">Use plan mode for the next message</string>
-    <string name="ui_slash_goal_description" formatted="false">Edit this session&apos;s goal</string>
+    <string name="ui_slash_goal_description" formatted="false">Edit this session\'s goal</string>
     <string name="ui_run_slash_command" formatted="false">Run slash command</string>
     <string name="ui_message_queue" formatted="false">Message queue</string>
     <string name="ui_queue_count" formatted="false">%1$d queued</string>
