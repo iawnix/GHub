@@ -99,7 +99,7 @@ class CodexApi(val rpc: RpcClient) {
 
     suspend fun queueList(thread: String, cursor: String? = null, limit: Int = 100): Page<JsonObject> {
         val result = rpc.request("thread/queue/list", buildJsonObject {
-            put("threadId", thread); put("cursor", str(cursor)); put("limit", JsonPrimitive(limit))
+            put("threadId", thread); cursor?.let { put("cursor", it) }; put("limit", JsonPrimitive(limit))
         })
         return Page(result.array("data").map { it.jsonObject }, result.string("nextCursor"))
     }
@@ -110,9 +110,10 @@ class CodexApi(val rpc: RpcClient) {
             put("input", userInput(text, images))
         }, mutation = true)
 
-    suspend fun queueDelete(thread: String, queuedId: String): Boolean =
-        rpc.request("thread/queue/delete", jsonObject("threadId" to str(thread), "queuedSubmissionId" to str(queuedId)), true)
-            ["deleted"]?.jsonPrimitive?.booleanOrNull == true
+    suspend fun queueDelete(thread: String, queuedId: String): Boolean {
+        val result = rpc.request("thread/queue/delete", jsonObject("threadId" to str(thread), "queuedSubmissionId" to str(queuedId)), true)
+        return result["deleted"]?.jsonPrimitive?.booleanOrNull == true
+    }
 
     suspend fun queueReorder(thread: String, queuedIds: List<String>) = rpc.request("thread/queue/reorder", buildJsonObject {
         put("threadId", thread); putJsonArray("queuedSubmissionIds") { queuedIds.forEach(::add) }
