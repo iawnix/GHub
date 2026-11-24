@@ -358,9 +358,6 @@ import dev.remotegpt.client.*
     if (optionsOpen) ModalBottomSheet(onDismissRequest = { onOptionsChange(false) }) {
         ConversationActions(
             cwd = state.thread?.cwd.orEmpty(), archived = archived,
-            projectAvailable = ws.selectedProject?.startsWith('/') == true,
-            onFiles = { onOptionsChange(false); vm.selectTab(WorkspaceTab.FILES) },
-            onTerminal = { onOptionsChange(false); vm.selectTab(WorkspaceTab.TERMINAL) },
             onRefresh = { onOptionsChange(false); vm.refreshConversation() },
             onRename = { onOptionsChange(false); rename = true },
             onArchive = { onOptionsChange(false); vm.archive(thread, !archived) },
@@ -400,16 +397,12 @@ import dev.remotegpt.client.*
 
 /** Shared by the actual conversation and the offline design gallery. */
 @Composable fun ConversationActions(
-    cwd: String, archived: Boolean, projectAvailable: Boolean,
-    onFiles: () -> Unit, onTerminal: () -> Unit,
+    cwd: String, archived: Boolean,
     onRefresh: () -> Unit, onRename: () -> Unit, onArchive: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(tr(R.string.ui_session_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
         if (cwd.isNotBlank()) Text(cwd, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SheetAction(tr(R.string.ui_project_files), WorkbenchIcons.FolderOpen, enabled = projectAvailable, onClick = onFiles)
-        SheetAction(tr(R.string.ui_terminal_290), WorkbenchIcons.Terminal, enabled = projectAvailable, onClick = onTerminal)
-        HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
         SheetAction(tr(R.string.ui_sync_session), WorkbenchIcons.Refresh, onClick = onRefresh)
         SheetAction(tr(R.string.ui_rename), WorkbenchIcons.Edit, onClick = onRename)
         SheetAction(if (archived) tr(R.string.ui_restore_session) else tr(R.string.ui_archive_session), WorkbenchIcons.Archive, onClick = onArchive)
