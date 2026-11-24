@@ -251,16 +251,7 @@ import kotlin.math.roundToInt
                                 view?.let { terminal ->
                                     haptic(false)
                                     terminal.requestFocus()
-                                    var index = 0
-                                    while (index < text.length) {
-                                        val first = text[index]
-                                        val codePoint = if (Character.isHighSurrogate(first) && index + 1 < text.length &&
-                                            Character.isLowSurrogate(text[index + 1])) {
-                                            Character.toCodePoint(first, text[index + 1])
-                                        } else first.code
-                                        terminal.inputCodePoint(TerminalView.KEY_EVENT_SOURCE_SOFT_KEYBOARD, codePoint, false, false)
-                                        index += Character.charCount(codePoint)
-                                    }
+                                    terminal.sendText(text)
                                 }
                             }
                         },
