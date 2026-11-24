@@ -606,4 +606,14 @@
     <string name="ui_goal_tokens">已使用 %1$d tokens</string>
     <string name="ui_plan_execute">开始执行</string>
     <string name="ui_plan_execute_prompt">请按上述计划开始执行。</string>
+    <string name="ui_permissions">权限</string>
+    <string name="ui_permission_scope">执行范围</string>
+    <string name="ui_permission_read_only">只读</string>
+    <string name="ui_permission_workspace">工作区可写</string>
+    <string name="ui_permission_full">完全访问</string>
+    <string name="ui_permission_approval">审批策略</string>
+    <string name="ui_permission_ask">需要时询问</string>
+    <string name="ui_permission_auto">自动允许</string>
+    <string name="ui_permission_untrusted">仅不受信任命令询问</string>
+    <string name="ui_permission_custom">自定义</string>
 </resources>

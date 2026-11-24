@@ -620,4 +620,14 @@
     <string name="ui_goal_tokens">%1$d tokens used</string>
     <string name="ui_plan_execute">Execute plan</string>
     <string name="ui_plan_execute_prompt">Please implement the plan above.</string>
+    <string name="ui_permissions">Permissions</string>
+    <string name="ui_permission_scope">Execution scope</string>
+    <string name="ui_permission_read_only">Read only</string>
+    <string name="ui_permission_workspace">Workspace write</string>
+    <string name="ui_permission_full">Full access</string>
+    <string name="ui_permission_approval">Approval policy</string>
+    <string name="ui_permission_ask">Ask when needed</string>
+    <string name="ui_permission_auto">Allow automatically</string>
+    <string name="ui_permission_untrusted">Untrusted commands only</string>
+    <string name="ui_permission_custom">Custom</string>
 </resources>

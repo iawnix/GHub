@@ -1611,6 +1611,15 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         if (effort != null && ui(host).modelOptions.firstOrNull { it.id == model }?.efforts?.contains(effort) != true) return
         updateMessageInput(host, thread, draft.edit?.id) { it.copy(effort = effort) }
     }
+    fun showPermissionEditor(show: Boolean = true) {
+        val host = state.value.activeHost ?: return
+        update(host) { it.copy(permissionEditorThread = if (show) it.selectedThread else null) }
+    }
+    fun applyPermissions(approval: String, sandbox: String) = perform { host, rt ->
+        val thread = ui(host).selectedThread ?: return@perform
+        rt.api.updatePermissions(thread, approval, sandbox)
+        update(host) { it.copy(permissions = it.permissions + (thread to PermissionSettings(approval, sandbox)), permissionEditorThread = null) }
+    }
     fun reloadModels() = perform { host, rt ->
         val models = rt.api.models()
         if (runtimes[host] === rt) update(host) { it.copy(modelOptions = models, models = models.map { model -> model.id to model.name }) }

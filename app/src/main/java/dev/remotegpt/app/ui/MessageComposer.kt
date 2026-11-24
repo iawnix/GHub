@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.Draft
 import dev.remotegpt.client.ModelOption
+import kotlin.math.roundToInt
 
 @Composable fun MessageComposer(
     draft: Draft, models: List<Pair<String, String>>, model: String?, online: Boolean, archived: Boolean,
@@ -49,6 +50,7 @@ import dev.remotegpt.client.ModelOption
     modes: Set<String> = emptySet(), onMode: (String) -> Unit = {},
     modeMenu: Boolean = false, onOpenModeMenu: () -> Unit = {}, onDismissModeMenu: () -> Unit = {},
     goal: dev.remotegpt.client.ThreadGoal? = null, onGoal: () -> Unit = {},
+    permissions: dev.remotegpt.app.PermissionSettings = dev.remotegpt.app.PermissionSettings(), onPermissions: () -> Unit = {},
     canExecutePlan: Boolean = false, onExecutePlan: () -> Unit = {},
 ) {
     val edit = draft.edit
@@ -269,6 +271,10 @@ import dev.remotegpt.client.ModelOption
             SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.AutoAwesome, enabled = online && !archived && edit == null) {
                 attachmentsMenu = false; onGoal()
             }
+            SheetAction(tr(R.string.ui_permissions), WorkbenchIcons.Key, enabled = online && !archived && edit == null,
+                supporting = tr(if (permissions.approval == "on-request") R.string.ui_permission_ask else R.string.ui_permission_custom)) {
+                attachmentsMenu = false; onPermissions()
+            }
             SheetAction(tr(R.string.ui_choose_image), WorkbenchIcons.Image, enabled = editable && online) { attachmentsMenu = false; onImage() }
             SheetAction(tr(R.string.ui_take_photo), WorkbenchIcons.PhotoCamera, enabled = editable && online) { attachmentsMenu = false; onCamera() }
             SheetAction(tr(R.string.ui_choose_file), WorkbenchIcons.AttachFile, enabled = editable && online) { attachmentsMenu = false; onFile() }
@@ -284,6 +290,25 @@ import dev.remotegpt.client.ModelOption
         onSelect = { onEffort(it); effortMenu = false }, onDismiss = { effortMenu = false })
 
 
+}
+
+@Composable internal fun PermissionPickerSheet(current: dev.remotegpt.app.PermissionSettings, onApply: (String, String) -> Unit, onDismiss: () -> Unit) {
+    var approval by remember(current) { mutableStateOf(current.approval) }
+    var sandbox by remember(current) { mutableStateOf(current.sandbox) }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(tr(R.string.ui_permissions), style = MaterialTheme.typography.titleLarge)
+            Text(tr(R.string.ui_permission_scope), style = MaterialTheme.typography.labelLarge)
+            listOf("read-only" to R.string.ui_permission_read_only, "workspace-write" to R.string.ui_permission_workspace, "danger-full-access" to R.string.ui_permission_full).forEach { (value, label) ->
+                FilterChip(selected = sandbox == value, onClick = { sandbox = value }, label = { Text(tr(label)) }, modifier = Modifier.fillMaxWidth())
+            }
+            Text(tr(R.string.ui_permission_approval), style = MaterialTheme.typography.labelLarge)
+            listOf("on-request" to R.string.ui_permission_ask, "never" to R.string.ui_permission_auto, "untrusted" to R.string.ui_permission_untrusted).forEach { (value, label) ->
+                FilterChip(selected = approval == value, onClick = { approval = value }, label = { Text(tr(label)) }, modifier = Modifier.fillMaxWidth())
+            }
+            Button(onClick = { onApply(approval, sandbox); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text(tr(R.string.ui_save)) }
+        }
+    }
 }
 
 fun effortLabel(value: String?): String = when (value) {
@@ -305,11 +330,27 @@ fun effortLabel(value: String?): String = when (value) {
 
 @Composable internal fun EffortPickerSheet(efforts: List<String>, selected: String?, followsSession: Boolean,
     running: Boolean, onSelect: (String?) -> Unit, onDismiss: () -> Unit) {
-    SelectionSheet(tr(R.string.ui_reasoning_level),
-        listOf(SelectionOption("inherit", tr(if (followsSession) R.string.ui_use_session_settings else R.string.ui_model_default))) +
-            efforts.map { SelectionOption("effort:$it", effortLabel(it)) },
-        selected?.let { "effort:$it" } ?: "inherit",
-        onSelect = { onSelect(if (it == "inherit") null else it.removePrefix("effort:")) }, onDismiss = onDismiss,
-        hint = if (running) tr(R.string.ui_next_message_only) else null,
-        emptyText = if (efforts.isEmpty()) tr(R.string.ui_this_model_does_not_offer_adjustable_reasoning) else null)
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(tr(R.string.ui_reasoning_level), style = MaterialTheme.typography.titleLarge)
+            val values = efforts.distinct()
+            if (values.isEmpty()) Text(tr(R.string.ui_this_model_does_not_offer_adjustable_reasoning)) else {
+                val index = values.indexOf(selected).coerceAtLeast(0)
+                var position by remember(selected, values) { mutableFloatStateOf(index.toFloat()) }
+                Text(effortLabel(values[position.roundToInt()]), style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary)
+                Slider(value = position, onValueChange = { position = it }, onValueChangeFinished = {
+                    onSelect(values[position.roundToInt()])
+                }, valueRange = 0f..(values.lastIndex.toFloat()), steps = (values.size - 2).coerceAtLeast(0),
+                    modifier = Modifier.fillMaxWidth())
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(effortLabel(values.first()), style = MaterialTheme.typography.labelSmall)
+                    Text(effortLabel(values.last()), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            TextButton(onClick = { onSelect(null); onDismiss() }, enabled = !running, modifier = Modifier.fillMaxWidth()) {
+                Text(tr(if (followsSession) R.string.ui_use_session_settings else R.string.ui_model_default))
+            }
+        }
+    }
 }

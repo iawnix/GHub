@@ -20,6 +20,7 @@ enum class WorkspaceTab { SESSIONS, FILES, TERMINAL }
     val lastSubmission: SubmittedInput? = null, val edit: InterruptedInputEdit? = null)
 data class PendingQuestions(val request: ServerRequest, val submitted: Boolean = false)
 data class PendingApproval(val request: ServerRequest, val submitted: Boolean = false)
+data class PermissionSettings(val approval: String = "on-request", val sandbox: String = "workspace-write")
 data class TerminalTab(val id: String, val name: String, val session: TerminalSession, val projectPath: String = "")
 data class TerminalPreferences(val fontSize: Float = 14f, val extraKeys: Boolean = false)
 @Serializable data class ProjectProfile(val path: String, val name: String = projectName(path))
@@ -53,6 +54,7 @@ data class HostWorkspace(
     val projectFiles: Map<String, ProjectFiles> = emptyMap(), val projectTerminals: Map<String, String> = emptyMap(),
     val drafts: Map<String, Draft> = emptyMap(), val approvals: List<PendingApproval> = emptyList(),
     val pendingQuestions: List<PendingQuestions> = emptyList(),
+    val permissions: Map<String, PermissionSettings> = emptyMap(), val permissionEditorThread: String? = null,
     val models: List<Pair<String, String>> = emptyList(), val model: String? = null,
     val modelOptions: List<ModelOption> = emptyList(),
     val collaborationModes: Set<String> = emptySet(), val modePickerThread: String? = null,

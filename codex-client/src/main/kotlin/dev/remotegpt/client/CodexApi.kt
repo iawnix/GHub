@@ -106,6 +106,17 @@ class CodexApi(val rpc: RpcClient) {
     suspend fun clearGoal(thread: String) { rpc.request("thread/goal/clear", buildJsonObject {
         put("threadId", thread); put("origin", "user")
     }, mutation = true) }
+    suspend fun updatePermissions(thread: String, approval: String, sandbox: String) {
+        require(approval in setOf("untrusted", "on-request", "never"))
+        require(sandbox in setOf("read-only", "workspace-write", "danger-full-access"))
+        rpc.request("thread/settings/update", buildJsonObject {
+            put("threadId", thread); put("approvalPolicy", approval); put("sandboxPolicy", buildJsonObject {
+                put("type", when (sandbox) { "read-only" -> "readOnly"; "danger-full-access" -> "dangerFullAccess"; else -> "workspaceWrite" })
+                if (sandbox == "read-only") put("networkAccess", false)
+                if (sandbox == "workspace-write") { putJsonArray("writableRoots") {}; put("networkAccess", false); put("excludeTmpdirEnvVar", false); put("excludeSlashTmp", false) }
+            })
+        }, mutation = true)
+    }
 
     suspend fun interrupt(thread: String, turn: String) = rpc.request("turn/interrupt", jsonObject("threadId" to str(thread), "turnId" to str(turn)), true)
     suspend fun rename(thread: String, name: String) = rpc.request("thread/name/set", jsonObject("threadId" to str(thread), "name" to str(name)), true)

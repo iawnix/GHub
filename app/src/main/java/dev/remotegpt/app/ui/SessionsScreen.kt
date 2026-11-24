@@ -255,6 +255,7 @@ import dev.remotegpt.client.*
                         modeMenu = ws.modePickerThread == thread,
                         onOpenModeMenu = { vm.showModePicker() }, onDismissModeMenu = { vm.showModePicker(false) },
                         goal = ws.goals[thread], onGoal = { vm.showGoalEditor() },
+                        permissions = ws.permissions[thread] ?: PermissionSettings(), onPermissions = { vm.showPermissionEditor() },
                         onEffort = vm::selectEffort, onReloadModels = { vm.reloadModels() },
                         online = ws.connection == ConnectionStatus.ONLINE && problem == null && !ws.loadingHistory, archived = archived, listening = listening,
                         onText = vm::draftText, onRemoveAttachment = vm::removeAttachment, onModel = vm::selectModel,
@@ -266,6 +267,8 @@ import dev.remotegpt.client.*
                         revision = revision,
                         running = state.conversation?.activeTurn != null, stopping = thread in ws.stoppingTurns, onStop = { vm.interrupt() }, modifier = Modifier,
                     )
+                    if (ws.permissionEditorThread == thread) PermissionPickerSheet(ws.permissions[thread] ?: PermissionSettings(),
+                        onApply = { approval, sandbox -> vm.applyPermissions(approval, sandbox) }, onDismiss = { vm.showPermissionEditor(false) })
                 }) { listPadding, dockHeight ->
                 LazyColumn(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().workbenchBackdropSource().nestedScroll(scrollIntent), state = listState, contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (state.conversation?.nextCursor != null) item(key = "control:older") { TextButton(onClick = { followingLatest = false; vm.loadOlder() }, modifier = Modifier.fillMaxWidth()) { Text(tr(R.string.ui_load_earlier_messages)) } }
