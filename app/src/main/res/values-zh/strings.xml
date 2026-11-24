@@ -543,7 +543,7 @@
     <string name="terminal_modifier_locked">已锁定</string>
     <string name="terminal_lock_modifier">锁定 %1$s</string>
     <string name="terminal_unlock_modifier">解除 %1$s 锁定</string>
-    <string name="terminal_modifier_hint">点按修饰键用于下一次输入，长按可锁定。</string>
+    <string name="terminal_modifier_hint">点按 Ctrl、Alt 或 Shift 仅作用于下一次输入；长按可保持启用，再次点按可取消锁定。</string>
     <string name="ui_question_required" formatted="false">需要你的回答</string>
     <string name="ui_question_blocking" formatted="false">任务正在等待你的回答。</string>
     <string name="ui_question_nonblocking" formatted="false">任务会继续进行，你可以随时回答。</string>

@@ -553,7 +553,7 @@
     <string name="terminal_modifier_locked">Locked</string>
     <string name="terminal_lock_modifier">Lock %1$s</string>
     <string name="terminal_unlock_modifier">Unlock %1$s</string>
-    <string name="terminal_modifier_hint">Tap a modifier for the next key. Touch and hold to lock.</string>
+    <string name="terminal_modifier_hint">Tap Ctrl, Alt, or Shift for the next key. Touch and hold to keep it enabled; tap again to unlock.</string>
     <string name="ui_question_required" formatted="false">Your input is needed</string>
     <string name="ui_question_blocking" formatted="false">Work is waiting for your answer.</string>
     <string name="ui_question_nonblocking" formatted="false">You can answer while work continues.</string>
