@@ -25,12 +25,7 @@ import java.util.UUID
     var preparing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        ConversationCopyButton(text, tr(R.string.chat_copy_reply), beforeCopy = {
-            if (text.length > 100_000) {
-                Toast.makeText(context, tr(R.string.chat_copy_long_reply), Toast.LENGTH_SHORT).show()
-                false
-            } else true
-        })
+        ConversationCopyButton(text, tr(R.string.chat_copy_reply), tooLongMessage = R.string.chat_copy_long_reply)
         ConversationActionButton(WorkbenchIcons.Share, tr(R.string.chat_share_reply), enabled = !preparing, onClick = {
             preparing = true
             scope.launch {

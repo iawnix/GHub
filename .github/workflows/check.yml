@@ -6,10 +6,10 @@ on:
   workflow_call:
     inputs:
       allow_device_failures:
-        description: Allow emulator matrix failures when publishing a tag.
+        description: Allow hosted emulator failures without failing the workflow.
         required: false
         type: boolean
-        default: false
+        default: true
 permissions:
   contents: read
 jobs:
@@ -42,9 +42,8 @@ jobs:
             app/build/reports/
   device:
     # Hosted emulators can fail before or during instrumentation when the
-    # launcher/ADB is not ready. Keep the reports, but do not block the
-    # compile and unit-test gates on an infrastructure-only failure.
-    continue-on-error: true
+    # launcher/ADB is not ready. Callers may pass allow_device_failures: false to enforce strict gates.
+    continue-on-error: ${{ inputs.allow_device_failures != false }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -95,8 +94,8 @@ jobs:
 
   release-device:
     # The release fixture is useful diagnostics, but its emulator and Pixel
-    # Launcher are outside the product build and can fail independently.
-    continue-on-error: true
+    # Launcher are outside the product build and can fail independently unless strict mode is requested.
+    continue-on-error: ${{ inputs.allow_device_failures != false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

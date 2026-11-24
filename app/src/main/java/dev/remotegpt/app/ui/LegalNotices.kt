@@ -17,6 +17,19 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+internal val LEGAL_NOTICE_ASSETS = listOf(
+    "THIRD_PARTY_NOTICES.md",
+    "GPL-3.0-only.txt",
+    "Termux-LICENSE.md",
+    "JLaTeXMath-LICENSE.txt",
+    "JLaTeXMath-COPYING.txt",
+    "Apache-2.0.txt",
+    "Java-WebSocket-MIT.txt",
+    "Bouncy-Castle.txt",
+    "SLF4J-MIT.txt",
+    "Phosphor-LICENSE.txt",
+)
+
 @Composable fun LegalNotices(onClose: () -> Unit) {
     val context = LocalContext.current
     var selected by remember { mutableStateOf<String?>(null) }
@@ -32,8 +45,10 @@ import kotlinx.coroutines.withContext
                 Text(selected ?: tr(R.string.ui_open_source_licenses), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
                 if (selected == null) {
-                    listOf("THIRD_PARTY_NOTICES.md", "GPL-3.0-only.txt", "Termux-LICENSE.md", "Apache-2.0.txt", "Java-WebSocket-MIT.txt", "Bouncy-Castle.txt", "SLF4J-MIT.txt", "Phosphor-LICENSE.txt").forEach { name ->
-                        TextButton(onClick = { selected = name }, modifier = Modifier.fillMaxWidth()) { Text(name) }
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                        LEGAL_NOTICE_ASSETS.forEach { name ->
+                            TextButton(onClick = { selected = name }, modifier = Modifier.fillMaxWidth()) { Text(name) }
+                        }
                     }
                 } else SelectionContainer(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Text(text, style = MaterialTheme.typography.bodySmall)

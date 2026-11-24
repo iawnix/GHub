@@ -40,4 +40,23 @@ class ConversationRowsTest {
         assertEquals(1, rows.filterIsInstance<ConversationRow.Reply>().size)
         assertEquals("a2", rows.filterIsInstance<ConversationRow.Reply>().single().item.id)
     }
+
+    @Test fun preparsedAstBlocksCarryDocumentReferenceLinksAndAttachImagesOnce() = kotlinx.coroutines.runBlocking {
+        val source = "First paragraph with [Guide][docs].\n\nSecond paragraph.\n\n[docs]: https://example.com/guide"
+        val parsed = ChatMarkdownParser().parse(source)
+        val preparsed = (parsed.node as ChatMarkdownRoot).blocks.map { block ->
+            PreparsedMarkdownBlock(block, parsed.referenceLinkHandler)
+        }
+        val item = TimelineItem("a1", "turn", "agentMessage", source, complete = true,
+            imagePaths = listOf("/tmp/diagram.png"))
+        val rows = buildConversationRowsWithAst(
+            listOf(java.util.AbstractMap.SimpleEntry("turn", listOf(item))),
+            mapOf(item.identityKey to preparsed),
+            activeTurn = null, completedTurn = "turn", turnStatus = "completed",
+        )
+        val blocks = rows.filterIsInstance<ConversationRow.AssistantBlock>()
+        assertEquals(2, blocks.size)
+        assertEquals("https://example.com/guide", blocks.first().preparsed!!.links.find("[docs]"))
+        assertEquals(listOf(false, true), blocks.map { it.isLastBlock })
+    }
 }

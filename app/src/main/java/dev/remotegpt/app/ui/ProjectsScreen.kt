@@ -208,7 +208,7 @@ import dev.remotegpt.app.*
         Row(Modifier.fillMaxWidth().clickable(enabled = !archiving) { onContinue(thread.id) }.then(modifier).heightIn(min = 48.dp)
             .padding(start = ThreadIndent, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(thread.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(thread.title.ifBlank { tr(R.string.ui_new_session) }, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 relativeUpdateTime(thread.updatedAt)?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
@@ -282,7 +282,7 @@ import dev.remotegpt.app.*
 
 @Composable fun ProjectEditor(initialPath: String, onDismiss: () -> Unit, onSave: (String, String) -> Unit,
     busy: Boolean = false, error: String? = null) {
-    var path by rememberSaveable { mutableStateOf(initialPath) }
+    var path by rememberSaveable(initialPath) { mutableStateOf(initialPath) }
     var name by rememberSaveable { mutableStateOf("") }
     val saving by rememberUpdatedState(busy)
     ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() },

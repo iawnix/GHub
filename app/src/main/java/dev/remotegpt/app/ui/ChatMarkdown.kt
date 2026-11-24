@@ -34,10 +34,33 @@ import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 
-private class ChatMarkdownState : MarkdownState {
-    override val state = MutableStateFlow<State>(State.Loading())
+@Immutable
+internal class PreparsedMarkdownBlock(
+    val block: ChatMarkdownBlock,
+    val links: ReferenceLinkHandler,
+) {
+    fun toState(): State.Success = State.Success(
+        node = ChatMarkdownRoot(block.node, listOf(block)),
+        content = block.source,
+        linksLookedUp = true,
+        referenceLinkHandler = links,
+    )
+}
+
+private class ChatMarkdownState(initial: State = State.Loading()) : MarkdownState {
+    override val state = MutableStateFlow(initial)
     override val links = MutableStateFlow<Map<String, String?>>(emptyMap())
     override suspend fun parse(): State = state.value
+    fun update(next: State) {
+        if (state.value !== next) state.value = next
+    }
+}
+
+@Composable internal fun rememberPreparsedMarkdown(preparsed: PreparsedMarkdownBlock): MarkdownState {
+    val current = remember(preparsed.block, preparsed.links) { preparsed.toState() }
+    val state = remember { ChatMarkdownState(current) }
+    SideEffect { state.update(current) }
+    return state
 }
 
 @Composable internal fun rememberChatMarkdown(content: String, complete: Boolean): MarkdownState {

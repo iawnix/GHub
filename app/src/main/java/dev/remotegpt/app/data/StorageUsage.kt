@@ -32,6 +32,23 @@ data class StorageUsage(
                 diagnosticBytes = fileSize(File(context.filesDir, "last-crash.txt")),
             )
         }
+
+        suspend fun clearSharedTemporaryFiles(context: Context, maxAgeMs: Long = 0L) = withContext(Dispatchers.IO) {
+            clearDirectoryFiles(File(context.cacheDir, "shared"), maxAgeMs)
+        }
+    }
+}
+
+internal fun clearDirectoryFiles(directory: File, maxAgeMs: Long = 0L, nowMs: Long = System.currentTimeMillis()) {
+    if (!directory.isDirectory) return
+    val cutoff = nowMs - maxAgeMs
+    directory.walkBottomUp().forEach { entry ->
+        if (entry == directory) return@forEach
+        if (entry.isDirectory) {
+            if (entry.listFiles().isNullOrEmpty()) entry.delete()
+        } else if (maxAgeMs <= 0L || entry.lastModified() <= cutoff) {
+            entry.delete()
+        }
     }
 }
 

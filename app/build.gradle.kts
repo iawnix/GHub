@@ -43,8 +43,11 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (providers.gradleProperty("testBuildType").orNull == "release") {
+                proguardFile("proguard-release-tested.pro")
+                if (System.getenv("RELEASE_KEYSTORE") == null) signingConfig = signingConfigs.getByName("debug")
+            }
             if (System.getenv("RELEASE_KEYSTORE") != null) signingConfig = signingConfigs.getByName("release")
-            else if (providers.gradleProperty("testBuildType").orNull == "release") signingConfig = signingConfigs.getByName("debug")
         }
     }
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/INDEX.LIST", "META-INF/versions/9/OSGI-INF/MANIFEST.MF") }

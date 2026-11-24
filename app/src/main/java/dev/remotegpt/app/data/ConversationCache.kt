@@ -19,7 +19,7 @@ internal fun compactConversation(conversation: Conversation): Conversation {
     val truncated = conversation.historyTruncated || conversation.items.size > 64
     return conversation.copy(items = conversation.items.takeLast(64).map { item ->
         item.copy(
-            text = if (item.kind in setOf("agentMessage", "userMessage")) item.text else item.text.takeLast(8_192),
+            text = if (item.kind in setOf("agentMessage", "userMessage", "plan")) item.text else item.text.takeLast(8_192),
             imagePaths = item.imagePaths.take(8),
             fileEdits = item.fileEdits.take(8).map { it.copy(diff = it.diff.takeLast(8_192)) },
             commandExecution = item.commandExecution?.let {

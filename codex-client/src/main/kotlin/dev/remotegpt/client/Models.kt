@@ -46,7 +46,7 @@ data class ModelOption(val id: String, val name: String, val efforts: List<Strin
 
 fun threadSummary(raw: JsonObject, archived: Boolean = false): ThreadSummary = ThreadSummary(
     id = raw.string("id") ?: error("Missing thread ID"),
-    title = raw.string("name")?.takeIf { it.isNotBlank() } ?: raw.string("preview")?.take(100).orEmpty().ifBlank { "新会话" },
+    title = raw.string("name")?.takeIf { it.isNotBlank() } ?: raw.string("preview")?.take(100).orEmpty(),
     cwd = raw.string("cwd").orEmpty(), status = raw.obj("status").string("type") ?: "notLoaded",
     updatedAt = (raw["updatedAt"] as? JsonPrimitive)?.longOrNull ?: 0, archived = archived,
     model = raw.string("model"), reasoningEffort = raw.string("reasoningEffort"),
@@ -108,6 +108,8 @@ data class TimelineItem(
     // Identity within a conversation. Length-prefixing avoids delimiter collisions.
     // Computed, so existing serialized caches remain compatible.
     val identityKey: String get() = "${turnId.length}:$turnId$id"
+    // Tracks the active summary part index across live deltas without changing equality or cache JSON.
+    @kotlinx.serialization.Transient internal var streamingSummaryIndex: Int? = null
 }
 
 @Serializable

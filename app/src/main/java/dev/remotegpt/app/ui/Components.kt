@@ -59,6 +59,11 @@ import dev.remotegpt.client.*
     }
 }
 
+private val knownTimelineKinds = setOf(
+    "userMessage", "agentMessage", "plan", "commandExecution",
+    "fileChange", "imageView", "dynamicToolCall", "contextCompaction", "reasoning",
+)
+
 @Composable fun TimelineCard(
     item: TimelineItem,
     preview: (String) -> Unit,
@@ -69,6 +74,7 @@ import dev.remotegpt.client.*
     imagePreviews: Map<String, String> = emptyMap(),
     imageLoading: Set<String> = emptySet(),
     onLoadImage: (String) -> Unit = {},
+    preparsedMarkdown: Any? = null,
 ) {
     // Compaction is a lifecycle marker, with no parameters or summary body to expand.
     // Ignore the old placeholder text as well, so existing offline caches display correctly.
@@ -113,10 +119,20 @@ import dev.remotegpt.client.*
                     else if (item.kind == "dynamicToolCall") DynamicToolCallContent(item)
                     else if (questionReply != null) QuestionReplyContent(questionReply)
                     else SelectionContainer {
-                        if (item.kind in setOf("agentMessage", "plan")) key(item.identityKey) { StyledMarkdown(item.text.ifBlank { "…" }, item.complete) }
-                        else Text(item.text.ifBlank { if (item.imagePaths.isEmpty()) tr(R.string.ui_running) else tr(R.string.ui_image_attachment) }, style = if (tool) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
-                            fontFamily = if (tool) FontFamily.Monospace else FontFamily.Default,
-                            modifier = Modifier.padding(bottom = if (tool) 14.dp else 0.dp))
+                        if (item.kind in setOf("agentMessage", "plan")) {
+                            key(item.identityKey) {
+                                StyledMarkdown(item.text.ifBlank { "…" }, item.complete, preparsedMarkdown as? PreparsedMarkdownBlock)
+                            }
+                        } else {
+                            val displayText = if (item.kind !in knownTimelineKinds) {
+                                tr(R.string.ui_unsupported_timeline_item, item.kind)
+                            } else {
+                                item.text.ifBlank { if (item.imagePaths.isEmpty()) tr(R.string.ui_running) else tr(R.string.ui_image_attachment) }
+                            }
+                            Text(displayText, style = if (tool) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                                fontFamily = if (tool) FontFamily.Monospace else FontFamily.Default,
+                                modifier = Modifier.padding(bottom = if (tool) 14.dp else 0.dp))
+                        }
                     }
                     item.questions.forEach { question ->
                         Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -147,12 +163,12 @@ import dev.remotegpt.client.*
 /** Compact, neutral Markdown styling for the conversation stream.
  * The library defaults are tuned for documents and use display-sized headings;
  * chat answers need a smaller hierarchy and tighter blocks. */
-@Composable private fun StyledMarkdown(content: String, complete: Boolean) {
+@Composable private fun StyledMarkdown(content: String, complete: Boolean, preparsed: PreparsedMarkdownBlock? = null) {
     val colors = MaterialTheme.colorScheme
     val body = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface)
     val compact = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface)
     Markdown(
-        markdownState = rememberChatMarkdown(content, complete),
+        markdownState = if (preparsed != null) rememberPreparsedMarkdown(preparsed) else rememberChatMarkdown(content, complete),
         components = remember { chatMarkdownComponents() },
         imageTransformer = remember { NoOpImageTransformerImpl() },
         loading = { Text(content, style = body) },

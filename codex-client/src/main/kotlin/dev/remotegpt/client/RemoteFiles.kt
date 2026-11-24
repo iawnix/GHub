@@ -22,12 +22,21 @@ class RemoteFiles(private val ssh: SshConnection) {
         }.sortedWith(remoteFileOrder) }
     }
     /** Verify retained attachments without changing or downloading them. */
-    suspend fun readableFile(path: String): Boolean = withContext(Dispatchers.IO) {
-        if (!path.startsWith('/') || '\u0000' in path) return@withContext false
+    suspend fun readableFile(path: String): Boolean = readableFiles(listOf(path)) == null
+
+    /** Returns the first unreadable path, or null when all attachments are regular readable files. */
+    suspend fun readableFiles(paths: List<String>): String? = withContext(Dispatchers.IO) {
+        if (paths.isEmpty()) return@withContext null
         ssh.client.newSFTPClient().use { sftp ->
-            val attributes = sftp.statExistence(path) ?: return@use false
-            if (attributes.type != FileMode.Type.REGULAR) return@use false
-            sftp.open(path, setOf(OpenMode.READ)).use { true }
+            for (path in paths) {
+                ensureActive()
+                if (!path.startsWith('/') || '\u0000' in path) return@use path
+                val attributes = sftp.statExistence(path) ?: return@use path
+                if (attributes.type != FileMode.Type.REGULAR) return@use path
+                val readable = runCatching { sftp.open(path, setOf(OpenMode.READ)).use { true } }.getOrDefault(false)
+                if (!readable) return@use path
+            }
+            null
         }
     }
 
@@ -35,37 +44,55 @@ class RemoteFiles(private val ssh: SshConnection) {
 
     /** Idempotent directory creation over SFTP; paths are never interpreted by a shell. */
     suspend fun ensureDirectory(path: String) = withContext(Dispatchers.IO) {
-        require(path.startsWith('/') && '\u0000' !in path && '\n' !in path) { "请选择有效的远端绝对路径" }
+        if (!path.startsWith('/') || '\u0000' in path || '\n' in path) {
+            throw ClientArgumentException(ClientErrorCode.INVALID_REMOTE_DIRECTORY, "Choose a valid absolute remote path")
+        }
         ssh.client.newSFTPClient().use { sftp ->
             sftp.mkdirs(path)
-            require(sftp.stat(path).type == FileMode.Type.DIRECTORY) { "该路径已被文件占用，请选择目录路径。" }
+            if (sftp.stat(path).type != FileMode.Type.DIRECTORY) {
+                throw ClientArgumentException(ClientErrorCode.PATH_OCCUPIED_BY_FILE, "Path is occupied by a file")
+            }
         }
     }
 
     suspend fun readText(path: String): TextFile = withContext(Dispatchers.IO) {
         ssh.client.newSFTPClient().use { sftp ->
             val resolved = sftp.canonicalize(path)
-            require(sftp.stat(resolved).size <= 1_048_576) { "仅支持编辑 1 MiB 以内的文本，请下载此文件。" }
+            if (sftp.stat(resolved).size > 1_048_576) {
+                throw ClientArgumentException(ClientErrorCode.TEXT_TOO_LARGE_TO_EDIT, "Text editing supports files up to 1 MiB")
+            }
             val bytes = read(sftp, resolved)
-            require(bytes.none { it == 0.toByte() }) { "这不是可编辑的文本文件，请下载后打开。" }
+            if (bytes.any { it == 0.toByte() }) {
+                throw ClientArgumentException(ClientErrorCode.NOT_EDITABLE_TEXT, "Binary file cannot be edited as text")
+            }
             val text = try { Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString() }
-                catch (_: java.nio.charset.CharacterCodingException) { error("仅支持 UTF-8 文本，请下载后使用对应编码打开。") }
+                catch (_: java.nio.charset.CharacterCodingException) {
+                    throw ClientStateException(ClientErrorCode.UNSUPPORTED_TEXT_ENCODING, "Only UTF-8 text files are supported")
+                }
             TextFile(resolved, text, digest(bytes))
         }
     }
 
     suspend fun saveText(file: TextFile, text: String, overwrite: Boolean = false): TextFile = withContext(Dispatchers.IO) {
         val bytes = text.toByteArray()
-        require(bytes.size <= 1_048_576) { "文本超过 1 MiB" }
+        if (bytes.size > 1_048_576) {
+            throw ClientArgumentException(ClientErrorCode.TEXT_EXCEEDS_SAVE_LIMIT, "Text exceeds 1 MiB")
+        }
         ssh.client.newSFTPClient().use { sftp ->
-            if (!overwrite && (sftp.statExistence(file.path) == null || digest(read(sftp, file.path)) != file.sha256)) throw FileConflict()
+            if (!overwrite) {
+                val stat = sftp.statExistence(file.path) ?: throw FileConflict()
+                // A file that grew past the edit limit since readText() was definitely modified externally.
+                if (stat.size > 1_048_576 || digest(read(sftp, file.path)) != file.sha256) throw FileConflict()
+            }
             atomicWrite(sftp, file.path, bytes.inputStream())
             TextFile(file.path, text, digest(bytes))
         }
     }
 
     suspend fun upload(cwd: String, filename: String, source: InputStream): String = withContext(Dispatchers.IO) {
-        require(cwd.startsWith('/')) { "请选择远端工作目录" }
+        if (!cwd.startsWith('/')) {
+            throw ClientArgumentException(ClientErrorCode.INVALID_REMOTE_DIRECTORY, "Choose a remote working directory")
+        }
         val safeName = filename.substringAfterLast('/').replace(Regex("[^\\p{L}\\p{N}._-]"), "_").take(120).ifBlank { "attachment" }
         val directory = cwd.trimEnd('/') + "/.remote-gpt/attachments"
         val target = "$directory/${UUID.randomUUID()}-$safeName"
@@ -76,7 +103,9 @@ class RemoteFiles(private val ssh: SshConnection) {
     suspend fun download(path: String, target: OutputStream, maxBytes: Long = Long.MAX_VALUE) = withContext(Dispatchers.IO) {
         ssh.client.newSFTPClient().use { sftp ->
             val size = sftp.stat(path).size
-            require(size <= maxBytes) { "文件超过预览大小限制，请下载到手机后打开" }
+            if (size > maxBytes) {
+                throw ClientArgumentException(ClientErrorCode.PREVIEW_TOO_LARGE, "File exceeds preview size limit")
+            }
             sftp.open(path).use { remote ->
                 remote.RemoteFileInputStream().use { input ->
                     val buffer = ByteArray(32 * 1024)
@@ -87,7 +116,9 @@ class RemoteFiles(private val ssh: SshConnection) {
                         if (count < 0) break
                         if (count == 0) continue
                         total += count
-                        require(total <= maxBytes) { "文件超过预览大小限制，请下载到手机后打开" }
+                        if (total > maxBytes) {
+                            throw ClientArgumentException(ClientErrorCode.PREVIEW_TOO_LARGE, "File exceeds preview size limit")
+                        }
                         target.write(buffer, 0, count)
                     }
                     target.flush()
@@ -97,7 +128,9 @@ class RemoteFiles(private val ssh: SshConnection) {
     }
 
     private fun read(sftp: SFTPClient, path: String): ByteArray {
-        require(sftp.stat(path).size <= 1_048_576) { "文件超过文本编辑大小限制" }
+        if (sftp.stat(path).size > 1_048_576) {
+            throw ClientArgumentException(ClientErrorCode.TEXT_TOO_LARGE_TO_EDIT, "File exceeds text edit size limit")
+        }
         return sftp.open(path).use { file -> file.RemoteFileInputStream().use { readLimited(it, 1_048_576) } }
     }
 

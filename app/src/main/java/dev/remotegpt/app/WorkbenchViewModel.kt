@@ -69,6 +69,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     private val persistence = mutableMapOf<String, Job>()
     private val imageLoads = mutableMapOf<String, Job>()
     private val terminalOpenings = mutableMapOf<Pair<String, String>, Job>()
+    private val terminalCounters = mutableMapOf<String, Int>()
     private val editorDrafts = EditorDraftStore(File(app.filesDir, "editor-drafts"))
     private val imageCache = RemoteImageCache(File(app.cacheDir, "remote-images"))
     private var imageGeneration = 0
@@ -125,6 +126,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         network.registerDefaultNetworkCallback(networkCallback)
+        launchStorage { StorageUsage.clearSharedTemporaryFiles(app, maxAgeMs = 86_400_000L) }
         launchStorage { app.settings.theme.collect { value -> mutable.update { it.copy(theme = value) } } }
         launchStorage { app.settings.terminal.collect { value -> mutable.update { it.copy(terminalPreferences = value) } } }
         launchStorage {
@@ -378,34 +380,50 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         conversationCheckpoints.cancelMatching { it.first == profile.id }
         trims.remove(profile.id)?.cancel()
         memoryBudgets.remove(profile.id)
+        terminalCounters.remove(profile.id)
         editorDrafts.write(profile.id, null)
         persistence.keys.filter { it.contains(":${profile.id}:") }.forEach { persistence.remove(it)?.cancel() }
         ui(profile.id).drafts.values.flatMap { it.attachments }.forEach { uploads.remove(it.id)?.cancel() }
+        val remainingHostKeys = state.value.profiles.filter { it.id != profile.id }.flatMapTo(HashSet(), ::profileHostKeyNames)
+        val unusedHostKeys = profileHostKeyNames(profile) - remainingHostKeys
         mutable.update { it.copy(workspaces = it.workspaces - profile.id) }
         cacheWrites.withLock {
             savedConversations.keys.removeAll { it.first == profile.id }
             dao.deleteWorkspace(profile.id)
         }
+        app.settings.removeHost(profile.id, unusedHostKeys)
         withContext(Dispatchers.IO) { (profile.jumps + profile.endpoint).forEach { app.secrets.remove(it.credentialId) } }
     }
 
     override suspend fun credential(id: String) = withContext(Dispatchers.IO) { app.secrets.read(id) }
-    override suspend fun verifyHostKey(host: String, port: Int, algorithm: String, fingerprint: String): Boolean = promptMutex.withLock {
-        val previous = app.settings.fingerprint(host, port)
+    override suspend fun verifyHostKey(host: String, port: Int, algorithm: String, fingerprint: String): Boolean =
+        verifyHostKey("", host, port, algorithm, fingerprint)
+    override suspend fun verifyHostKey(route: String, host: String, port: Int, algorithm: String, fingerprint: String): Boolean = promptMutex.withLock {
+        val previous = app.settings.fingerprint(host, port, route)
         if (previous == fingerprint) return@withLock true
         val answer = CompletableDeferred<Boolean>()
-        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = ConnectionPrompt.HostKey(HostKeyChallenge(host, port, algorithm, fingerprint, previous), answer)) } }
+        val entry = ConnectionPrompt.HostKey(HostKeyChallenge(host, port, algorithm, fingerprint, previous), answer)
+        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = entry) } }
         try {
             val trusted = withTimeout(110_000) { answer.await() }
-            if (trusted) app.settings.trust(host, port, fingerprint)
+            if (trusted) app.settings.trust(host, port, fingerprint, route)
             trusted
-        } finally { withContext(NonCancellable + Dispatchers.Main) { mutable.update { it.copy(prompt = null) } } }
+        } finally {
+            withContext(NonCancellable + Dispatchers.Main) {
+                mutable.update { if (it.prompt === entry) it.copy(prompt = null) else it }
+            }
+        }
     }
     override suspend fun keyboard(prompt: KeyboardPrompt): List<String> = promptMutex.withLock {
         val answer = CompletableDeferred<List<String>>()
-        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = ConnectionPrompt.Keyboard(prompt, answer)) } }
+        val entry = ConnectionPrompt.Keyboard(prompt, answer)
+        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = entry) } }
         try { withTimeout(110_000) { answer.await() } }
-        finally { withContext(NonCancellable + Dispatchers.Main) { mutable.update { it.copy(prompt = null) } } }
+        finally {
+            withContext(NonCancellable + Dispatchers.Main) {
+                mutable.update { if (it.prompt === entry) it.copy(prompt = null) else it }
+            }
+        }
     }
 
     fun connect(host: String? = state.value.activeHost, bootstrap: Boolean = false) {
@@ -457,7 +475,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 }, onTraffic = { direction, bytes ->
                     syncTimings.increment("rpc_${direction}_messages")
                     syncTimings.increment("rpc_${direction}_bytes", bytes)
-                })
+                }, clientVersion = BuildConfig.VERSION_NAME)
                 val initialized = rpc.connect()
                 val userAgent = initialized.string("userAgent")
                 if (!CodexCompatibility.isSupported(userAgent)) throw UnsupportedServer(tr(R.string.ui_the_socket_did_not_report_a_supported , userAgent ?: tr(R.string.ui_unknown), CodexCompatibility.MINIMUM_VERSION))
@@ -553,6 +571,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun releaseConnection(host: String) {
         terminalOpenings.keys.filter { it.first == host }.toList().forEach { terminalOpenings.remove(it)?.cancel() }
+        terminalCounters.remove(host)
         ui(host).terminals.forEach { it.session.finishIfRunning() }
         imageLoads.keys.filter { it.startsWith("$host:") }.toList().forEach { imageLoads.remove(it)?.cancel() }
         connectionEpochs[host] = UUID.randomUUID().toString()
@@ -870,6 +889,14 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         is UncertainDelivery -> tr(R.string.ui_uncertain_delivery)
         is ThreadUnavailable -> tr(R.string.ui_thread_unavailable_detail)
         is FileConflict -> tr(R.string.ui_the_file_changed_after_you_opened_it)
+        is HostKeyRejected -> tr(R.string.ui_host_key_rejected_error)
+        is DaemonNotRunning -> tr(R.string.ui_daemon_not_running_error)
+        is RemoteCommandFailed -> tr(R.string.ui_remote_command_failed_error)
+        is RemoteCommandTimeout -> tr(R.string.ui_remote_command_timeout_error)
+        is EventBacklog -> tr(R.string.ui_output_processing_is_behind_restoring_the_session)
+        is ProxyClosed -> if (e.heartbeat) tr(R.string.ui_connection_heartbeat_timed_out_reconnecting) else tr(R.string.ui_the_remote_proxy_closed_reconnecting)
+        is ClientArgumentException -> clientErrorText(e.code)
+        is ClientStateException -> clientErrorText(e.code)
         is UnsupportedServer, is RpcException -> e.message.orEmpty()
         else -> when {
             isOversizedCache(e) -> tr(R.string.ui_local_session_cache_was_too_large_and)
@@ -878,6 +905,27 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             else -> e.message?.take(240) ?: tr(R.string.ui_operation_failed_check_the_connection_and_try)
         }
     }
+
+    private fun clientErrorText(code: ClientErrorCode): String = tr(when (code) {
+        ClientErrorCode.INVALID_SSH_ENDPOINT -> R.string.ui_enter_a_host_username_and_valid_port
+        ClientErrorCode.MISSING_PRIVATE_KEY -> R.string.ui_import_private_key
+        ClientErrorCode.PROXY_CONNECT_FAILED -> R.string.ui_proxy_connect_failed_error
+        ClientErrorCode.CONNECTION_CLOSED -> R.string.ui_you_can_continue_after_reconnecting_your_draft
+        ClientErrorCode.REQUEST_EXPIRED -> R.string.ui_request_expired_error
+        ClientErrorCode.UNSUPPORTED_APPROVAL, ClientErrorCode.UNSUPPORTED_QUESTION -> R.string.ui_unsupported_request_error
+        ClientErrorCode.APPROVAL_ALREADY_SUBMITTED, ClientErrorCode.ANSWER_ALREADY_SUBMITTED -> R.string.ui_submitted_waiting_for_server_confirmation
+        ClientErrorCode.INCOMPLETE_ANSWERS -> R.string.ui_answer_every_question_error
+        ClientErrorCode.INVALID_OPTION_ANSWER -> R.string.ui_select_provided_option_error
+        ClientErrorCode.THREAD_ID_MISMATCH -> R.string.ui_thread_id_mismatch_error
+        ClientErrorCode.INVALID_REMOTE_DIRECTORY -> R.string.ui_enter_an_absolute_remote_directory
+        ClientErrorCode.PATH_OCCUPIED_BY_FILE -> R.string.ui_path_occupied_by_file_error
+        ClientErrorCode.TEXT_TOO_LARGE_TO_EDIT -> R.string.ui_text_too_large_to_edit_error
+        ClientErrorCode.NOT_EDITABLE_TEXT -> R.string.ui_not_editable_text_error
+        ClientErrorCode.UNSUPPORTED_TEXT_ENCODING -> R.string.ui_unsupported_text_encoding_error
+        ClientErrorCode.TEXT_EXCEEDS_SAVE_LIMIT -> R.string.ui_text_exceeds_save_limit_error
+        ClientErrorCode.PREVIEW_TOO_LARGE -> R.string.ui_preview_too_large_error
+        ClientErrorCode.REPEATED_MODEL_CURSOR -> R.string.ui_operation_failed_check_the_connection_and_try
+    })
 
     /** File and terminal actions use SSH independently from the Codex proxy. */
     private suspend fun waitForFileRuntime(host: String): FileRuntime? {
@@ -1725,8 +1773,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             // The original/edit input and its delivery fence reach disk before any mutation.
             flushDraft(host, thread)
             if (edited) {
-                for (attachment in input.attachments) {
-                    require(rt.files.readableFile(attachment.remotePath)) { tr(R.string.ui_edit_attachment_unavailable, attachment.name) }
+                val missingPath = rt.files.readableFiles(input.attachments.map { it.remotePath })
+                if (missingPath != null) {
+                    val missingName = input.attachments.firstOrNull { it.remotePath == missingPath }?.name ?: missingPath
+                    throw IllegalArgumentException(tr(R.string.ui_edit_attachment_unavailable, missingName))
                 }
                 val latest = rt.api.latestTurnStatus(thread)
                 rt.rpc.awaitEventsApplied()
@@ -1810,8 +1860,12 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         if (ui(host).connection != ConnectionStatus.ONLINE || !rt.rpc.isConnected) return
         try {
             rt.rpc.approve(request, decision)
-            update(host) { it.copy(approvals = it.approvals.map { p -> if (p.request.key == request.key) p.copy(submitted = true) else p }) }
         } catch (e: Exception) { message(errorText(e)) }
+        finally {
+            if (rt.rpc.approvalSubmitted(request)) update(host) {
+                it.copy(approvals = it.approvals.map { p -> if (p.request.key == request.key) p.copy(submitted = true) else p })
+            }
+        }
     }
 
     fun answerQuestions(request: ServerRequest, answers: Map<String, List<String>>) {
@@ -1995,7 +2049,9 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             override fun onCopyTextToClipboard(session: TerminalSession, text: String?) { mutable.update { it.copy(clipboardRequest = ClipboardRequest(text.orEmpty())) } }
             override fun onPasteTextFromClipboard(session: TerminalSession?) { mutable.update { it.copy(clipboardRequest = ClipboardRequest(null, session)) } }
         })
-        val tab = TerminalTab(UUID.randomUUID().toString(), tr(R.string.ui_terminal , ui(host).terminals.size + 1), session, project)
+        val nextNumber = (terminalCounters[host] ?: 0) + 1
+        terminalCounters[host] = nextNumber
+        val tab = TerminalTab(UUID.randomUUID().toString(), tr(R.string.ui_terminal , nextNumber), session, project)
         update(host) { it.copy(terminals = it.terminals + tab,
             selectedTerminal = if (it.selectedProject == project) tab.id else it.selectedTerminal,
             projectTerminals = it.projectTerminals + (project to tab.id)) }
@@ -2092,7 +2148,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             ws.copy(imagePreviews = emptyMap(), imageLoading = emptySet())
         }) }
         clearingImages = true
-        try { imageCache.clear() } finally { clearingImages = false }
+        try {
+            imageCache.clear()
+            StorageUsage.clearSharedTemporaryFiles(app)
+        } finally { clearingImages = false }
         cacheWrites.withLock {
             // Invalidate at the actual clear boundary, after any suspended image
             // cleanup and previous body IO, so neither can reinstall an old base.

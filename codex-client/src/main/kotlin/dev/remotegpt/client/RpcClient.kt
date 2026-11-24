@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicBoolean
 
 interface MessageTransport : Closeable {
+    val isOpen: Boolean get() = true
     suspend fun connect(onMessage: (String) -> Unit, onClosed: (Throwable?) -> Unit)
     fun send(text: String)
 }
@@ -17,6 +18,7 @@ interface MessageTransport : Closeable {
 class RpcClient(private val transport: MessageTransport, private val timeoutMs: Long = 30_000,
     private val onTiming: (String, Long, String) -> Unit = { _, _, _ -> },
     private val onTraffic: ((String, Long) -> Unit)? = null,
+    private val clientVersion: String = "0.1.0",
 ) : Closeable {
     val epoch = UUID.randomUUID().toString()
     private val eventBuffer = OrderedRpcEvents { disconnected(EventBacklog()); transport.close() }
@@ -34,7 +36,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
     suspend fun connect(): JsonObject {
         transport.connect(::receive, ::disconnected)
         val initialized = request("initialize", buildJsonObject {
-            putJsonObject("clientInfo") { put("name", "remote_gpt_android"); put("title", "GHub"); put("version", "0.1.0") }
+            putJsonObject("clientInfo") { put("name", "remote_gpt_android"); put("title", "GHub"); put("version", clientVersion) }
             putJsonObject("capabilities") { put("experimentalApi", true) }
         })
         send(buildJsonObject { put("method", "initialized"); putJsonObject("params") {} }.toString())
@@ -42,14 +44,14 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
     }
 
     suspend fun request(method: String, params: JsonObject = JsonObject(emptyMap()), mutation: Boolean = false): JsonObject {
-        check(!closed.get()) { "连接已关闭" }
+        if (closed.get()) throw ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")
         val id = sequence.incrementAndGet()
         val deferred = CompletableDeferred<JsonObject>()
         val started = System.nanoTime()
         var outcome = "failed"
         pending[id.toString()] = deferred
         try {
-            check(!closed.get()) { "连接已关闭" }
+            if (closed.get()) throw ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")
             send(buildJsonObject { put("id", id); put("method", method); put("params", params) }.toString())
             return withTimeout(timeoutMs) { deferred.await() }.also { outcome = "ok" }
         } catch (e: RpcException) { throw RpcException(e.code, e.message.orEmpty(), method)
@@ -63,12 +65,20 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         }
     }
 
+    fun approvalSubmitted(request: ServerRequest): Boolean = request.epoch == epoch && request.id.toString() in submittedApprovals
+
     fun approve(request: ServerRequest, decision: String) {
-        check(!closed.get()) { "连接已关闭，审批已失效。" }
-        require(request.epoch == epoch && approvals[request.id.toString()] == request) { "审批已过期，请刷新会话。" }
-        require(request.supportedApproval) { "此审批类型尚不支持。" }
+        if (closed.get() || !transport.isOpen) throw ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")
+        if (request.epoch != epoch || approvals[request.id.toString()] != request) {
+            throw ClientArgumentException(ClientErrorCode.REQUEST_EXPIRED, "Approval request has expired")
+        }
+        if (!request.supportedApproval) {
+            throw ClientArgumentException(ClientErrorCode.UNSUPPORTED_APPROVAL, "Unsupported approval method")
+        }
         require(decision in setOf("accept", "acceptForSession", "decline", "cancel"))
-        check(submittedApprovals.add(request.id.toString())) { "审批已提交，正在等待服务端确认，请勿重复操作。" }
+        if (!submittedApprovals.add(request.id.toString())) {
+            throw ClientStateException(ClientErrorCode.APPROVAL_ALREADY_SUBMITTED, "Approval already submitted")
+        }
         send(buildJsonObject {
             put("id", request.id); putJsonObject("result") { put("decision", decision) }
         }.toString())
@@ -78,18 +88,27 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
     fun questionsSubmitted(request: ServerRequest): Boolean = request.epoch == epoch && request.id.toString() in submittedApprovals
 
     fun answerQuestions(request: ServerRequest, answers: Map<String, List<String>>) {
-        check(!closed.get()) { "连接已关闭，问题已失效。" }
-        require(request.epoch == epoch && approvals[request.id.toString()] == request) { "问题已过期，请刷新会话。" }
-        val questions = requireNotNull(request.userQuestions) { "此提问类型尚不支持。" }
-        require(answers.keys == questions.map { it.id }.toSet()) { "请回答每个问题。" }
+        if (closed.get() || !transport.isOpen) throw ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")
+        if (request.epoch != epoch || approvals[request.id.toString()] != request) {
+            throw ClientArgumentException(ClientErrorCode.REQUEST_EXPIRED, "Question request has expired")
+        }
+        val questions = request.userQuestions
+            ?: throw ClientArgumentException(ClientErrorCode.UNSUPPORTED_QUESTION, "Unsupported question payload")
+        if (answers.keys != questions.map { it.id }.toSet()) {
+            throw ClientArgumentException(ClientErrorCode.INCOMPLETE_ANSWERS, "Answer every question")
+        }
         questions.forEach { question ->
             val answer = answers.getValue(question.id)
-            require(answer.size == 1 && answer.single().isNotBlank()) { "请回答每个问题。" }
-            require(question.options.isEmpty() || question.isOther || question.options.any { it.label == answer.single() }) {
-                "请选择提供的选项。"
+            if (answer.size != 1 || answer.single().isBlank()) {
+                throw ClientArgumentException(ClientErrorCode.INCOMPLETE_ANSWERS, "Answer every question")
+            }
+            if (!(question.options.isEmpty() || question.isOther || question.options.any { it.label == answer.single() })) {
+                throw ClientArgumentException(ClientErrorCode.INVALID_OPTION_ANSWER, "Select one of the provided options")
             }
         }
-        check(submittedApprovals.add(request.id.toString())) { "回答已提交，正在等待服务端确认，请勿重复操作。" }
+        if (!submittedApprovals.add(request.id.toString())) {
+            throw ClientStateException(ClientErrorCode.ANSWER_ALREADY_SUBMITTED, "Answer already submitted")
+        }
         // A send failure can have uncertain delivery. Keep the submission fenced
         // until resolution or reconnect, just like permission responses.
         send(buildJsonObject {
@@ -118,7 +137,7 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         val applied = CompletableDeferred<Unit>()
         barriers += applied
         try {
-            check(!closed.get()) { "连接已关闭" }
+            if (closed.get()) throw ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")
             eventBuffer.offer(RpcEvent.Barrier(applied), 0)
             withTimeout(timeoutMs) { applied.await() }
         } finally { barriers -= applied }
@@ -165,9 +184,9 @@ class RpcClient(private val transport: MessageTransport, private val timeoutMs: 
         disconnectReason = reason
         approvals.clear()
         submittedApprovals.clear()
-        pending.values.forEach { it.completeExceptionally(reason ?: IllegalStateException("连接已断开")) }
+        pending.values.forEach { it.completeExceptionally(reason ?: ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")) }
         pending.clear()
-        barriers.forEach { it.completeExceptionally(reason ?: IllegalStateException("连接已断开")) }
+        barriers.forEach { it.completeExceptionally(reason ?: ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")) }
         barriers.clear()
         eventBuffer.close(reason)
     }

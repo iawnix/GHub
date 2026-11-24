@@ -16,7 +16,7 @@ class TerminalSession(private val backend: TerminalBackend, private val client: 
     private val main = Handler(Looper.getMainLooper())
     private val pendingReads = Semaphore(16)
     private var emulator: TerminalEmulator? = null
-    private var running = true
+    @Volatile private var running = true
     private val backlog = ArrayDeque<ByteArray>()
     private var backlogSize = 0
     var onChanged: (() -> Unit)? = null

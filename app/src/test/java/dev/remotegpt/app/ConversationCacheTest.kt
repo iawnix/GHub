@@ -94,4 +94,13 @@ class ConversationCacheTest {
         val two = Conversation("t", listOf(TimelineItem("two", "turn", "agentMessage", "**Answer**", true)))
         assertEquals(one.items + two.items, decodeConversationCache(listOf(wireJson.encodeToString(one), wireJson.encodeToString(two)))?.items)
     }
+
+    @Test fun longPlanItemsKeepTheirOpeningHeadingsAndCodeFencesInCache() {
+        val planText = "# Implementation Plan\n\n```kotlin\nfun entry() = Unit\n```\n\n" + "- Step detail line\n".repeat(1_000)
+        assertTrue(planText.length > 8_192)
+        val original = Conversation("thread", listOf(TimelineItem("plan-1", "turn", "plan", planText, true)))
+        val decoded = decodeConversationCache(encodeConversationCache(original))!!
+        assertEquals(planText, decoded.items.single().text)
+        assertEquals(planText, planConversationCache(null, original).snapshot.items.single().text)
+    }
 }

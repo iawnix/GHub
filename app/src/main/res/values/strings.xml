@@ -630,4 +630,22 @@
     <string name="ui_permission_auto">Allow automatically</string>
     <string name="ui_permission_untrusted">Untrusted commands only</string>
     <string name="ui_permission_custom">Custom</string>
+    <string name="ui_copy_too_long">This content is too long for the clipboard.</string>
+    <string name="ui_unsupported_timeline_item">Unsupported item type: %1$s</string>
+    <string name="ui_host_key_rejected_error">Host fingerprint was not confirmed. Verify it and reconnect manually.</string>
+    <string name="ui_daemon_not_running_error">The official App Server is not running. Set up the background service in server settings.</string>
+    <string name="ui_remote_command_failed_error">Remote command failed. Check the Codex executable path and service status.</string>
+    <string name="ui_remote_command_timeout_error">Remote command timed out. Checking connection.</string>
+    <string name="ui_proxy_connect_failed_error">Could not connect to the App Server proxy. Check service status and version.</string>
+    <string name="ui_request_expired_error">This request has expired. Refresh the session.</string>
+    <string name="ui_unsupported_request_error">This request type is not supported yet.</string>
+    <string name="ui_answer_every_question_error">Please answer every question.</string>
+    <string name="ui_select_provided_option_error">Please select one of the provided options.</string>
+    <string name="ui_thread_id_mismatch_error">The server returned an inconsistent session ID.</string>
+    <string name="ui_path_occupied_by_file_error">This path is already occupied by a file. Choose a directory path.</string>
+    <string name="ui_text_too_large_to_edit_error">Only text files up to 1 MiB can be edited in the app. Download this file instead.</string>
+    <string name="ui_not_editable_text_error">This is not an editable text file. Download it to open.</string>
+    <string name="ui_unsupported_text_encoding_error">Only UTF-8 text is supported. Download the file to open it with its encoding.</string>
+    <string name="ui_text_exceeds_save_limit_error">Text exceeds 1 MiB.</string>
+    <string name="ui_preview_too_large_error">File exceeds the preview size limit. Download it to your device to open.</string>
 </resources>

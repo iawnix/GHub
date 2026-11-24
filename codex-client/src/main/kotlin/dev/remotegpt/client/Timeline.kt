@@ -6,7 +6,8 @@ object Timeline {
     /** These events need a body baseline before they can be applied or persisted. */
     fun needsBaseline(method: String): Boolean = method in setOf(
         "turn/started", "turn/completed", "item/started", "item/completed",
-        "item/agentMessage/delta", "item/commandExecution/outputDelta", "item/plan/delta", "item/reasoning/summaryTextDelta",
+        "item/agentMessage/delta", "item/commandExecution/outputDelta", "item/plan/delta",
+        "item/reasoning/summaryTextDelta", "item/reasoning/summaryPartAdded",
     )
 
     /** Collapse repeated records of the same turn/item, preserving their first position. */
@@ -29,7 +30,7 @@ object Timeline {
             "imageView", "dynamicToolCall", "contextCompaction" -> ""
             "plan" -> raw.string("text").orEmpty()
             "reasoning" -> raw.array("summary").joinToString("\n") { (it as? JsonPrimitive)?.contentOrNull.orEmpty() }
-            else -> "此类型暂未完整显示：$type"
+            else -> "Unsupported item: $type"
         }
         val images = buildList {
             raw.array("content").mapNotNull { (it as? JsonObject)?.takeIf { v -> v.string("type") == "localImage" }?.string("path") }
@@ -91,13 +92,43 @@ object Timeline {
                 stateRevision = state.stateRevision + 1)
             "item/started", "item/completed" -> state.copy(items = upsert(state.items,
                 parseItem(params.obj("item"), params.string("turnId").orEmpty(), method == "item/completed")))
+            "item/reasoning/summaryPartAdded" -> {
+                val id = params.string("itemId") ?: return state
+                val turn = params.string("turnId").orEmpty()
+                val summaryIndex = (params["summaryIndex"] as? JsonPrimitive)?.intOrNull
+                val current = state.items.firstOrNull { it.id == id && it.turnId == turn }
+                    ?: TimelineItem(id, turn, "reasoning", "").also { it.streamingSummaryIndex = summaryIndex }
+                if (current.complete) state else {
+                    val needsNewline = summaryIndex != null && summaryIndex > 0 &&
+                        current.streamingSummaryIndex != summaryIndex &&
+                        current.text.isNotEmpty() && !current.text.endsWith('\n')
+                    val updated = (if (needsNewline) current.copy(text = current.text + "\n") else current)
+                        .also { it.streamingSummaryIndex = summaryIndex ?: current.streamingSummaryIndex }
+                    state.copy(items = upsert(state.items, updated))
+                }
+            }
             "item/agentMessage/delta", "item/commandExecution/outputDelta", "item/plan/delta", "item/reasoning/summaryTextDelta" -> {
                 val id = params.string("itemId") ?: return state
                 val turn = params.string("turnId").orEmpty()
+                val kind = when (method) {
+                    "item/commandExecution/outputDelta" -> "commandExecution"
+                    "item/plan/delta" -> "plan"
+                    "item/reasoning/summaryTextDelta" -> "reasoning"
+                    else -> "agentMessage"
+                }
+                val summaryIndex = if (kind == "reasoning") (params["summaryIndex"] as? JsonPrimitive)?.intOrNull else null
                 val current = state.items.firstOrNull { it.id == id && it.turnId == turn }
-                    ?: TimelineItem(id, turn, if (method.contains("commandExecution")) "commandExecution" else "agentMessage", "",
-                        commandExecution = if (method.contains("commandExecution")) CommandExecutionDetails() else null)
-                if (current.complete) state else state.copy(items = upsert(state.items, current.copy(text = current.text + params.string("delta").orEmpty())))
+                    ?: TimelineItem(id, turn, kind, "",
+                        commandExecution = if (kind == "commandExecution") CommandExecutionDetails() else null)
+                        .also { it.streamingSummaryIndex = summaryIndex }
+                if (current.complete) state else {
+                    val separator = if (kind == "reasoning" && summaryIndex != null &&
+                        current.streamingSummaryIndex != null && summaryIndex != current.streamingSummaryIndex &&
+                        current.text.isNotEmpty() && !current.text.endsWith('\n')) "\n" else ""
+                    val updated = current.copy(text = current.text + separator + params.string("delta").orEmpty())
+                        .also { it.streamingSummaryIndex = summaryIndex ?: current.streamingSummaryIndex }
+                    state.copy(items = upsert(state.items, updated))
+                }
             }
             else -> state
         }

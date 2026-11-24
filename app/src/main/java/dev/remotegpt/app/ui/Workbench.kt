@@ -82,6 +82,7 @@ import java.util.UUID
     }
     var pendingDownload by rememberSaveable { mutableStateOf("") }
     var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var cameraFilePath by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val snackbars = remember { SnackbarHostState() }
     var bottomControls by remember(state.activeHost, state.workspace.selectedThread, state.tab) { mutableIntStateOf(0) }
@@ -120,14 +121,19 @@ import java.util.UUID
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { uri -> vm.upload(uri, true) } }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { uri -> vm.upload(uri, false) } }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success -> if (success) cameraUri?.let { vm.upload(Uri.parse(it), true) } }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) cameraUri?.let { vm.upload(Uri.parse(it), true) }
+        else cameraFilePath?.let { path -> File(path).delete() }
+        cameraUri = null
+        cameraFilePath = null
+    }
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> if (uri != null && pendingDownload.isNotBlank()) vm.download(pendingDownload, uri) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { it?.let(vm::exportDiagnostics) }
 
     LaunchedEffect(state.message) { state.message?.let { snackbars.showSnackbar(it, withDismissAction = true); if (vm.state.value.message == it) vm.message(null) } }
     LaunchedEffect(state.archiveUndo?.token) {
         state.archiveUndo?.let { undo ->
-            val result = snackbars.showSnackbar(tr(R.string.ui_archived_353 , undo.title.take(40)), actionLabel = tr(R.string.ui_undo),
+            val result = snackbars.showSnackbar(tr(R.string.ui_archived_353 , undo.title.ifBlank { tr(R.string.ui_new_session) }.take(40)), actionLabel = tr(R.string.ui_undo),
                 withDismissAction = true, duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) vm.undoArchive(undo)
             else vm.dismissArchiveUndo(undo.token)
@@ -207,7 +213,7 @@ import java.util.UUID
         topBar = {
             if (state.tab != WorkspaceTab.TERMINAL || state.profile == null) WorkbenchHeader(
                 title = when {
-                    showConversation -> state.thread?.title ?: tr(R.string.ui_sessions)
+                    showConversation -> state.thread?.title?.ifBlank { tr(R.string.ui_new_session) } ?: tr(R.string.ui_sessions)
                     state.tab == WorkspaceTab.FILES -> tr(R.string.ui_files)
                     state.tab == WorkspaceTab.TERMINAL -> tr(R.string.ui_terminal_290)
                     else -> state.profile?.name ?: tr(R.string.app_name)
@@ -267,8 +273,14 @@ import java.util.UUID
                             onCamera = {
                                 val file = File(context.cacheDir, "shared/${UUID.randomUUID()}.jpg").apply { parentFile?.mkdirs() }
                                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+                                cameraFilePath = file.absolutePath
                                 cameraUri = uri.toString()
-                                runCatching { camera.launch(uri) }.onFailure { vm.message(tr(R.string.ui_no_camera_app_found_choose_an_image)) }
+                                runCatching { camera.launch(uri) }.onFailure {
+                                    file.delete()
+                                    cameraFilePath = null
+                                    cameraUri = null
+                                    vm.message(tr(R.string.ui_no_camera_app_found_choose_an_image))
+                                }
                             }, onVoice = { if (listening) speech.cancel() else microphone.launch(Manifest.permission.RECORD_AUDIO) }, optionsOpen = showConversationOptions, onOptionsChange = { showConversationOptions = it }, onBottomControls = { bottomControls = it })
                         WorkspaceTab.FILES -> FilesScreen(state, vm, onWorkspace = { showWorkspace = true }, snackbar = snackbars) { file -> pendingDownload = file.path; saveFile.launch(file.name) }
                         WorkspaceTab.TERMINAL -> TerminalsScreen(state, vm, onWorkspace = { showWorkspace = true }, onBottomControls = { bottomControls = it })
@@ -343,7 +355,7 @@ import java.util.UUID
 }
 
 @Composable fun TextPrompt(title: String, label: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit, validate: (String) -> Boolean = { it.isNotBlank() }) {
-    var value by rememberSaveable { mutableStateOf(initial) }
+    var value by rememberSaveable(title, initial) { mutableStateOf(initial) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)

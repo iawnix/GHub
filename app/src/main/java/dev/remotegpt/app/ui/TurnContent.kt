@@ -36,12 +36,15 @@ import dev.remotegpt.client.*
     onLoadImage: (String) -> Unit = {},
     revision: MessageRevisionActions? = null,
 ) {
-    val answers = items.filter { it.kind == "agentMessage" && it.questions.isEmpty() }
+    val answers = items.filter { it.kind in setOf("agentMessage", "plan") && it.questions.isEmpty() }
     val answer = answers.lastOrNull()
     val files = items.filter { it.kind == "fileChange" }
     val images = items.filter { it.kind == "imageView" }
     val questions = items.filter { it.questions.isNotEmpty() }
-    val steps = items.filter { it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "fileChange" && it.kind != "imageView" }
+    val steps = items.filter {
+        it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "plan" &&
+            it.kind != "fileChange" && it.kind != "imageView" && it.questions.isEmpty()
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items.filter { it.kind == "userMessage" }.forEach { item ->
             key(item.identityKey) {
@@ -99,7 +102,11 @@ import dev.remotegpt.client.*
                 ({ revision.onBegin(row.item.id) }) else null)
         }
         is ConversationRow.AssistantBlock -> TimelineCard(
-            row.item.copy(text = row.source), preview,
+            row.item.copy(
+                text = row.source,
+                imagePaths = if (row.isLastBlock) row.item.imagePaths else emptyList(),
+            ),
+            preview,
             assistantOutput = row.showSync && row.index == 0,
             assistantSyncing = syncing,
             assistantConnected = connected,
@@ -107,6 +114,7 @@ import dev.remotegpt.client.*
             imagePreviews = imagePreviews,
             imageLoading = imageLoading,
             onLoadImage = onLoadImage,
+            preparsedMarkdown = row.preparsed,
         )
         is ConversationRow.AssistantFallback -> TimelineCard(
             row.item, preview, assistantOutput = row.showSync, assistantSyncing = syncing,

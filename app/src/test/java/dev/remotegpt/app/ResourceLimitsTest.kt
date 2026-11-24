@@ -1,7 +1,12 @@
 package dev.remotegpt.app
 
 import dev.remotegpt.app.data.RemoteImageCache
+import dev.remotegpt.app.data.clearDirectoryFiles
+import dev.remotegpt.app.data.hostKeyPreferenceName
+import dev.remotegpt.app.data.profileHostKeyNames
+import dev.remotegpt.app.ui.LEGAL_NOTICE_ASSETS
 import dev.remotegpt.client.*
+import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
@@ -47,6 +52,43 @@ class ResourceLimitsTest {
         release.update(false)
         advanceTimeBy(30_001)
         assertEquals(2, closes)
+        // Even without an intervening update(true), a completed release clears its job slot.
+        release.update(false)
+        advanceTimeBy(30_001)
+        assertEquals(3, closes)
+    }
+
+    @Test fun sharedTemporaryCleanupHonorsRetentionAndHostKeyRoutesStayIsolated() {
+        val temp = Files.createTempDirectory("shared-temp").toFile()
+        try {
+            val oldFile = File(temp, "reply-old.md").apply { writeText("old"); setLastModified(1_000L) }
+            val freshFile = File(temp, "camera-fresh.jpg").apply { writeText("fresh"); setLastModified(9_500L) }
+            clearDirectoryFiles(temp, maxAgeMs = 5_000L, nowMs = 10_000L)
+            assertFalse(oldFile.exists())
+            assertTrue(freshFile.exists())
+            clearDirectoryFiles(temp, maxAgeMs = 0L, nowMs = 10_000L)
+            assertTrue(temp.listFiles().isNullOrEmpty())
+        } finally {
+            temp.deleteRecursively()
+        }
+
+        val jumpA = SshEndpoint("jump-a.example", 22, "ops")
+        val jumpB = SshEndpoint("jump-b.example", 22, "ops")
+        val internalTarget = SshEndpoint("10.0.0.5", 22, "dev")
+        val profileA = HostProfile(name = "A", endpoint = internalTarget, jumps = listOf(jumpA))
+        val profileB = HostProfile(name = "B", endpoint = internalTarget, jumps = listOf(jumpB))
+        val keysA = profileHostKeyNames(profileA)
+        val keysB = profileHostKeyNames(profileB)
+        assertEquals(setOf("host_key:jump-a.example:22", "host_key:jump-a.example:22->10.0.0.5:22"), keysA)
+        assertEquals(setOf("host_key:jump-b.example:22", "host_key:jump-b.example:22->10.0.0.5:22"), keysB)
+        assertTrue((keysA intersect keysB).isEmpty())
+        assertEquals("host_key:10.0.0.5:22", hostKeyPreferenceName("10.0.0.5", 22))
+    }
+
+    @Test fun bundledLicenseFilesAreAllExposedInLegalNotices() {
+        val licensesDir = sequenceOf(File("../licenses"), File("licenses")).first { it.isDirectory }
+        val bundled = licensesDir.listFiles()!!.filter { it.isFile }.map { it.name }.toSet()
+        assertEquals(bundled, LEGAL_NOTICE_ASSETS.toSet())
     }
     @Test fun imageCacheLimitsBytesAndCountAndProtectsVisibleImage() = runBlocking {
         val directory = Files.createTempDirectory("images").toFile()

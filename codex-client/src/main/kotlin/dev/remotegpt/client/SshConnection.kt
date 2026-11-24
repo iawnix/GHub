@@ -20,8 +20,23 @@ import java.util.concurrent.TimeUnit
 interface SshPrompts {
     suspend fun credential(id: String): Credential
     suspend fun verifyHostKey(host: String, port: Int, algorithm: String, fingerprint: String): Boolean
+    suspend fun verifyHostKey(route: String, host: String, port: Int, algorithm: String, fingerprint: String): Boolean =
+        verifyHostKey(host, port, algorithm, fingerprint)
     suspend fun keyboard(prompt: KeyboardPrompt): List<String>
 }
+
+/** Bridges SSHJ synchronous callbacks while propagating outer coroutine cancellation immediately. */
+internal fun <T> runPromptInterruptibly(parent: Job?, block: suspend CoroutineScope.() -> T): T {
+    val child = Job(parent)
+    return try {
+        runBlocking(child, block)
+    } finally {
+        child.cancel()
+    }
+}
+
+fun hopRoutePrefix(jumps: List<SshEndpoint>, hopIndex: Int): String =
+    jumps.take(hopIndex).joinToString("->") { "${it.host}:${it.port}" }
 
 fun shellQuote(value: String): String {
     require('\u0000' !in value)
@@ -38,9 +53,14 @@ class SshConnection private constructor(val profile: HostProfile, private val ch
             try {
                 return withContext(Dispatchers.IO) {
                 SshCrypto.configure()
-                for (endpoint in profile.jumps + profile.endpoint) {
+                val callerJob = currentCoroutineContext()[Job]
+                val endpoints = profile.jumps + profile.endpoint
+                for ((hopIndex, endpoint) in endpoints.withIndex()) {
                     ensureActive()
-                    require(endpoint.host.isNotBlank() && endpoint.username.isNotBlank() && endpoint.port in 1..65535) { "请填写有效主机、端口和用户名" }
+                    if (endpoint.host.isBlank() || endpoint.username.isBlank() || endpoint.port !in 1..65535) {
+                        throw ClientArgumentException(ClientErrorCode.INVALID_SSH_ENDPOINT, "Invalid SSH host, port, or username")
+                    }
+                    val route = hopRoutePrefix(profile.jumps, hopIndex)
                     val ssh = SSHClient()
                     val previous = chain.lastOrNull()
                     chain += ssh
@@ -50,35 +70,48 @@ class SshConnection private constructor(val profile: HostProfile, private val ch
                         override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
                             val bytes = Buffer.PlainBuffer().putPublicKey(key).compactData
                             val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(bytes))
-                            if (!runBlocking { prompts.verifyHostKey(endpoint.host, endpoint.port, key.algorithm, fingerprint) }) throw HostKeyRejected()
+                            if (!runPromptInterruptibly(callerJob) {
+                                    prompts.verifyHostKey(route, endpoint.host, endpoint.port, key.algorithm, fingerprint)
+                                }) throw HostKeyRejected()
                             return true
                         }
                         override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
                     })
-                    if (previous == null) ssh.connect(endpoint.host, endpoint.port)
-                    else ssh.connectVia(previous.newDirectConnection(endpoint.host, endpoint.port))
-                    val secret = prompts.credential(endpoint.credentialId)
-                    when (endpoint.auth) {
-                        AuthKind.PASSWORD -> ssh.authPassword(endpoint.username, secret.password)
-                        AuthKind.PRIVATE_KEY -> {
-                            require(secret.privateKey.isNotBlank()) { "请导入 SSH 私钥" }
-                            val password = object : PasswordFinder {
-                                override fun reqPassword(resource: Resource<*>?): CharArray = secret.passphrase.toCharArray()
-                                override fun shouldRetry(resource: Resource<*>?) = false
-                            }
-                            ssh.authPublickey(endpoint.username, ssh.loadKeys(secret.privateKey, null, password))
-                        }
-                        AuthKind.INTERACTIVE -> ssh.auth(endpoint.username, AuthKeyboardInteractive(object : ChallengeResponseProvider {
-                            private var title = "SSH 认证"
-                            private var instruction = ""
-                            override fun getSubmethods() = emptyList<String>()
-                            override fun init(resource: Resource<*>?, name: String, instruction: String) { title = name; this.instruction = instruction }
-                            override fun getResponse(prompt: String, echo: Boolean): CharArray = runBlocking {
-                                prompts.keyboard(KeyboardPrompt(title, instruction, listOf(prompt to echo))).firstOrNull().orEmpty().toCharArray()
-                            }
-                            override fun shouldRetry() = false
-                        }))
+                    val cancelHandle = callerJob?.invokeOnCompletion { cause ->
+                        if (cause != null) runCatching { ssh.close() }
                     }
+                    try {
+                        if (previous == null) ssh.connect(endpoint.host, endpoint.port)
+                        else ssh.connectVia(previous.newDirectConnection(endpoint.host, endpoint.port))
+                        ensureActive()
+                        val secret = prompts.credential(endpoint.credentialId)
+                        when (endpoint.auth) {
+                            AuthKind.PASSWORD -> ssh.authPassword(endpoint.username, secret.password)
+                            AuthKind.PRIVATE_KEY -> {
+                                if (secret.privateKey.isBlank()) {
+                                    throw ClientArgumentException(ClientErrorCode.MISSING_PRIVATE_KEY, "Missing SSH private key")
+                                }
+                                val password = object : PasswordFinder {
+                                    override fun reqPassword(resource: Resource<*>?): CharArray = secret.passphrase.toCharArray()
+                                    override fun shouldRetry(resource: Resource<*>?) = false
+                                }
+                                ssh.authPublickey(endpoint.username, ssh.loadKeys(secret.privateKey, null, password))
+                            }
+                            AuthKind.INTERACTIVE -> ssh.auth(endpoint.username, AuthKeyboardInteractive(object : ChallengeResponseProvider {
+                                private var title = ""
+                                private var instruction = ""
+                                override fun getSubmethods() = emptyList<String>()
+                                override fun init(resource: Resource<*>?, name: String, instruction: String) { title = name; this.instruction = instruction }
+                                override fun getResponse(prompt: String, echo: Boolean): CharArray = runPromptInterruptibly(callerJob) {
+                                    prompts.keyboard(KeyboardPrompt(title, instruction, listOf(prompt to echo))).firstOrNull().orEmpty().toCharArray()
+                                }
+                                override fun shouldRetry() = false
+                            }))
+                        }
+                    } finally {
+                        cancelHandle?.dispose()
+                    }
+                    ensureActive()
                     ssh.connection.keepAlive.keepAliveInterval = 20
                 }
                 SshConnection(profile, chain)

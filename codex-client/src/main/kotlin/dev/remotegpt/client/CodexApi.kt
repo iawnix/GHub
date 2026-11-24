@@ -57,7 +57,7 @@ class CodexApi(val rpc: RpcClient) {
             }
             throw e
         }
-        check(metadata.id == id) { "服务端返回的会话标识不一致" }
+        if (metadata.id != id) throw ClientStateException(ClientErrorCode.THREAD_ID_MISMATCH, "Server returned mismatched thread ID")
         try {
             history(id, limit = 1)
         } catch (e: RpcException) {
@@ -73,7 +73,7 @@ class CodexApi(val rpc: RpcClient) {
     }
 
     suspend fun create(cwd: String): ThreadSummary {
-        require(cwd.startsWith('/')) { "请输入远端绝对目录" }
+        if (!cwd.startsWith('/')) throw ClientArgumentException(ClientErrorCode.INVALID_REMOTE_DIRECTORY, "Enter an absolute remote directory")
         return configuredThread(rpc.request("thread/start", buildJsonObject {
             put("cwd", cwd); put("sandbox", "workspace-write"); put("approvalPolicy", "on-request")
             put("approvalsReviewer", "user")
@@ -136,7 +136,9 @@ class CodexApi(val rpc: RpcClient) {
                 }
             }
             cursor = page.string("nextCursor")
-            check(cursor == null || cursors.add(cursor!!)) { "模型列表分页游标重复" }
+            if (cursor != null && !cursors.add(cursor!!)) {
+                throw ClientStateException(ClientErrorCode.REPEATED_MODEL_CURSOR, "Repeated model pagination cursor")
+            }
         } while (cursor != null)
         return result.distinctBy { it.id }
     }

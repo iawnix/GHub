@@ -14,7 +14,14 @@ internal sealed interface ConversationRow {
         override val turnId = item.turnId
     }
 
-    data class AssistantBlock(val item: TimelineItem, val source: String, val index: Int, val showSync: Boolean) : ConversationRow {
+    data class AssistantBlock(
+        val item: TimelineItem,
+        val source: String,
+        val index: Int,
+        val showSync: Boolean,
+        val isLastBlock: Boolean = true,
+        val preparsed: PreparsedMarkdownBlock? = null,
+    ) : ConversationRow {
         override val key = "assistant:${item.identityKey}:$index"
         override val contentType = "assistant-markdown"
         override val turnId = item.turnId
@@ -72,6 +79,34 @@ internal fun buildConversationRows(
     activeTurn: String?,
     completedTurn: String?,
     turnStatus: String?,
+): List<ConversationRow> = buildConversationRowsFromPreparsed(
+    turns = turns,
+    markdownBlocks = markdownBlocks.mapValues { (_, blocks) -> blocks.map { source -> source to null } },
+    activeTurn = activeTurn,
+    completedTurn = completedTurn,
+    turnStatus = turnStatus,
+)
+
+internal fun buildConversationRowsWithAst(
+    turns: List<Map.Entry<String, List<TimelineItem>>>,
+    markdownBlocks: Map<String, List<PreparsedMarkdownBlock>>,
+    activeTurn: String?,
+    completedTurn: String?,
+    turnStatus: String?,
+): List<ConversationRow> = buildConversationRowsFromPreparsed(
+    turns = turns,
+    markdownBlocks = markdownBlocks.mapValues { (_, blocks) -> blocks.map { preparsed -> preparsed.block.source to preparsed } },
+    activeTurn = activeTurn,
+    completedTurn = completedTurn,
+    turnStatus = turnStatus,
+)
+
+private fun buildConversationRowsFromPreparsed(
+    turns: List<Map.Entry<String, List<TimelineItem>>>,
+    markdownBlocks: Map<String, List<Pair<String, PreparsedMarkdownBlock?>>>,
+    activeTurn: String?,
+    completedTurn: String?,
+    turnStatus: String?,
 ): List<ConversationRow> = buildList {
     turns.forEach { (turnId, items) ->
         items.filter { it.kind == "userMessage" }.forEach { add(ConversationRow.User(it)) }
@@ -84,7 +119,10 @@ internal fun buildConversationRows(
             val showSync = assistantIndex == assistantItems.lastIndex
             val blocks = markdownBlocks[item.identityKey]
             if (blocks.isNullOrEmpty()) add(ConversationRow.AssistantFallback(item, showSync))
-            else blocks.forEachIndexed { index, source -> add(ConversationRow.AssistantBlock(item, source, index, showSync)) }
+            else blocks.forEachIndexed { index, (source, preparsed) ->
+                add(ConversationRow.AssistantBlock(item, source, index, showSync,
+                    isLastBlock = index == blocks.lastIndex, preparsed = preparsed))
+            }
         }
 
         val steps = items.filter {
