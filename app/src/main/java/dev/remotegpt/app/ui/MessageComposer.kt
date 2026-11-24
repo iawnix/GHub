@@ -237,7 +237,7 @@ import dev.remotegpt.client.ModelOption
                     }
                     val queueable = hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
                     val queueAction = running && queueable
-                    val enabled = if (running) online && !stopping && (queueable || !hasContent) else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
+                    val enabled = if (running) online && !stopping else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
                     val sendLabel = tr(when {
                         stopping -> R.string.ui_stopping_task
                         queueAction -> R.string.ui_queue_message
