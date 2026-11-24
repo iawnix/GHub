@@ -4,6 +4,8 @@ package dev.remotegpt.app.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.size
@@ -57,11 +59,14 @@ import kotlinx.coroutines.delay
     }
 }
 
+internal const val MAX_CLIPBOARD_CHARS = 100_000
+
 /** Copy the original source; repeated clicks restart feedback and source changes
  * clear it, so streaming updates never claim that newer text was already copied. */
 @Composable internal fun ConversationCopyButton(
     text: String,
     label: String,
+    @StringRes tooLongMessage: Int = R.string.ui_copy_too_long,
     beforeCopy: () -> Boolean = { true },
 ) {
     val context = LocalContext.current
@@ -76,10 +81,19 @@ import kotlinx.coroutines.delay
         feedback = if (copied) tr(R.string.ui_copied) else null,
         onClick = {
             if (beforeCopy()) {
-                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                    .setPrimaryClip(ClipData.newPlainText(label, text))
-                copied = true
-                request++
+                if (text.length > MAX_CLIPBOARD_CHARS) {
+                    Toast.makeText(context, tr(tooLongMessage), Toast.LENGTH_SHORT).show()
+                } else {
+                    runCatching {
+                        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                            .setPrimaryClip(ClipData.newPlainText(label, text))
+                    }.onSuccess {
+                        copied = true
+                        request++
+                    }.onFailure {
+                        Toast.makeText(context, tr(tooLongMessage), Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         },
     )

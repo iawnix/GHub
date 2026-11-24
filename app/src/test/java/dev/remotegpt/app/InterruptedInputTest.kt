@@ -74,6 +74,15 @@ class InterruptedInputTest {
         assertEquals(original, after.lastSubmission!!.input)
     }
 
+    @Test fun ordinarySendPreservesQueuedInputs() {
+        val queued = QueuedInput("queued-1", MessageInput("follow-up"))
+        val after = Draft(text = original.text, queued = listOf(queued))
+            .acceptedSubmission(original, "turn", "send", edited = false)
+        assertEquals(listOf(queued), after.queued)
+        val restored = wireJson.decodeFromString<Draft>(wireJson.encodeToString(after))
+        assertEquals(listOf(queued), restored.queued)
+    }
+
     @Test fun processDeathRestoresSendingRevisionAsUncertainWithoutChangingOtherDraft() {
         val draft = Draft(text = "ordinary", lastSubmission = SubmittedInput("turn", "send-1", original),
             edit = InterruptedInputEdit("edit", "turn", "prompt", original.copy(text = "edited 中文"), "sending", "send-2"))

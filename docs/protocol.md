@@ -30,7 +30,7 @@ proxy 通道使用原始字节流，无 PTY；stderr 单独读取。终端功能
 | 历史分页 | `thread/turns/list`，正文使用 `itemsView: full` |
 | 状态核对 | `thread/turns/list(limit=1, sortDirection=desc, itemsView=notLoaded)` |
 | 归档与恢复 | `thread/archive`、`thread/unarchive` |
-| 对话与中断 | `turn/start`、`turn/interrupt` |
+| 对话、排队与引导 | `turn/start`、`turn/interrupt`、`turn/steer`、`thread/queue/*` |
 | 计划模式 | `collaborationMode/list`、`turn/start.collaborationMode` |
 | 会话目标 | `thread/goal/get`、`thread/goal/set`、`thread/goal/clear`、`thread/goal/updated`、`thread/goal/cleared` |
 | 流式状态 | `thread/status/changed`、`turn/*`、`item/*` |
@@ -39,6 +39,8 @@ proxy 通道使用原始字节流，无 PTY；stderr 单独读取。终端功能
 | 审批与提问同步 | `serverRequest/resolved` |
 
 枚举沿用实际 schema，例如 `approvalPolicy: on-request`、`sandbox: workspace-write`。扩展字段可被忽略，未知时间线类型显示占位内容；暂未接入的服务端交互请求返回协议错误，用户可转到 CLI 处理。握手声明 `experimentalApi: true`，以使用计划模式接口；可选能力按连接探测，不支持时保留普通会话功能。
+
+`turn/steer` 将输入注入当前活动轮次，并使用 `expectedTurnId` 防止把内容发送到已经变化的轮次。支持官方队列的服务端使用 `thread/queue/add`、`list`、`update`、`delete`、`reorder` 和 `start`，并通过 `thread/queue/changed` 通知队列变化。客户端优先使用这些接口；较旧服务端拒绝队列接口时，消息退回本地 Draft FIFO，保持排队、编辑和删除功能可用。服务端队列中的输入在重连和会话恢复时重新同步。
 
 ### 用户问答
 

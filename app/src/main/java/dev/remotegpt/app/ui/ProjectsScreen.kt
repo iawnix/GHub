@@ -3,18 +3,24 @@ package dev.remotegpt.app.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.flow.first
@@ -48,6 +54,8 @@ import dev.remotegpt.app.*
     onMore: () -> Unit, onContinue: (String) -> Unit = {},
     onCreate: (String) -> Unit = {}, onProjectMenu: (String) -> Unit = {},
     onArchive: (String) -> Unit = {},
+    searching: Boolean = false, onSearchChange: (String) -> Unit = {},
+    onCloseSearch: () -> Unit = {}, onExitArchive: () -> Unit = {},
 ) {
     val haptic = rememberHaptic()
     val list = rememberLazyListState()
@@ -59,6 +67,8 @@ import dev.remotegpt.app.*
     var focusedProject by rememberSaveable { mutableStateOf<String?>(null) }
     // Only direct expansion requests may reveal a project. Network updates never scroll.
     var revealProject by remember { mutableStateOf<String?>(null) }
+    val searchActive = searching || ws.search.isNotEmpty()
+    val query = ws.search.trim()
     LaunchedEffect(ws.selectedProject) {
         ws.selectedProject?.let { if (it !in expanded) expanded = expanded + it }
     }
@@ -72,13 +82,74 @@ import dev.remotegpt.app.*
         }) {
         LazyColumn(Modifier.fillMaxSize().workbenchBackdropSource(), state = list,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topInset + 8.dp, bottom = 8.dp)) {
+            if (searchActive) item(key = "control:search") {
+                val focusRequester = remember { FocusRequester() }
+                LaunchedEffect(Unit) { if (ws.search.isEmpty()) runCatching { focusRequester.requestFocus() } }
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, interactiveOutlineColor()),
+                ) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 14.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(WorkbenchIcons.Search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        BasicTextField(
+                            value = ws.search,
+                            onValueChange = onSearchChange,
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).focusRequester(focusRequester)
+                                .semantics { contentDescription = tr(R.string.ui_search_sessions) },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            decorationBox = { inner ->
+                                Box(contentAlignment = Alignment.CenterStart) {
+                                    if (ws.search.isEmpty()) Text(tr(R.string.ui_search_sessions),
+                                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    inner()
+                                }
+                            },
+                        )
+                        IconButton(onClick = { haptic(false); if (ws.search.isNotEmpty()) onSearchChange("") else onCloseSearch() }) {
+                            Icon(WorkbenchIcons.Close, tr(R.string.ui_clear_search), Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+            if (ws.archived) item(key = "control:archived") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .55f),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(WorkbenchIcons.Archive, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Text(tr(R.string.ui_archived_sessions), Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        TextButton(onClick = { haptic(false); onExitArchive() }) {
+                            Text(tr(R.string.ui_back_to_recent))
+                        }
+                    }
+                }
+            }
             if (ws.projects.isEmpty() && !ws.loadingThreads) item(key = "control:empty") {
                 EmptyPanel(WorkbenchIcons.FolderOpen, tr(R.string.ui_add_your_project), tr(R.string.ui_choose_a_remote_working_directory_to_start), tr(R.string.ui_add_project), onAdd)
             }
-            ws.projects.forEach { project ->
-                val threads = ws.threads.filter { projectPath(it.cwd) == project.path && (!it.awaitingFirstMessage || !ws.archived) }
-                    .distinctBy { it.id }.sortedWith(compareByDescending<ThreadSummary> { ws.results[it.id]?.unread == true }.thenByDescending { it.updatedAt })
-                val open = project.path in expanded
+            val projectEntries = ws.projects.mapNotNull { project ->
+                val projectMatches = query.isNotEmpty() && (project.name.contains(query, ignoreCase = true) || project.path.contains(query, ignoreCase = true))
+                val threads = ws.threads.filter {
+                    projectPath(it.cwd) == project.path && (!it.awaitingFirstMessage || !ws.archived) &&
+                        (query.isEmpty() || projectMatches || it.title.contains(query, ignoreCase = true))
+                }.distinctBy { it.id }.sortedWith(compareByDescending<ThreadSummary> { ws.results[it.id]?.unread == true }.thenByDescending { it.updatedAt })
+                if (query.isNotEmpty() && !projectMatches && threads.isEmpty()) null else project to threads
+            }
+            if (query.isNotEmpty() && projectEntries.isEmpty() && !ws.loadingThreads && ws.projects.isNotEmpty()) item(key = "control:no-matches") {
+                Text(tr(R.string.ui_no_matching_sessions), Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 28.dp),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            projectEntries.forEach { (project, threads) ->
+                val open = query.isNotEmpty() || project.path in expanded
                 val unread = threads.count { ws.results[it.id]?.unread == true }
                 val running = threads.count { ws.results[it.id]?.status == "inProgress" || it.status == "active" }
                 val failures = threads.count { ws.results[it.id]?.status == "failed" }
@@ -208,7 +279,7 @@ import dev.remotegpt.app.*
         Row(Modifier.fillMaxWidth().clickable(enabled = !archiving) { onContinue(thread.id) }.then(modifier).heightIn(min = 48.dp)
             .padding(start = ThreadIndent, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(thread.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(thread.title.ifBlank { tr(R.string.ui_new_session) }, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 relativeUpdateTime(thread.updatedAt)?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
@@ -282,7 +353,7 @@ import dev.remotegpt.app.*
 
 @Composable fun ProjectEditor(initialPath: String, onDismiss: () -> Unit, onSave: (String, String) -> Unit,
     busy: Boolean = false, error: String? = null) {
-    var path by rememberSaveable { mutableStateOf(initialPath) }
+    var path by rememberSaveable(initialPath) { mutableStateOf(initialPath) }
     var name by rememberSaveable { mutableStateOf("") }
     val saving by rememberUpdatedState(busy)
     ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() },

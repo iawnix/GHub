@@ -81,6 +81,16 @@
     <string name="ui_attachment">Attachment: %1$s</string>
     <string name="ui_the_current_model_does_not_support_this" formatted="false">The current model does not support this reasoning level. Select another level.</string>
     <string name="ui_message_sent_restoring_session_state_please_do" formatted="false">Message sent. Restoring session state; please do not resend.</string>
+    <string name="ui_message_queued" formatted="false">Message added to the queue.</string>
+    <string name="ui_queue_commands_not_supported" formatted="false">Commands cannot be queued while a task is running.</string>
+    <string name="ui_steer_commands_not_supported" formatted="false">Commands cannot steer a running task.</string>
+    <string name="ui_steer_task" formatted="false">Guide task now</string>
+    <string name="ui_steer_unavailable" formatted="false">This server does not support steering active tasks.</string>
+    <string name="ui_message_queue" formatted="false">Message queue</string>
+    <string name="ui_queue_message" formatted="false">Queue message</string>
+    <string name="ui_queued_message" formatted="false">Queued message</string>
+    <string name="ui_edit_queued_message" formatted="false">Edit queued message</string>
+    <string name="ui_remove_queued_message" formatted="false">Remove queued message</string>
     <string name="ui_file_saved" formatted="false">File saved</string>
     <string name="ui_choose_a_session_first" formatted="false">Choose a session first</string>
     <string name="ui_select_a_session_first" formatted="false">Select a session first</string>
@@ -630,4 +640,39 @@
     <string name="ui_permission_auto">Allow automatically</string>
     <string name="ui_permission_untrusted">Untrusted commands only</string>
     <string name="ui_permission_custom">Custom</string>
+    <string name="ui_permission_read_only_detail" formatted="false">Inspect files and run read-only checks</string>
+    <string name="ui_permission_workspace_detail" formatted="false">Edit files inside the current project</string>
+    <string name="ui_permission_full_detail" formatted="false">Unrestricted filesystem and network access</string>
+    <string name="ui_permission_ask_detail" formatted="false">Prompt before running commands outside safe rules</string>
+    <string name="ui_permission_auto_detail" formatted="false">Run commands without asking for confirmation</string>
+    <string name="ui_permission_untrusted_detail" formatted="false">Ask only before untrusted commands</string>
+    <string name="ui_search_sessions" formatted="false">Search sessions</string>
+    <string name="ui_clear_search" formatted="false">Clear search</string>
+    <string name="ui_no_matching_sessions" formatted="false">No matching sessions</string>
+    <string name="ui_switch_workspace" formatted="false">Switch workspace view</string>
+    <string name="ui_unsaved_changes" formatted="false">Unsaved</string>
+    <string name="ui_editor_line_count">%1$d lines</string>
+    <string name="terminal_page_up" formatted="false">Page up</string>
+    <string name="terminal_page_down" formatted="false">Page down</string>
+    <string name="terminal_slash" formatted="false">Slash</string>
+    <string name="terminal_dash" formatted="false">Hyphen</string>
+    <string name="terminal_pipe" formatted="false">Pipe</string>
+    <string name="ui_copy_too_long">This content is too long for the clipboard.</string>
+    <string name="ui_unsupported_timeline_item">Unsupported item type: %1$s</string>
+    <string name="ui_host_key_rejected_error">Host fingerprint was not confirmed. Verify it and reconnect manually.</string>
+    <string name="ui_daemon_not_running_error">The official App Server is not running. Set up the background service in server settings.</string>
+    <string name="ui_remote_command_failed_error">Remote command failed. Check the Codex executable path and service status.</string>
+    <string name="ui_remote_command_timeout_error">Remote command timed out. Checking connection.</string>
+    <string name="ui_proxy_connect_failed_error">Could not connect to the App Server proxy. Check service status and version.</string>
+    <string name="ui_request_expired_error">This request has expired. Refresh the session.</string>
+    <string name="ui_unsupported_request_error">This request type is not supported yet.</string>
+    <string name="ui_answer_every_question_error">Please answer every question.</string>
+    <string name="ui_select_provided_option_error">Please select one of the provided options.</string>
+    <string name="ui_thread_id_mismatch_error">The server returned an inconsistent session ID.</string>
+    <string name="ui_path_occupied_by_file_error">This path is already occupied by a file. Choose a directory path.</string>
+    <string name="ui_text_too_large_to_edit_error">Only text files up to 1 MiB can be edited in the app. Download this file instead.</string>
+    <string name="ui_not_editable_text_error">This is not an editable text file. Download it to open.</string>
+    <string name="ui_unsupported_text_encoding_error">Only UTF-8 text is supported. Download the file to open it with its encoding.</string>
+    <string name="ui_text_exceeds_save_limit_error">Text exceeds 1 MiB.</string>
+    <string name="ui_preview_too_large_error">File exceeds the preview size limit. Download it to your device to open.</string>
 </resources>

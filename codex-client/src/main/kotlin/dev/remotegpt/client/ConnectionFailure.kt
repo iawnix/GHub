@@ -1,12 +1,38 @@
 package dev.remotegpt.client
 
 /** Fixed diagnostic categories: never include server messages, addresses or credentials. */
-class EventBacklog : Exception("客户端事件积压，正在重新同步会话。")
-class ProxyClosed(val code: Int, val remote: Boolean, val heartbeat: Boolean) : Exception("代理连接已断开 ($code)")
-class HostKeyRejected : Exception("主机指纹未获确认，请核对后手动连接。")
-class DaemonNotRunning : Exception("官方 App Server 尚未运行，可以在主机设置中配置常驻服务。")
-class RemoteCommandFailed : Exception("远端命令失败，请检查 Codex 可执行文件路径和服务状态。")
-class RemoteCommandTimeout : Exception("远端命令超时，正在重新检查连接。")
+enum class ClientErrorCode {
+    INVALID_SSH_ENDPOINT,
+    MISSING_PRIVATE_KEY,
+    PROXY_CONNECT_FAILED,
+    CONNECTION_CLOSED,
+    REQUEST_EXPIRED,
+    UNSUPPORTED_APPROVAL,
+    APPROVAL_ALREADY_SUBMITTED,
+    UNSUPPORTED_QUESTION,
+    INCOMPLETE_ANSWERS,
+    INVALID_OPTION_ANSWER,
+    ANSWER_ALREADY_SUBMITTED,
+    THREAD_ID_MISMATCH,
+    INVALID_REMOTE_DIRECTORY,
+    PATH_OCCUPIED_BY_FILE,
+    TEXT_TOO_LARGE_TO_EDIT,
+    NOT_EDITABLE_TEXT,
+    UNSUPPORTED_TEXT_ENCODING,
+    TEXT_EXCEEDS_SAVE_LIMIT,
+    PREVIEW_TOO_LARGE,
+    REPEATED_MODEL_CURSOR,
+}
+
+class ClientArgumentException(val code: ClientErrorCode, message: String) : IllegalArgumentException(message)
+class ClientStateException(val code: ClientErrorCode, message: String) : IllegalStateException(message)
+
+class EventBacklog : Exception("Client event backlog exceeded; resynchronizing session.")
+class ProxyClosed(val code: Int, val remote: Boolean, val heartbeat: Boolean) : Exception("Proxy WebSocket closed ($code)")
+class HostKeyRejected : Exception("Host key fingerprint was not trusted.")
+class DaemonNotRunning : Exception("Codex App Server daemon is not running.")
+class RemoteCommandFailed : Exception("Remote Codex command exited with an error.")
+class RemoteCommandTimeout : Exception("Remote Codex command timed out.")
 
 fun connectionDiagnostic(error: Throwable?): String {
     val causes = generateSequence(error) { it.cause }.take(8).toList()

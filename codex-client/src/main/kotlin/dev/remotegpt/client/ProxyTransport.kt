@@ -17,6 +17,7 @@ class ProxyTransport(private val ssh: SshConnection) : MessageTransport {
     private var command: Session.Command? = null
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val disposed = AtomicBoolean(false)
+    override val isOpen: Boolean get() = !disposed.get() && socket?.isOpen == true
 
     override suspend fun connect(onMessage: (String) -> Unit, onClosed: (Throwable?) -> Unit) = withContext(Dispatchers.IO) {
         val channel = ssh.proxy().also { command = it }
@@ -39,10 +40,16 @@ class ProxyTransport(private val ssh: SshConnection) : MessageTransport {
         })
         ws.connectionLostTimeout = 30
         socket = ws
-        if (!ws.connectBlocking(20, TimeUnit.SECONDS)) { close(); error("无法连接官方 App Server proxy，请检查服务状态和版本。") }
+        if (!ws.connectBlocking(20, TimeUnit.SECONDS)) {
+            close()
+            throw ClientStateException(ClientErrorCode.PROXY_CONNECT_FAILED, "Could not connect to Codex App Server proxy")
+        }
     }
 
-    override fun send(text: String) { check(socket?.isOpen == true) { "连接已断开" }; socket!!.send(text) }
+    override fun send(text: String) {
+        if (!isOpen) throw ClientStateException(ClientErrorCode.CONNECTION_CLOSED, "Connection is closed")
+        socket!!.send(text)
+    }
     override fun close() {
         if (!disposed.compareAndSet(false, true)) return
         runCatching { socket?.close() }; runCatching { command?.close() }; ioScope.cancel()

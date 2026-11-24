@@ -94,4 +94,32 @@ class TimelineSyncTest {
         assertEquals("prefix tail", result.text)
         assertFalse(result.commandExecution!!.outputTruncated)
     }
+
+    @Test fun `plan and reasoning deltas before item started preserve their true kind and summary line breaks`() {
+        val start = Conversation("thread", activeTurn = "turn")
+        val planDelta = buildJsonObject {
+            put("threadId", "thread"); put("turnId", "turn"); put("itemId", "plan-1"); put("delta", "1. Inspect")
+        }
+        val afterPlan = Timeline.notification(start, "item/plan/delta", planDelta)
+        assertEquals("plan", afterPlan.items.single().kind)
+        assertEquals("1. Inspect", afterPlan.items.single().text)
+
+        val reason0 = buildJsonObject {
+            put("threadId", "thread"); put("turnId", "turn"); put("itemId", "reason-1")
+            put("summaryIndex", 0); put("delta", "Checking transport")
+        }
+        val part1Added = buildJsonObject {
+            put("threadId", "thread"); put("turnId", "turn"); put("itemId", "reason-1"); put("summaryIndex", 1)
+        }
+        val reason1 = buildJsonObject {
+            put("threadId", "thread"); put("turnId", "turn"); put("itemId", "reason-1")
+            put("summaryIndex", 1); put("delta", "Verifying cache")
+        }
+        var state = Timeline.notification(afterPlan, "item/reasoning/summaryTextDelta", reason0)
+        state = Timeline.notification(state, "item/reasoning/summaryPartAdded", part1Added)
+        state = Timeline.notification(state, "item/reasoning/summaryTextDelta", reason1)
+        val reasoning = state.items.single { it.id == "reason-1" }
+        assertEquals("reasoning", reasoning.kind)
+        assertEquals("Checking transport\nVerifying cache", reasoning.text)
+    }
 }

@@ -57,7 +57,7 @@ class CodexApi(val rpc: RpcClient) {
             }
             throw e
         }
-        check(metadata.id == id) { "服务端返回的会话标识不一致" }
+        if (metadata.id != id) throw ClientStateException(ClientErrorCode.THREAD_ID_MISMATCH, "Server returned mismatched thread ID")
         try {
             history(id, limit = 1)
         } catch (e: RpcException) {
@@ -73,7 +73,7 @@ class CodexApi(val rpc: RpcClient) {
     }
 
     suspend fun create(cwd: String): ThreadSummary {
-        require(cwd.startsWith('/')) { "请输入远端绝对目录" }
+        if (!cwd.startsWith('/')) throw ClientArgumentException(ClientErrorCode.INVALID_REMOTE_DIRECTORY, "Enter an absolute remote directory")
         return configuredThread(rpc.request("thread/start", buildJsonObject {
             put("cwd", cwd); put("sandbox", "workspace-write"); put("approvalPolicy", "on-request")
             put("approvalsReviewer", "user")
@@ -86,11 +86,52 @@ class CodexApi(val rpc: RpcClient) {
             mode?.let { put("collaborationMode", collaborationSettings(it, requireNotNull(model), effort)) }
             model?.let { put("model", it) }
             effort?.let { put("effort", it) }
-            putJsonArray("input") {
-                if (text.isNotBlank()) add(buildJsonObject { put("type", "text"); put("text", text) })
-                images.forEach { path -> add(buildJsonObject { put("type", "localImage"); put("path", path) }) }
-            }
+            put("input", userInput(text, images))
         }, mutation = true)
+    }
+
+    /** Official server-side queue. Older App Servers reject these experimental methods. */
+    suspend fun queueAdd(thread: String, text: String, images: List<String>, clientMessageId: String): JsonObject =
+        rpc.request("thread/queue/add", buildJsonObject {
+            put("threadId", thread); put("clientUserMessageId", clientMessageId)
+            put("input", userInput(text, images))
+        }, mutation = true)
+
+    suspend fun queueList(thread: String, cursor: String? = null, limit: Int = 100): Page<JsonObject> {
+        val result = rpc.request("thread/queue/list", buildJsonObject {
+            put("threadId", thread); cursor?.let { put("cursor", it) }; put("limit", JsonPrimitive(limit))
+        })
+        return Page(result.array("data").map { it.jsonObject }, result.string("nextCursor"))
+    }
+
+    suspend fun queueUpdate(thread: String, queuedId: String, text: String, images: List<String>): JsonObject =
+        rpc.request("thread/queue/update", buildJsonObject {
+            put("threadId", thread); put("queuedSubmissionId", queuedId)
+            put("input", userInput(text, images))
+        }, mutation = true)
+
+    suspend fun queueDelete(thread: String, queuedId: String): Boolean {
+        val result = rpc.request("thread/queue/delete", jsonObject("threadId" to str(thread), "queuedSubmissionId" to str(queuedId)), true)
+        return result["deleted"]?.jsonPrimitive?.booleanOrNull == true
+    }
+
+    suspend fun queueReorder(thread: String, queuedIds: List<String>) = rpc.request("thread/queue/reorder", buildJsonObject {
+        put("threadId", thread); putJsonArray("queuedSubmissionIds") { queuedIds.forEach(::add) }
+    }, mutation = true)
+
+    suspend fun queueStart(thread: String, queuedId: String? = null) = rpc.request("thread/queue/start", buildJsonObject {
+        put("threadId", thread); queuedId?.let { put("queuedSubmissionId", it) }
+    }, mutation = true)
+
+    suspend fun steer(thread: String, turn: String, text: String, images: List<String>, clientMessageId: String): JsonObject =
+        rpc.request("turn/steer", buildJsonObject {
+            put("threadId", thread); put("expectedTurnId", turn); put("clientUserMessageId", clientMessageId)
+            put("input", userInput(text, images))
+        }, mutation = true)
+
+    private fun userInput(text: String, images: List<String>) = buildJsonArray {
+        if (text.isNotBlank()) add(buildJsonObject { put("type", "text"); put("text", text) })
+        images.forEach { path -> add(buildJsonObject { put("type", "localImage"); put("path", path) }) }
     }
 
     suspend fun collaborationModes(): Set<String> = rpc.request("collaborationMode/list").array("data")
@@ -136,7 +177,9 @@ class CodexApi(val rpc: RpcClient) {
                 }
             }
             cursor = page.string("nextCursor")
-            check(cursor == null || cursors.add(cursor!!)) { "模型列表分页游标重复" }
+            if (cursor != null && !cursors.add(cursor!!)) {
+                throw ClientStateException(ClientErrorCode.REPEATED_MODEL_CURSOR, "Repeated model pagination cursor")
+            }
         } while (cursor != null)
         return result.distinctBy { it.id }
     }

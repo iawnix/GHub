@@ -11,11 +11,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.remotegpt.app.ConnectionStatus
+import dev.remotegpt.app.WorkspaceTab
 
 @Composable fun WorkbenchHeader(
     title: String, @Suppress("UNUSED_PARAMETER") host: String? = null, status: ConnectionStatus, conversation: Boolean,
@@ -23,6 +26,10 @@ import dev.remotegpt.app.ConnectionStatus
     scrollBehavior: TopAppBarScrollBehavior? = null,
     onMenu: (() -> Unit)? = null, onHosts: (() -> Unit)? = null, onAdd: (() -> Unit)? = null,
     onArchive: (() -> Unit)? = null, archiveLabel: String = tr(R.string.ui_archived),
+    archived: Boolean = false,
+    onSearch: (() -> Unit)? = null, searching: Boolean = false,
+    workspaceTab: WorkspaceTab? = null, hasConversation: Boolean = false,
+    onSelectTab: ((WorkspaceTab) -> Unit)? = null, onWorkspaceSheet: (() -> Unit)? = null,
     menuIcon: ImageVector = WorkbenchIcons.MoreHoriz, menuLabel: String = tr(R.string.ui_more_actions),
 ) {
     val heading: @Composable () -> Unit = {
@@ -39,12 +46,52 @@ import dev.remotegpt.app.ConnectionStatus
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         scrolledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
     )
+    val density = LocalDensity.current
+    val wideBar = with(density) { LocalWindowInfo.current.containerSize.width.toDp() >= 360.dp } && density.fontScale <= 1.35f
     if (large) MediumTopAppBar(modifier = Modifier.workbenchGlass(), title = { ProvideTextStyle(MaterialTheme.typography.headlineMedium, heading) }, expandedHeight = 128.dp, navigationIcon = back, colors = colors, scrollBehavior = scrollBehavior)
     else TopAppBar(modifier = Modifier.workbenchGlass(), title = { ProvideTextStyle(MaterialTheme.typography.titleMedium, heading) }, navigationIcon = back, actions = {
+        onSearch?.let { HeaderToggleAction(searching, it, WorkbenchIcons.Search, tr(R.string.ui_search_sessions)) }
         onAdd?.let { IconButton(onClick = it) { Icon(WorkbenchIcons.Add, tr(R.string.ui_add_project), Modifier.size(20.dp)) } }
-        onArchive?.let { IconButton(onClick = it) { Icon(WorkbenchIcons.Archive, archiveLabel, Modifier.size(20.dp)) } }
+        onArchive?.let { HeaderToggleAction(archived, it, WorkbenchIcons.Archive, archiveLabel) }
+        if (onSelectTab != null && workspaceTab != null) {
+            if (wideBar) {
+                if (workspaceTab != WorkspaceTab.SESSIONS) {
+                    IconButton(onClick = { onSelectTab(WorkspaceTab.SESSIONS) }) {
+                        Icon(WorkbenchIcons.ChatBubbleOutline, tr(if (hasConversation) R.string.ui_return_to_current_session else R.string.ui_sessions), Modifier.size(20.dp))
+                    }
+                }
+                if (workspaceTab != WorkspaceTab.FILES) {
+                    IconButton(onClick = { onSelectTab(WorkspaceTab.FILES) }) {
+                        Icon(WorkbenchIcons.FolderOpen, tr(R.string.ui_files), Modifier.size(20.dp))
+                    }
+                }
+                if (workspaceTab != WorkspaceTab.TERMINAL) {
+                    IconButton(onClick = { onSelectTab(WorkspaceTab.TERMINAL) }) {
+                        Icon(WorkbenchIcons.Terminal, tr(R.string.ui_terminal_290), Modifier.size(20.dp))
+                    }
+                }
+            } else if (onWorkspaceSheet != null) {
+                IconButton(onClick = onWorkspaceSheet) {
+                    Icon(WorkbenchIcons.Menu, tr(R.string.ui_switch_workspace), Modifier.size(20.dp))
+                }
+            }
+        }
         onMenu?.let { IconButton(onClick = it) { Icon(menuIcon, menuLabel, Modifier.size(20.dp)) } }
     }, colors = colors)
+}
+
+@Composable private fun HeaderToggleAction(checked: Boolean, onClick: () -> Unit, icon: ImageVector, label: String) {
+    IconToggleButton(
+        checked = checked,
+        onCheckedChange = { onClick() },
+        colors = IconButtonDefaults.iconToggleButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    ) {
+        Icon(icon, label, Modifier.size(20.dp))
+    }
 }
 
 /** Contextual actions, not navigation tabs. Kept below content and above system/IME insets. */

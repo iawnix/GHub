@@ -49,7 +49,7 @@ internal fun inputForInterruptedMessage(ws: HostWorkspace, thread: String, item:
 internal fun Draft.acceptedSubmission(input: MessageInput, turnId: String, clientMessageId: String, edited: Boolean): Draft {
     val submission = SubmittedInput(turnId, clientMessageId, input)
     return if (edited) copy(edit = null, lastSubmission = submission)
-    else Draft(model = model, effort = effort, mode = mode, lastSubmission = submission)
+    else copy(text = "", attachments = emptyList(), delivery = "draft", pendingId = null, lastSubmission = submission)
 }
 
 internal fun Draft.restored(): Draft {
@@ -59,5 +59,6 @@ internal fun Draft.restored(): Draft {
     return withInput(input().restoredAttachments()).copy(
         delivery = if (delivery == "sending") "uncertain" else delivery,
         edit = edit?.let { it.copy(input = it.input.restoredAttachments(), delivery = if (it.delivery == "sending") "uncertain" else it.delivery) },
+        queued = queued.map { it.copy(input = it.input.restoredAttachments()) },
     )
 }

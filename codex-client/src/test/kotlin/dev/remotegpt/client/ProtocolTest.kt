@@ -6,12 +6,13 @@ import kotlinx.serialization.json.*
 import org.junit.jupiter.api.Test
 import kotlin.test.*
 
-private class FixtureTransport : MessageTransport {
+private class FixtureTransport(override var isOpen: Boolean = true) : MessageTransport {
     val sent = mutableListOf<JsonObject>()
     lateinit var incoming: (String) -> Unit
     lateinit var disconnected: (Throwable?) -> Unit
     override suspend fun connect(onMessage: (String) -> Unit, onClosed: (Throwable?) -> Unit) { incoming = onMessage; disconnected = onClosed }
     override fun send(text: String) {
+        check(isOpen) { "Transport is closed" }
         val obj = wireJson.parseToJsonElement(text).jsonObject
         sent += obj
         if (obj.string("method") == "initialize") incoming(jsonObject("id" to obj["id"], "result" to buildJsonObject { put("userAgent", "codex/0.165.0") }).toString())
@@ -40,6 +41,27 @@ class ProtocolTest {
         }
         rpc.close()
     }
+    @Test fun `official queue and steer methods use v2 protocol names and preconditions`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect(); val api = CodexApi(rpc)
+        val queued = async { api.queueAdd("thread", "follow up", listOf("/tmp/a.png"), "client-1") }
+        yield()
+        val add = t.sent.last()
+        assertEquals("thread/queue/add", add.string("method"))
+        assertEquals("client-1", add.obj("params").string("clientUserMessageId"))
+        assertEquals("localImage", add.obj("params").array("input")[1].jsonObject.string("type"))
+        t.respond(add, buildJsonObject { putJsonObject("queuedSubmission") { put("id", "queued-1") } })
+        assertEquals("queued-1", queued.await().obj("queuedSubmission").string("id"))
+
+        val steering = async { api.steer("thread", "turn-1", "change direction", emptyList(), "client-2") }
+        yield()
+        val steer = t.sent.last()
+        assertEquals("turn/steer", steer.string("method"))
+        assertEquals("turn-1", steer.obj("params").string("expectedTurnId"))
+        t.respond(steer, buildJsonObject { put("turnId", "turn-1") })
+        steering.await()
+        rpc.close()
+    }
+
     @Test fun `goal mutations carry user origin and do not start a turn`() = runTest {
         val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect(); val api = CodexApi(rpc)
         val setting = async { api.setGoal("thread", "Ship it", budget = 10000) }; yield()
@@ -152,11 +174,49 @@ class ProtocolTest {
     }
 
     @Test fun `initialization uses official framing and opts into collaboration mode APIs`() = runTest {
-        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect()
+        val t = FixtureTransport(); val rpc = RpcClient(t, clientVersion = "0.1.59"); rpc.connect()
         assertEquals(listOf("initialize", "initialized"), t.sent.map { it.string("method") })
         assertFalse(t.sent.first().containsKey("jsonrpc"))
+        assertEquals("0.1.59", t.sent.first().obj("params").obj("clientInfo").string("version"))
         assertEquals(true, t.sent.first().obj("params").obj("capabilities")["experimentalApi"]?.jsonPrimitive?.boolean)
         rpc.close()
+    }
+
+    @Test fun `closed transport rejects approval and question submission before fencing`() = runTest {
+        val t = FixtureTransport(); val rpc = RpcClient(t); rpc.connect()
+        t.incoming("""{"id":"a-1","method":"item/commandExecution/requestApproval","params":{"threadId":"thread","command":"pwd"}}""")
+        val approval = (rpc.events.receive() as RpcEvent.Request).request
+        t.incoming("""{"id":"q-1","method":"item/tool/requestUserInput","params":$questionParams}""")
+        val question = (rpc.events.receive() as RpcEvent.Request).request
+        t.isOpen = false
+        assertFailsWith<IllegalStateException> { rpc.approve(approval, "accept") }
+        assertFalse(rpc.approvalSubmitted(approval))
+        assertFailsWith<IllegalStateException> { rpc.answerQuestions(question, mapOf("scope" to listOf("Structures"))) }
+        assertFalse(rpc.questionsSubmitted(question))
+        t.isOpen = true
+        rpc.approve(approval, "accept")
+        assertTrue(rpc.approvalSubmitted(approval))
+        rpc.close()
+    }
+
+    @Test fun `ssh prompt bridge cancels immediately when parent connection job is cancelled`() = runBlocking {
+        val parent = Job()
+        val entered = CompletableDeferred<Unit>()
+        val worker = async(Dispatchers.Default) {
+            runPromptInterruptibly(parent) {
+                entered.complete(Unit)
+                awaitCancellation()
+            }
+        }
+        entered.await()
+        parent.cancel()
+        withTimeout(2_000) {
+            assertFailsWith<CancellationException> { worker.await() }
+        }
+        val jumps = listOf(SshEndpoint("jump1.example", 22, "u"), SshEndpoint("jump2.example", 2222, "u"))
+        assertEquals("", hopRoutePrefix(jumps, 0))
+        assertEquals("jump1.example:22", hopRoutePrefix(jumps, 1))
+        assertEquals("jump1.example:22->jump2.example:2222", hopRoutePrefix(jumps, 2))
     }
 
     @Test fun `out of order results are matched to their requests`() = runTest {

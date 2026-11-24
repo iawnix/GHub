@@ -61,6 +61,8 @@ import java.util.UUID
     var showLegal by rememberSaveable { mutableStateOf(false) }
     var showProjectEditor by rememberSaveable { mutableStateOf(false) }
     var showWorkspace by rememberSaveable { mutableStateOf(false) }
+    var showSearch by rememberSaveable(state.activeHost) { mutableStateOf(false) }
+    val searchActive = showSearch || state.workspace.search.isNotEmpty()
     var bootstrapHost by rememberSaveable { mutableStateOf<String?>(null) }
     var handledNotification by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(state.notificationNavigationId) {
@@ -82,6 +84,7 @@ import java.util.UUID
     }
     var pendingDownload by rememberSaveable { mutableStateOf("") }
     var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
+    var cameraFilePath by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val snackbars = remember { SnackbarHostState() }
     var bottomControls by remember(state.activeHost, state.workspace.selectedThread, state.tab) { mutableIntStateOf(0) }
@@ -120,14 +123,19 @@ import java.util.UUID
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { uri -> vm.upload(uri, true) } }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { uri -> vm.upload(uri, false) } }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success -> if (success) cameraUri?.let { vm.upload(Uri.parse(it), true) } }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) cameraUri?.let { vm.upload(Uri.parse(it), true) }
+        else cameraFilePath?.let { path -> File(path).delete() }
+        cameraUri = null
+        cameraFilePath = null
+    }
     val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri -> if (uri != null && pendingDownload.isNotBlank()) vm.download(pendingDownload, uri) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { it?.let(vm::exportDiagnostics) }
 
     LaunchedEffect(state.message) { state.message?.let { snackbars.showSnackbar(it, withDismissAction = true); if (vm.state.value.message == it) vm.message(null) } }
     LaunchedEffect(state.archiveUndo?.token) {
         state.archiveUndo?.let { undo ->
-            val result = snackbars.showSnackbar(tr(R.string.ui_archived_353 , undo.title.take(40)), actionLabel = tr(R.string.ui_undo),
+            val result = snackbars.showSnackbar(tr(R.string.ui_archived_353 , undo.title.ifBlank { tr(R.string.ui_new_session) }.take(40)), actionLabel = tr(R.string.ui_undo),
                 withDismissAction = true, duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) vm.undoArchive(undo)
             else vm.dismissArchiveUndo(undo.token)
@@ -156,6 +164,14 @@ import java.util.UUID
         scrollBehavior.state.contentOffset = 0f
     }
     BackHandler(!showHome && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) { vm.navigateBack() }
+    BackHandler(showHome && (searchActive || state.workspace.archived) && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) {
+        if (searchActive) {
+            showSearch = false
+            vm.searchThreads("")
+        } else if (state.workspace.archived) {
+            vm.showArchived(false)
+        }
+    }
 
     // Pages are keyed by identity only, so data updates never restart a transition. A page
     // that is leaving renders only while its data still exists; otherwise it leaves blank.
@@ -207,7 +223,7 @@ import java.util.UUID
         topBar = {
             if (state.tab != WorkspaceTab.TERMINAL || state.profile == null) WorkbenchHeader(
                 title = when {
-                    showConversation -> state.thread?.title ?: tr(R.string.ui_sessions)
+                    showConversation -> state.thread?.title?.ifBlank { tr(R.string.ui_new_session) } ?: tr(R.string.ui_sessions)
                     state.tab == WorkspaceTab.FILES -> tr(R.string.ui_files)
                     state.tab == WorkspaceTab.TERMINAL -> tr(R.string.ui_terminal_290)
                     else -> state.profile?.name ?: tr(R.string.app_name)
@@ -223,6 +239,20 @@ import java.util.UUID
                 onAdd = if (showHome && state.profile != null) ({ showProjectEditor = true }) else null,
                 onArchive = if (showHome && state.profile != null) ({ vm.showArchived(!state.workspace.archived) }) else null,
                 archiveLabel = tr(if (state.workspace.archived) R.string.ui_back_to_recent else R.string.ui_archived),
+                archived = state.workspace.archived,
+                onSearch = if (showHome && state.profile != null) ({
+                    if (searchActive) {
+                        showSearch = false
+                        vm.searchThreads("")
+                    } else showSearch = true
+                }) else null,
+                searching = searchActive,
+                workspaceTab = state.tab,
+                hasConversation = state.workspace.selectedThread != null,
+                onSelectTab = if (!showHome && state.workspace.selectedProject?.startsWith('/') == true) ({ tab ->
+                    if (tab == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(tab)
+                }) else null,
+                onWorkspaceSheet = if (showConversation && state.workspace.selectedProject?.startsWith('/') == true) ({ showWorkspace = true }) else null,
                 backLabel = if (state.tab != WorkspaceTab.SESSIONS) tr(R.string.ui_back_to_session) else tr(R.string.ui_back_to_projects),
             )
         },
@@ -260,15 +290,24 @@ import java.util.UUID
                     if (view.endsWith(":home")) ProjectsScreen(state.workspace, onAdd = { showProjectEditor = true },
                         onRefresh = { vm.refreshThreads() }, onMore = { vm.refreshThreads(more = true) }, onContinue = vm::openThread,
                         onCreate = { vm.createThread(it) }, onProjectMenu = { menuProject = it },
-                        onArchive = { vm.archive(it, true, host = state.activeHost, allowUndo = true) })
+                        onArchive = { vm.archive(it, true, host = state.activeHost, allowUndo = true) },
+                        searching = searchActive, onSearchChange = vm::searchThreads,
+                        onCloseSearch = { showSearch = false; vm.searchThreads("") },
+                        onExitArchive = { vm.showArchived(false) })
                     else when (state.tab) {
                         WorkspaceTab.SESSIONS -> ChatScreen(state, vm, listening,
                             onImage = { imagePicker.launch(arrayOf("image/*")) }, onFile = { filePicker.launch(arrayOf("*/*")) },
                             onCamera = {
                                 val file = File(context.cacheDir, "shared/${UUID.randomUUID()}.jpg").apply { parentFile?.mkdirs() }
                                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+                                cameraFilePath = file.absolutePath
                                 cameraUri = uri.toString()
-                                runCatching { camera.launch(uri) }.onFailure { vm.message(tr(R.string.ui_no_camera_app_found_choose_an_image)) }
+                                runCatching { camera.launch(uri) }.onFailure {
+                                    file.delete()
+                                    cameraFilePath = null
+                                    cameraUri = null
+                                    vm.message(tr(R.string.ui_no_camera_app_found_choose_an_image))
+                                }
                             }, onVoice = { if (listening) speech.cancel() else microphone.launch(Manifest.permission.RECORD_AUDIO) }, optionsOpen = showConversationOptions, onOptionsChange = { showConversationOptions = it }, onBottomControls = { bottomControls = it })
                         WorkspaceTab.FILES -> FilesScreen(state, vm, onWorkspace = { showWorkspace = true }, snackbar = snackbars) { file -> pendingDownload = file.path; saveFile.launch(file.name) }
                         WorkspaceTab.TERMINAL -> TerminalsScreen(state, vm, onWorkspace = { showWorkspace = true }, onBottomControls = { bottomControls = it })
@@ -343,7 +382,7 @@ import java.util.UUID
 }
 
 @Composable fun TextPrompt(title: String, label: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit, validate: (String) -> Boolean = { it.isNotBlank() }) {
-    var value by rememberSaveable { mutableStateOf(initial) }
+    var value by rememberSaveable(title, initial) { mutableStateOf(initial) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)

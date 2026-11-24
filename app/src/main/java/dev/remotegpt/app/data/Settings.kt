@@ -8,8 +8,20 @@ import kotlinx.coroutines.flow.map
 import dev.remotegpt.app.ProjectProfile
 import dev.remotegpt.app.ResultReceipt
 import dev.remotegpt.app.TerminalPreferences
+import dev.remotegpt.client.HostProfile
+import dev.remotegpt.client.hopRoutePrefix
 import dev.remotegpt.client.wireJson
 import kotlinx.serialization.encodeToString
+
+internal fun hostKeyPreferenceName(host: String, port: Int, route: String = ""): String =
+    if (route.isBlank()) "host_key:${host}:${port}" else "host_key:${route}->${host}:${port}"
+
+internal fun profileHostKeyNames(profile: HostProfile): Set<String> {
+    val endpoints = profile.jumps + profile.endpoint
+    return endpoints.mapIndexed { index, endpoint ->
+        hostKeyPreferenceName(endpoint.host, endpoint.port, hopRoutePrefix(profile.jumps, index))
+    }.toSet()
+}
 
 private val Context.settingsStore by preferencesDataStore("settings")
 class Settings(private val context: Context) {
@@ -63,7 +75,26 @@ class Settings(private val context: Context) {
         val current = it[key] ?: emptySet()
         it[key] = if (enabled) current + host else current - host
     } }
-    private fun hostKey(host: String, port: Int) = stringPreferencesKey("host_key:${host}:${port}")
-    suspend fun fingerprint(host: String, port: Int): String? = context.settingsStore.data.first()[hostKey(host, port)]
-    suspend fun trust(host: String, port: Int, fingerprint: String) { context.settingsStore.edit { it[hostKey(host, port)] = fingerprint } }
+    private fun hostKey(host: String, port: Int, route: String = "") =
+        stringPreferencesKey(hostKeyPreferenceName(host, port, route))
+    suspend fun fingerprint(host: String, port: Int, route: String = ""): String? =
+        context.settingsStore.data.first()[hostKey(host, port, route)]
+    suspend fun trust(host: String, port: Int, fingerprint: String, route: String = "") {
+        context.settingsStore.edit { it[hostKey(host, port, route)] = fingerprint }
+    }
+    suspend fun removeHost(host: String, unusedHostKeys: Set<String> = emptySet()) {
+        context.settingsStore.edit { prefs ->
+            prefs.remove(stringPreferencesKey("results:${host}"))
+            prefs.remove(stringPreferencesKey("thread:${host}"))
+            prefs.remove(stringPreferencesKey("projects:${host}"))
+            prefs.remove(stringPreferencesKey("hidden_projects:${host}"))
+            prefs.remove(stringPreferencesKey("project:${host}"))
+            if (prefs[stringPreferencesKey("active_host")] == host) {
+                prefs.remove(stringPreferencesKey("active_host"))
+            }
+            val reconnectKey = stringSetPreferencesKey("reconnect_hosts")
+            prefs[reconnectKey]?.let { current -> prefs[reconnectKey] = current - host }
+            unusedHostKeys.forEach { name -> prefs.remove(stringPreferencesKey(name)) }
+        }
+    }
 }

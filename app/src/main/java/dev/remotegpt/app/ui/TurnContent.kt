@@ -36,12 +36,32 @@ import dev.remotegpt.client.*
     onLoadImage: (String) -> Unit = {},
     revision: MessageRevisionActions? = null,
 ) {
-    val answers = items.filter { it.kind == "agentMessage" && it.questions.isEmpty() }
-    val answer = answers.lastOrNull()
+    val answersIndexed = items.mapIndexedNotNull { index, item ->
+        if (item.kind in setOf("agentMessage", "plan") && item.questions.isEmpty()) index to item else null
+    }
+    val answer = answersIndexed.lastOrNull()?.second
     val files = items.filter { it.kind == "fileChange" }
     val images = items.filter { it.kind == "imageView" }
     val questions = items.filter { it.questions.isNotEmpty() }
-    val steps = items.filter { it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "fileChange" && it.kind != "imageView" }
+    val steps = items.filter {
+        it.kind != "userMessage" && it.kind != "agentMessage" && it.kind != "plan" &&
+            it.kind != "fileChange" && it.kind != "imageView" && it.questions.isEmpty()
+    }
+    val stepKeys = steps.mapTo(HashSet()) { it.identityKey }
+    val lastStepIndex = items.indexOfLast { it.identityKey in stepKeys }
+    @Composable fun RenderAnswer(item: TimelineItem) {
+        TimelineCard(
+            item,
+            preview,
+            assistantOutput = true,
+            assistantSyncing = syncing,
+            assistantConnected = connected,
+            assistantShowSync = item === answer && !active && steps.isEmpty(),
+            imagePreviews = imagePreviews,
+            imageLoading = imageLoading,
+            onLoadImage = onLoadImage,
+        )
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items.filter { it.kind == "userMessage" }.forEach { item ->
             key(item.identityKey) {
@@ -55,25 +75,25 @@ import dev.remotegpt.client.*
         questions.forEach { question ->
             key(question.identityKey) { TimelineCard(question, preview) }
         }
-        if (steps.isNotEmpty() || active) ExecutionSummary(steps, active, files.size, images.size, syncing, connected, preview, turnStatus,
-            imagePreviews, imageLoading, onLoadImage)
-        images.forEach { image ->
-            key(image.identityKey) {
-                TimelineCard(image, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+        if (lastStepIndex >= 0) {
+            answersIndexed.filter { (idx, _) -> idx < lastStepIndex }.forEach { (_, item) -> RenderAnswer(item) }
+            ExecutionSummary(steps, active, files.size, images.size, syncing, connected, preview, turnStatus,
+                imagePreviews, imageLoading, onLoadImage)
+            images.forEach { image ->
+                key(image.identityKey) {
+                    TimelineCard(image, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+                }
             }
-        }
-        answers.forEachIndexed { index, answer ->
-            TimelineCard(
-                answer,
-                preview,
-                assistantOutput = true,
-                assistantSyncing = syncing,
-                assistantConnected = connected,
-                assistantShowSync = index == answers.lastIndex && !active && steps.isEmpty(),
-                imagePreviews = imagePreviews,
-                imageLoading = imageLoading,
-                onLoadImage = onLoadImage,
-            )
+            answersIndexed.filter { (idx, _) -> idx > lastStepIndex }.forEach { (_, item) -> RenderAnswer(item) }
+        } else {
+            answersIndexed.forEach { (_, item) -> RenderAnswer(item) }
+            if (active) ExecutionSummary(steps, true, files.size, images.size, syncing, connected, preview, turnStatus,
+                imagePreviews, imageLoading, onLoadImage)
+            images.forEach { image ->
+                key(image.identityKey) {
+                    TimelineCard(image, preview, imagePreviews = imagePreviews, imageLoading = imageLoading, onLoadImage = onLoadImage)
+                }
+            }
         }
         if (files.isNotEmpty()) FileSummary(files, preview)
         if (answer?.complete == true && !active) ReplyActions(answer.text, completed = turnStatus == "completed")
@@ -99,7 +119,11 @@ import dev.remotegpt.client.*
                 ({ revision.onBegin(row.item.id) }) else null)
         }
         is ConversationRow.AssistantBlock -> TimelineCard(
-            row.item.copy(text = row.source), preview,
+            row.item.copy(
+                text = row.source,
+                imagePaths = if (row.isLastBlock) row.item.imagePaths else emptyList(),
+            ),
+            preview,
             assistantOutput = row.showSync && row.index == 0,
             assistantSyncing = syncing,
             assistantConnected = connected,
@@ -107,6 +131,7 @@ import dev.remotegpt.client.*
             imagePreviews = imagePreviews,
             imageLoading = imageLoading,
             onLoadImage = onLoadImage,
+            preparsedMarkdown = row.preparsed,
         )
         is ConversationRow.AssistantFallback -> TimelineCard(
             row.item, preview, assistantOutput = row.showSync, assistantSyncing = syncing,

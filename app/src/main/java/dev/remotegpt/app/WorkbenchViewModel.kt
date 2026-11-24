@@ -49,6 +49,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         var loadedAt = 0L
         var overviewReading = false
         var loadedReading = false
+        /** Null until the first queue probe; false means this older server lacks the API. */
+        var queueSupported: Boolean? = null
     }
     private val runtimes = mutableMapOf<String, Runtime>()
     /** SSH/SFTP remains usable while the optional Codex proxy is restarting. */
@@ -69,6 +71,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     private val persistence = mutableMapOf<String, Job>()
     private val imageLoads = mutableMapOf<String, Job>()
     private val terminalOpenings = mutableMapOf<Pair<String, String>, Job>()
+    private val queueDrains = mutableMapOf<Pair<String, String>, Job>()
+    private val terminalCounters = mutableMapOf<String, Int>()
     private val editorDrafts = EditorDraftStore(File(app.filesDir, "editor-drafts"))
     private val imageCache = RemoteImageCache(File(app.cacheDir, "remote-images"))
     private var imageGeneration = 0
@@ -125,6 +129,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         network.registerDefaultNetworkCallback(networkCallback)
+        launchStorage { StorageUsage.clearSharedTemporaryFiles(app, maxAgeMs = 86_400_000L) }
         launchStorage { app.settings.theme.collect { value -> mutable.update { it.copy(theme = value) } } }
         launchStorage { app.settings.terminal.collect { value -> mutable.update { it.copy(terminalPreferences = value) } } }
         launchStorage {
@@ -378,34 +383,50 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         conversationCheckpoints.cancelMatching { it.first == profile.id }
         trims.remove(profile.id)?.cancel()
         memoryBudgets.remove(profile.id)
+        terminalCounters.remove(profile.id)
         editorDrafts.write(profile.id, null)
         persistence.keys.filter { it.contains(":${profile.id}:") }.forEach { persistence.remove(it)?.cancel() }
         ui(profile.id).drafts.values.flatMap { it.attachments }.forEach { uploads.remove(it.id)?.cancel() }
+        val remainingHostKeys = state.value.profiles.filter { it.id != profile.id }.flatMapTo(HashSet(), ::profileHostKeyNames)
+        val unusedHostKeys = profileHostKeyNames(profile) - remainingHostKeys
         mutable.update { it.copy(workspaces = it.workspaces - profile.id) }
         cacheWrites.withLock {
             savedConversations.keys.removeAll { it.first == profile.id }
             dao.deleteWorkspace(profile.id)
         }
+        app.settings.removeHost(profile.id, unusedHostKeys)
         withContext(Dispatchers.IO) { (profile.jumps + profile.endpoint).forEach { app.secrets.remove(it.credentialId) } }
     }
 
     override suspend fun credential(id: String) = withContext(Dispatchers.IO) { app.secrets.read(id) }
-    override suspend fun verifyHostKey(host: String, port: Int, algorithm: String, fingerprint: String): Boolean = promptMutex.withLock {
-        val previous = app.settings.fingerprint(host, port)
+    override suspend fun verifyHostKey(host: String, port: Int, algorithm: String, fingerprint: String): Boolean =
+        verifyHostKey("", host, port, algorithm, fingerprint)
+    override suspend fun verifyHostKey(route: String, host: String, port: Int, algorithm: String, fingerprint: String): Boolean = promptMutex.withLock {
+        val previous = app.settings.fingerprint(host, port, route)
         if (previous == fingerprint) return@withLock true
         val answer = CompletableDeferred<Boolean>()
-        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = ConnectionPrompt.HostKey(HostKeyChallenge(host, port, algorithm, fingerprint, previous), answer)) } }
+        val entry = ConnectionPrompt.HostKey(HostKeyChallenge(host, port, algorithm, fingerprint, previous), answer)
+        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = entry) } }
         try {
             val trusted = withTimeout(110_000) { answer.await() }
-            if (trusted) app.settings.trust(host, port, fingerprint)
+            if (trusted) app.settings.trust(host, port, fingerprint, route)
             trusted
-        } finally { withContext(NonCancellable + Dispatchers.Main) { mutable.update { it.copy(prompt = null) } } }
+        } finally {
+            withContext(NonCancellable + Dispatchers.Main) {
+                mutable.update { if (it.prompt === entry) it.copy(prompt = null) else it }
+            }
+        }
     }
     override suspend fun keyboard(prompt: KeyboardPrompt): List<String> = promptMutex.withLock {
         val answer = CompletableDeferred<List<String>>()
-        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = ConnectionPrompt.Keyboard(prompt, answer)) } }
+        val entry = ConnectionPrompt.Keyboard(prompt, answer)
+        withContext(Dispatchers.Main) { mutable.update { it.copy(prompt = entry) } }
         try { withTimeout(110_000) { answer.await() } }
-        finally { withContext(NonCancellable + Dispatchers.Main) { mutable.update { it.copy(prompt = null) } } }
+        finally {
+            withContext(NonCancellable + Dispatchers.Main) {
+                mutable.update { if (it.prompt === entry) it.copy(prompt = null) else it }
+            }
+        }
     }
 
     fun connect(host: String? = state.value.activeHost, bootstrap: Boolean = false) {
@@ -457,7 +478,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 }, onTraffic = { direction, bytes ->
                     syncTimings.increment("rpc_${direction}_messages")
                     syncTimings.increment("rpc_${direction}_bytes", bytes)
-                })
+                }, clientVersion = BuildConfig.VERSION_NAME)
                 val initialized = rpc.connect()
                 val userAgent = initialized.string("userAgent")
                 if (!CodexCompatibility.isSupported(userAgent)) throw UnsupportedServer(tr(R.string.ui_the_socket_did_not_report_a_supported , userAgent ?: tr(R.string.ui_unknown), CodexCompatibility.MINIMUM_VERSION))
@@ -553,6 +574,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun releaseConnection(host: String) {
         terminalOpenings.keys.filter { it.first == host }.toList().forEach { terminalOpenings.remove(it)?.cancel() }
+        terminalCounters.remove(host)
         ui(host).terminals.forEach { it.session.finishIfRunning() }
         imageLoads.keys.filter { it.startsWith("$host:") }.toList().forEach { imageLoads.remove(it)?.cancel() }
         connectionEpochs[host] = UUID.randomUUID().toString()
@@ -766,6 +788,9 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                         rt.syncWake.trySend(Unit)
                     }
+                    if (event.method == "thread/queue/changed" && thread != null) {
+                        viewModelScope.launch { syncRemoteQueue(host, rt, thread) }
+                    }
                     if (event.method == "serverRequest/resolved") update(host) { ws -> ws.copy(approvals = ws.approvals.filterNot { it.request.id == event.params["requestId"] },
                         pendingQuestions = ws.pendingQuestions.filterNot { it.request.id == event.params["requestId"] }) }
                     if (event.method == "thread/started") {
@@ -823,12 +848,15 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                                 renderPending[host] = it to SystemClock.elapsedRealtime()
                             }
                         }
-                        if (event.method == "turn/completed" && ui(host).selectedThread == thread)
-                            viewModelScope.launch {
+                        if (event.method == "turn/completed") {
+                            if (ui(host).selectedThread == thread) viewModelScope.launch {
                                 try { synchronizeHistory(host, thread, rt) }
                                 catch (e: CancellationException) { throw e }
                                 catch (e: Exception) { record("history_sync_failed", e.javaClass.simpleName) }
                             }
+                            drainQueued(host, rt, thread)
+                            viewModelScope.launch { syncRemoteQueue(host, rt, thread) }
+                        }
                     }
                 }
             }
@@ -838,7 +866,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 is RpcEvent.Request -> publication.flush()
                 is RpcEvent.Notification -> when (event.method) {
                     "item/started", "item/completed", "turn/started", "turn/completed",
-                    "thread/status/changed", "serverRequest/resolved", "error" -> publication.flush()
+                    "thread/status/changed", "thread/queue/changed", "serverRequest/resolved", "error" -> publication.flush()
                 }
                 else -> Unit
             }
@@ -870,6 +898,14 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         is UncertainDelivery -> tr(R.string.ui_uncertain_delivery)
         is ThreadUnavailable -> tr(R.string.ui_thread_unavailable_detail)
         is FileConflict -> tr(R.string.ui_the_file_changed_after_you_opened_it)
+        is HostKeyRejected -> tr(R.string.ui_host_key_rejected_error)
+        is DaemonNotRunning -> tr(R.string.ui_daemon_not_running_error)
+        is RemoteCommandFailed -> tr(R.string.ui_remote_command_failed_error)
+        is RemoteCommandTimeout -> tr(R.string.ui_remote_command_timeout_error)
+        is EventBacklog -> tr(R.string.ui_output_processing_is_behind_restoring_the_session)
+        is ProxyClosed -> if (e.heartbeat) tr(R.string.ui_connection_heartbeat_timed_out_reconnecting) else tr(R.string.ui_the_remote_proxy_closed_reconnecting)
+        is ClientArgumentException -> clientErrorText(e.code)
+        is ClientStateException -> clientErrorText(e.code)
         is UnsupportedServer, is RpcException -> e.message.orEmpty()
         else -> when {
             isOversizedCache(e) -> tr(R.string.ui_local_session_cache_was_too_large_and)
@@ -878,6 +914,27 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             else -> e.message?.take(240) ?: tr(R.string.ui_operation_failed_check_the_connection_and_try)
         }
     }
+
+    private fun clientErrorText(code: ClientErrorCode): String = tr(when (code) {
+        ClientErrorCode.INVALID_SSH_ENDPOINT -> R.string.ui_enter_a_host_username_and_valid_port
+        ClientErrorCode.MISSING_PRIVATE_KEY -> R.string.ui_import_private_key
+        ClientErrorCode.PROXY_CONNECT_FAILED -> R.string.ui_proxy_connect_failed_error
+        ClientErrorCode.CONNECTION_CLOSED -> R.string.ui_you_can_continue_after_reconnecting_your_draft
+        ClientErrorCode.REQUEST_EXPIRED -> R.string.ui_request_expired_error
+        ClientErrorCode.UNSUPPORTED_APPROVAL, ClientErrorCode.UNSUPPORTED_QUESTION -> R.string.ui_unsupported_request_error
+        ClientErrorCode.APPROVAL_ALREADY_SUBMITTED, ClientErrorCode.ANSWER_ALREADY_SUBMITTED -> R.string.ui_submitted_waiting_for_server_confirmation
+        ClientErrorCode.INCOMPLETE_ANSWERS -> R.string.ui_answer_every_question_error
+        ClientErrorCode.INVALID_OPTION_ANSWER -> R.string.ui_select_provided_option_error
+        ClientErrorCode.THREAD_ID_MISMATCH -> R.string.ui_thread_id_mismatch_error
+        ClientErrorCode.INVALID_REMOTE_DIRECTORY -> R.string.ui_enter_an_absolute_remote_directory
+        ClientErrorCode.PATH_OCCUPIED_BY_FILE -> R.string.ui_path_occupied_by_file_error
+        ClientErrorCode.TEXT_TOO_LARGE_TO_EDIT -> R.string.ui_text_too_large_to_edit_error
+        ClientErrorCode.NOT_EDITABLE_TEXT -> R.string.ui_not_editable_text_error
+        ClientErrorCode.UNSUPPORTED_TEXT_ENCODING -> R.string.ui_unsupported_text_encoding_error
+        ClientErrorCode.TEXT_EXCEEDS_SAVE_LIMIT -> R.string.ui_text_exceeds_save_limit_error
+        ClientErrorCode.PREVIEW_TOO_LARGE -> R.string.ui_preview_too_large_error
+        ClientErrorCode.REPEATED_MODEL_CURSOR -> R.string.ui_operation_failed_check_the_connection_and_try
+    })
 
     /** File and terminal actions use SSH independently from the Codex proxy. */
     private suspend fun waitForFileRuntime(host: String): FileRuntime? {
@@ -1149,6 +1206,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                             activeTurn = if (status == "inProgress") turnId else null, status = status, stateRevision = conversation.stateRevision + 1)) else ws.conversations)
                 }
                 if (receipt != before) persistResults(host)
+                if (status == "completed" && changed) drainQueued(host, rt, id)
                 // Full message history is fetched only for the selected session,
                 // including when polling repairs a missed completion notification.
                 if (ui(host).selectedThread == id && !ui(host).loadingHistory && !rt.sessions.isCurrent(id))
@@ -1180,7 +1238,30 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         persistResults(host)
     }
 
-    fun showArchived(value: Boolean) { state.value.activeHost?.let { id -> update(id) { it.copy(archived = value, search = "") }; refreshThreads(id) } }
+    private val searchJobs = HashMap<String, Job>()
+
+    fun showArchived(value: Boolean) {
+        state.value.activeHost?.let { id ->
+            searchJobs.remove(id)?.cancel()
+            update(id) { it.copy(archived = value, search = "") }
+            refreshThreads(id)
+        }
+    }
+
+    fun searchThreads(query: String) {
+        val host = state.value.activeHost ?: return
+        if (ui(host).search == query) return
+        update(host) { it.copy(search = query) }
+        searchJobs.remove(host)?.cancel()
+        if (query.isBlank()) {
+            refreshThreads(host)
+        } else {
+            searchJobs[host] = viewModelScope.launch {
+                delay(280)
+                refreshThreads(host)
+            }
+        }
+    }
     fun createThread(cwd: String) = viewModelScope.launch {
         val host = state.value.activeHost ?: return@launch
         val root = projectPath(cwd.trim())
@@ -1343,6 +1424,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } else rt.sessions.dirty(thread) // Archived threads have no live subscription.
             synchronizeHistory(host, thread, rt)
+            syncRemoteQueue(host, rt, thread)
             viewModelScope.launch { refreshGoal(host, thread, rt) }
             attentionRestored(host, thread, rt)
             if (runtimes[host] === rt) update(host) { it.copy(threadProblems = it.threadProblems - thread) }
@@ -1370,7 +1452,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             val saved = listOfNotNull(cached, dao.conversation(host, thread)?.let { wireJson.decodeFromString<Conversation>(it.json) })
             val draft = dao.draft(host, thread)?.let { wireJson.decodeFromString<Draft>(it.json) } ?: Draft()
             saved.all { it.items.isEmpty() && it.activeTurn == null && it.nextCursor == null } &&
-                draft.text.isEmpty() && draft.attachments.isEmpty() && draft.delivery == "draft" && draft.pendingId == null
+                draft.text.isEmpty() && draft.attachments.isEmpty() && draft.delivery == "draft" && draft.pendingId == null && draft.queued.isEmpty()
         }.getOrElse { error ->
             if (error is CancellationException) throw error
             message(tr(R.string.ui_cannot_verify_that_the_local_record_is))
@@ -1668,6 +1750,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun send() = perform { host, rt ->
         val thread = ui(host).selectedThread ?: return@perform
+        if (ui(host).conversations[thread]?.activeTurn != null) {
+            queueDraft(host, rt, thread)
+            return@perform
+        }
         val draft = ui(host).drafts[thread] ?: return@perform
         if (draft.delivery != "draft" || draft.edit != null) return@perform
         val command = sessionCommand(draft.text)
@@ -1691,6 +1777,190 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         sendInput(host, rt, edited = false)
     }
     fun resendInterruptedInput() = perform { host, rt -> sendInput(host, rt, edited = true) }
+
+    /** Inject the current composer input into the active turn through the official API. */
+    fun steer() = perform { host, rt ->
+        val thread = ui(host).selectedThread ?: return@perform
+        val turn = ui(host).conversations[thread]?.activeTurn ?: return@perform
+        val draft = ui(host).drafts[thread] ?: return@perform
+        if (draft.delivery != "draft" || draft.edit != null) return@perform
+        val input = draft.input()
+        if (input.attachments.any { it.state != "ready" } || (input.text.isBlank() && input.attachments.isEmpty())) return@perform
+        if (sessionCommand(input.text) != null) { message(tr(R.string.ui_steer_commands_not_supported)); return@perform }
+        val messageId = UUID.randomUUID().toString()
+        val text = (listOf(input.text) + input.attachments.filterNot { it.image }.map { tr(R.string.ui_attachment, it.remotePath) })
+            .filter { it.isNotBlank() }.joinToString("\n\n")
+        val images = input.attachments.filter { it.image }.map { it.remotePath }
+        updateDraft(host, thread) { it.copy(delivery = "sending", pendingId = messageId) }
+        try {
+            flushDraft(host, thread)
+            val response = rt.api.steer(thread, turn, text, images, messageId)
+            val acceptedTurn = response.string("turnId") ?: turn
+            updateDraft(host, thread) { it.acceptedSubmission(input, acceptedTurn, messageId, edited = false) }
+            flushDraft(host, thread)
+        } catch (e: Exception) {
+            updateDraft(host, thread) { it.copy(delivery = if (e is UncertainDelivery) "uncertain" else "draft",
+                pendingId = messageId.takeIf { e is UncertainDelivery }) }
+            withContext(NonCancellable) { flushDraft(host, thread) }
+            if (e is RpcException && e.code == -32601) {
+                message(tr(R.string.ui_steer_unavailable)); return@perform
+            }
+            throw e
+        }
+    }
+
+    /** Add the current composer contents to the local FIFO while a turn is running. */
+    private suspend fun queueDraft(host: String, rt: Runtime, thread: String) {
+        val draft = ui(host).drafts[thread] ?: return
+        if (draft.delivery != "draft" || draft.edit != null) return
+        val input = draft.input()
+        if (input.attachments.any { it.state != "ready" } || (input.text.isBlank() && input.attachments.isEmpty())) return
+        if (sessionCommand(input.text) != null) {
+            message(tr(R.string.ui_queue_commands_not_supported)); return
+        }
+        val itemId = UUID.randomUUID().toString()
+        val text = (listOf(input.text) + input.attachments.filterNot { it.image }.map { tr(R.string.ui_attachment, it.remotePath) })
+            .filter { it.isNotBlank() }.joinToString("\n\n")
+        val images = input.attachments.filter { it.image }.map { it.remotePath }
+        val remoteId = if (rt.queueSupported != false) {
+            try {
+                val response = rt.api.queueAdd(thread, text, images, itemId)
+                rt.queueSupported = true
+                response.obj("queuedSubmission").string("id")
+                    ?: throw IllegalStateException("Queued submission has no ID")
+            } catch (e: RpcException) {
+                if (!queueApiUnavailable(e)) throw e
+                rt.queueSupported = false
+                null
+            }
+        } else null
+        val item = QueuedInput(itemId, input, remoteId = remoteId)
+        updateDraft(host, thread) { current ->
+            current.copy(text = "", attachments = emptyList(), mode = null, queued = current.queued + item)
+        }
+        message(tr(R.string.ui_message_queued))
+    }
+
+    fun removeQueuedInput(id: String) {
+        val localHost = state.value.activeHost
+        val localThread = localHost?.let { ui(it).selectedThread }
+        val localItem = if (localHost != null && localThread != null) ui(localHost).drafts[localThread]?.queued?.firstOrNull { it.id == id } else null
+        if (localItem?.remoteId == null && localItem != null) {
+            updateDraft(localHost!!, localThread!!) { draft -> draft.copy(queued = draft.queued.filterNot { it.id == id }) }
+            return
+        }
+        perform { host, rt ->
+            val thread = ui(host).selectedThread ?: return@perform
+            val item = ui(host).drafts[thread]?.queued?.firstOrNull { it.id == id } ?: return@perform
+            item.remoteId?.let { rt.api.queueDelete(thread, it) }
+            updateDraft(host, thread) { draft -> draft.copy(queued = draft.queued.filterNot { it.id == id }) }
+        }
+    }
+
+    fun editQueuedInput(id: String) {
+        val localHost = state.value.activeHost
+        val localThread = localHost?.let { ui(it).selectedThread }
+        val localDraft = if (localHost != null && localThread != null) ui(localHost).drafts[localThread] else null
+        val localItem = localDraft?.queued?.firstOrNull { it.id == id }
+        if (localItem?.remoteId == null && localItem != null) {
+            if (localDraft.delivery != "draft" || localDraft.edit != null || localDraft.text.isNotBlank() || localDraft.attachments.isNotEmpty()) return
+            updateDraft(localHost!!, localThread!!) { current -> current.copy(
+                text = localItem.input.text, attachments = localItem.input.attachments, model = localItem.input.model,
+                effort = localItem.input.effort, mode = localItem.input.mode,
+                queued = current.queued.filterNot { it.id == id })
+            }
+            return
+        }
+        perform { host, rt ->
+            val thread = ui(host).selectedThread ?: return@perform
+            val draft = ui(host).drafts[thread] ?: return@perform
+            if (draft.delivery != "draft" || draft.edit != null || draft.text.isNotBlank() || draft.attachments.isNotEmpty()) return@perform
+            val item = draft.queued.firstOrNull { it.id == id } ?: return@perform
+            item.remoteId?.let { rt.api.queueDelete(thread, it) }
+            updateDraft(host, thread) { current -> current.copy(
+                text = item.input.text, attachments = item.input.attachments, model = item.input.model,
+                effort = item.input.effort, mode = item.input.mode,
+                queued = current.queued.filterNot { it.id == id })
+            }
+        }
+    }
+
+    private fun queueApiUnavailable(error: RpcException): Boolean =
+        error.code == -32601 || error.message.orEmpty().contains("experimental", ignoreCase = true) ||
+            error.message.orEmpty().contains("queue", ignoreCase = true) &&
+            error.message.orEmpty().contains("unavailable", ignoreCase = true)
+
+    private fun parseQueuedInput(raw: JsonObject): QueuedInput? {
+        val id = raw.string("id") ?: return null
+        val elements = raw.array("input")
+        val text = elements.mapNotNull { element ->
+            element.jsonObject.takeIf { it.string("type") == "text" }?.string("text")
+        }.joinToString("\n\n")
+        val attachments = elements.mapIndexedNotNull { index, element ->
+            val input = element.jsonObject
+            if (input.string("type") != "localImage") return@mapIndexedNotNull null
+            val path = input.string("path") ?: return@mapIndexedNotNull null
+            Attachment("remote:$id:$index", path.substringAfterLast('/'), image = true, remotePath = path, state = "ready")
+        }
+        return QueuedInput(id, MessageInput(text, attachments), remoteId = id)
+    }
+
+    private suspend fun syncRemoteQueue(host: String, rt: Runtime, thread: String) {
+        if (rt.queueSupported == false || runtimes[host] !== rt || !rt.rpc.isConnected) return
+        try {
+            val remote = mutableListOf<QueuedInput>()
+            var cursor: String? = null
+            do {
+                val page = rt.api.queueList(thread, cursor)
+                rt.queueSupported = true
+                page.items.mapNotNullTo(remote) { it.obj("queuedSubmission").takeIf { obj -> obj.isNotEmpty() }?.let(::parseQueuedInput) ?: parseQueuedInput(it) }
+                cursor = page.nextCursor
+            } while (cursor != null)
+            updateDraft(host, thread) { draft -> draft.copy(queued = remote + draft.queued.filter { it.remoteId == null }) }
+            flushDraft(host, thread)
+        } catch (e: RpcException) {
+            if (queueApiUnavailable(e)) rt.queueSupported = false else record("queue_sync_failed", e.javaClass.simpleName)
+        }
+    }
+
+    /** Send the next queued item after a normal turn completion. */
+    private fun drainQueued(host: String, rt: Runtime, thread: String) {
+        val key = host to thread
+        if (queueDrains[key]?.isActive == true) return
+        if (ui(host).conversations[thread]?.activeTurn != null || thread in ui(host).stoppingTurns) return
+        val draft = ui(host).drafts[thread] ?: return
+        // Preserve anything the user started typing after queueing. It remains a
+        // normal draft and can be queued or sent once the current queue drains.
+        if (draft.delivery != "draft" || draft.edit != null || draft.text.isNotBlank() || draft.attachments.isNotEmpty()) return
+        if (draft.queued.any { it.remoteId != null }) return
+        val item = draft.queued.firstOrNull() ?: return
+        updateDraft(host, thread) { current -> current.copy(
+            text = item.input.text, attachments = item.input.attachments,
+            model = item.input.model, effort = item.input.effort, mode = item.input.mode,
+            queued = current.queued.drop(1))
+        }
+        val job = viewModelScope.launch {
+            try {
+                sendInput(host, rt, edited = false)
+                val current = ui(host).drafts[thread]
+                if (current?.delivery == "draft" && current.input() == item.input) {
+                    updateDraft(host, thread) { draft -> draft.copy(text = "", attachments = emptyList(), queued = listOf(item) + draft.queued) }
+                    flushDraft(host, thread)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // sendInput restores the composer draft. Put the failed item back so
+                // reconnecting or editing can retry it without losing the queue.
+                updateDraft(host, thread) { current -> current.copy(text = "", attachments = emptyList(), delivery = "draft",
+                    pendingId = null, queued = listOf(item.copy(error = errorText(e))) + current.queued) }
+                flushDraft(host, thread)
+            } finally {
+                queueDrains.remove(key)
+            }
+        }
+        queueDrains[key] = job
+    }
 
     private suspend fun sendInput(host: String, rt: Runtime, edited: Boolean) {
         val thread = ui(host).selectedThread ?: return
@@ -1725,8 +1995,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             // The original/edit input and its delivery fence reach disk before any mutation.
             flushDraft(host, thread)
             if (edited) {
-                for (attachment in input.attachments) {
-                    require(rt.files.readableFile(attachment.remotePath)) { tr(R.string.ui_edit_attachment_unavailable, attachment.name) }
+                val missingPath = rt.files.readableFiles(input.attachments.map { it.remotePath })
+                if (missingPath != null) {
+                    val missingName = input.attachments.firstOrNull { it.remotePath == missingPath }?.name ?: missingPath
+                    throw IllegalArgumentException(tr(R.string.ui_edit_attachment_unavailable, missingName))
                 }
                 val latest = rt.api.latestTurnStatus(thread)
                 rt.rpc.awaitEventsApplied()
@@ -1810,8 +2082,12 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         if (ui(host).connection != ConnectionStatus.ONLINE || !rt.rpc.isConnected) return
         try {
             rt.rpc.approve(request, decision)
-            update(host) { it.copy(approvals = it.approvals.map { p -> if (p.request.key == request.key) p.copy(submitted = true) else p }) }
         } catch (e: Exception) { message(errorText(e)) }
+        finally {
+            if (rt.rpc.approvalSubmitted(request)) update(host) {
+                it.copy(approvals = it.approvals.map { p -> if (p.request.key == request.key) p.copy(submitted = true) else p })
+            }
+        }
     }
 
     fun answerQuestions(request: ServerRequest, answers: Map<String, List<String>>) {
@@ -1995,7 +2271,9 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             override fun onCopyTextToClipboard(session: TerminalSession, text: String?) { mutable.update { it.copy(clipboardRequest = ClipboardRequest(text.orEmpty())) } }
             override fun onPasteTextFromClipboard(session: TerminalSession?) { mutable.update { it.copy(clipboardRequest = ClipboardRequest(null, session)) } }
         })
-        val tab = TerminalTab(UUID.randomUUID().toString(), tr(R.string.ui_terminal , ui(host).terminals.size + 1), session, project)
+        val nextNumber = (terminalCounters[host] ?: 0) + 1
+        terminalCounters[host] = nextNumber
+        val tab = TerminalTab(UUID.randomUUID().toString(), tr(R.string.ui_terminal , nextNumber), session, project)
         update(host) { it.copy(terminals = it.terminals + tab,
             selectedTerminal = if (it.selectedProject == project) tab.id else it.selectedTerminal,
             projectTerminals = it.projectTerminals + (project to tab.id)) }
@@ -2092,7 +2370,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             ws.copy(imagePreviews = emptyMap(), imageLoading = emptySet())
         }) }
         clearingImages = true
-        try { imageCache.clear() } finally { clearingImages = false }
+        try {
+            imageCache.clear()
+            StorageUsage.clearSharedTemporaryFiles(app)
+        } finally { clearingImages = false }
         cacheWrites.withLock {
             // Invalidate at the actual clear boundary, after any suspended image
             // cleanup and previous body IO, so neither can reinstall an old base.

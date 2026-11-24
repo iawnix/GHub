@@ -101,8 +101,13 @@ import kotlinx.coroutines.*
     val endpoint = if (section == HostEditorSection.JUMP || section == HostEditorSection.JUMP_AUTH)
         profile.jumps.firstOrNull { it.credentialId == editor.jumpId } else profile.endpoint
     fun changeEndpoint(value: SshEndpoint) {
-        editor.updateProfile(if (value.credentialId == profile.endpoint.credentialId) profile.copy(endpoint = value)
-            else profile.copy(jumps = profile.jumps.map { if (it.credentialId == value.credentialId) value else it }))
+        // Compose callbacks can outlive the frame that created them. Always
+        // apply endpoint edits to the latest draft so a concurrent name or
+        // jump-host edit cannot be overwritten by a stale profile snapshot.
+        editor.profile?.let { current ->
+            editor.updateProfile(if (value.credentialId == current.endpoint.credentialId) current.copy(endpoint = value)
+                else current.copy(jumps = current.jumps.map { if (it.credentialId == value.credentialId) value else it }))
+        }
     }
     fun save() {
         val issue = validateHostDraft(profile, editor.credentials)
@@ -214,7 +219,9 @@ import kotlinx.coroutines.*
                         ServerSettingRow(tr(R.string.ui_authentication), WorkbenchIcons.Key,
                             authenticationSummary(hop, editor.credentials[hop.credentialId], editor.loading), enabled = !saving) { navigate(HostEditorSection.JUMP_AUTH) }
                         TextButton(onClick = {
-                            editor.updateProfile(profile.copy(jumps = profile.jumps.filterNot { it.credentialId == hop.credentialId }))
+                            editor.profile?.let { current ->
+                                editor.updateProfile(current.copy(jumps = current.jumps.filterNot { it.credentialId == hop.credentialId }))
+                            }
                             back()
                         }, enabled = !saving) { Text(tr(R.string.ui_remove_jump_host), color = MaterialTheme.colorScheme.error) }
                     }
