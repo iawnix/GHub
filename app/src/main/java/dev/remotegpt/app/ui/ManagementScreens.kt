@@ -99,7 +99,6 @@ import java.util.Locale
                         PreferenceRow(tr(R.string.ui_servers), WorkbenchIcons.Dns, tr(R.string.ui_servers_189 , hostCount), description = tr(R.string.ui_ssh_connections_keys_and_jump_hosts), onClick = onHosts)
                         GroupDivider()
                         PreferenceRow(tr(R.string.ui_keep_connected_in_background), WorkbenchIcons.Connected,
-                            description = if (backgroundKeepAlive) tr(R.string.ui_show_an_ongoing_notification_and_keep_ssh) else tr(R.string.ui_reconnect_when_needed_to_save_battery),
                             trailing = { Switch(checked = backgroundKeepAlive, onCheckedChange = onKeepAlive) })
                     }
                 }
