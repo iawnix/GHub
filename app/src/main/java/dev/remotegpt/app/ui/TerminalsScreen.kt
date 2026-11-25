@@ -280,7 +280,7 @@ import kotlin.math.roundToInt
             items(terminals, key = { it.id }) { tab ->
                 ListItem(headlineContent = { Text(tab.name) }, supportingContent = { if (!tab.session.isRunning()) Text(tr(R.string.terminal_ended)) },
                     leadingContent = { Icon(if (tab.id == selected?.id) WorkbenchIcons.Check else WorkbenchIcons.Terminal, null,
-                        tint = if (tab.id == selected?.id) MaterialTheme.colorScheme.onSurfaceVariant else functionalIconColor(WorkbenchIcons.Terminal)) },
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailingContent = { IconButton(onClick = { closing = tab.id }) { Icon(WorkbenchIcons.Close, tr(R.string.ui_close_330, tab.name), Modifier.size(20.dp)) } },
                     modifier = Modifier.clickable { onSelect(tab.id); switching = false }.semantics { this.selected = tab.id == selected?.id })
             }

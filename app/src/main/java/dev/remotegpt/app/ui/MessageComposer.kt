@@ -317,9 +317,9 @@ import dev.remotegpt.client.sessionCommandSuggestions
     if (optionsMenu) ModalBottomSheet(onDismissRequest = { optionsMenu = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(tr(R.string.ui_message_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-            SheetAction(tr(R.string.ui_choose_model), WorkbenchIcons.AutoAwesome,
+            SheetAction(tr(R.string.ui_choose_model), WorkbenchIcons.Model,
                 supporting = currentModel?.name ?: model) { optionsMenu = false; modelsMenu = true }
-            SheetAction(tr(R.string.ui_reasoning_level), WorkbenchIcons.Checklist,
+            SheetAction(tr(R.string.ui_reasoning_level), WorkbenchIcons.Reasoning,
                 supporting = effortLabel(effort)) { optionsMenu = false; effortMenu = true }
         }
     }
@@ -336,7 +336,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
                 supporting = tr(if (inputDraft.mode == "plan") R.string.ui_mode_plan else R.string.ui_mode_execute)) {
                 attachmentsMenu = false; onOpenModeMenu()
             }
-            SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.AutoAwesome, enabled = online && !archived && edit == null) {
+            SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.Goal, enabled = online && !archived && edit == null) {
                 attachmentsMenu = false; onGoal()
             }
             SheetAction(tr(R.string.ui_permissions), WorkbenchIcons.Key, enabled = online && !archived && edit == null,

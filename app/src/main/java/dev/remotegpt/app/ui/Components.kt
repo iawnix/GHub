@@ -66,15 +66,14 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
             tonalElevation = 3.dp,
             shadowElevation = 4.dp,
         ) {
-            Column(Modifier.padding(start = 12.dp, top = 10.dp, end = 8.dp, bottom = if (data.visuals.actionLabel != null) 4.dp else 10.dp)) {
+            Column(Modifier.padding(start = 16.dp, top = 10.dp, end = 8.dp, bottom = if (data.visuals.actionLabel != null) 4.dp else 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (queued) WorkbenchIcons.OutputPending else WorkbenchIcons.Description,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.inverseOnSurface,
-                    )
-                    Spacer(Modifier.width(10.dp))
+                    // Messages carry their meaning in words; a generic glyph on every one
+                    // only made errors and confirmations look alike.
+                    if (queued) {
+                        Icon(WorkbenchIcons.OutputPending, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.inverseOnSurface)
+                        Spacer(Modifier.width(10.dp))
+                    }
                     Text(data.visuals.message, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     if (data.visuals.withDismissAction) {
                         IconButton(onClick = { data.dismiss() }, modifier = Modifier.size(40.dp)) {
@@ -329,7 +328,7 @@ private val knownTimelineKinds = setOf(
 }
 
 /** Pinned above the composer while a blocking request is scrolled out of view. */
-@Composable internal fun PendingActionBanner(text: String, onView: () -> Unit) {
+@Composable internal fun PendingActionBanner(text: String, question: Boolean = false, onView: () -> Unit) {
     val amber = accentColor(WorkbenchAccent.AMBER)
     val haptic = rememberHaptic()
     Surface(onClick = { haptic(false); onView() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp),
@@ -337,7 +336,8 @@ private val knownTimelineKinds = setOf(
         border = BorderStroke(1.dp, amber.copy(alpha = .45f))) {
         Row(Modifier.fillMaxWidth().background(amber.copy(alpha = .08f)).heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(WorkbenchIcons.FrontHand, null, Modifier.size(18.dp), tint = amber)
+            // Same glyphs as TaskStatusIcon: a shield for approvals, a bubble for questions.
+            Icon(if (question) WorkbenchIcons.ChatBubbleOutline else WorkbenchIcons.FrontHand, null, Modifier.size(18.dp), tint = amber)
             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(tr(R.string.ui_approval_view), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }

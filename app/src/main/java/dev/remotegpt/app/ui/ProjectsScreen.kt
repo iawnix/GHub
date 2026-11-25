@@ -151,12 +151,15 @@ import dev.remotegpt.app.*
                                     unread > 0 -> TaskStatus.COMPLETED
                                     else -> null
                                 }
-                                projectStatus?.let { TaskStatusLabel(it, showLabel = true, text = when (it) {
-                                    TaskStatus.APPROVAL -> tr(R.string.ui_approval_needed, approvals)
-                                    TaskStatus.FAILED -> tr(R.string.task_failed_count, failures)
-                                    TaskStatus.COMPLETED -> tr(R.string.ui_completed, unread)
-                                    else -> taskStatusLabel(it)
-                                }) }
+                                when (projectStatus) {
+                                    null -> Unit
+                                    TaskStatus.COMPLETED -> UnreadResultLabel(tr(R.string.ui_new_results_count, unread))
+                                    else -> TaskStatusLabel(projectStatus, showLabel = true, text = when (projectStatus) {
+                                        TaskStatus.APPROVAL -> tr(R.string.ui_approval_needed, approvals)
+                                        TaskStatus.FAILED -> tr(R.string.task_failed_count, failures)
+                                        else -> taskStatusLabel(projectStatus)
+                                    })
+                                }
                             }
                             IconButton(onClick = { onProjectMenu(project.path) }) { Icon(WorkbenchIcons.MoreHoriz, tr(R.string.ui_actions_for_project, project.name), Modifier.size(18.dp)) }
                         }
@@ -238,21 +241,23 @@ import dev.remotegpt.app.*
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
                 unavailable -> Text(tr(R.string.ui_unavailable), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                status == TaskStatus.COMPLETED -> Row(Modifier.semantics(mergeDescendants = true) {},
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // An unread result is news, not a routine completed-state indicator.
-                    val unreadTint = accentColor(WorkbenchAccent.BLUE)
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(unreadTint))
-                    Text(tr(R.string.ui_new_result), style = MaterialTheme.typography.labelSmall, color = unreadTint, maxLines = 1)
-                }
-                status != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(taskStatusLabel(status), style = MaterialTheme.typography.labelSmall, color = taskStatusColor(status), maxLines = 1)
-                    TaskStatusIcon(status, label = null)
-                }
+                status == TaskStatus.COMPLETED -> UnreadResultLabel(tr(R.string.ui_new_result))
+                // Same order as the project row: glyph, then words.
+                status != null -> TaskStatusLabel(status, showLabel = true)
             }
         }
     }
 
+}
+
+/** An unread result is news, not a routine completed state: a blue dot, never a check. */
+@Composable private fun UnreadResultLabel(text: String) {
+    val tint = accentColor(WorkbenchAccent.BLUE)
+    Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(tint))
+        Text(text, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+    }
 }
 
 @Composable fun ProjectWorkspaceMenu(project: ProjectProfile?, selected: WorkspaceTab, hasConversation: Boolean,
@@ -282,7 +287,7 @@ import dev.remotegpt.app.*
         color = androidx.compose.ui.graphics.Color.Transparent) {
         Row(Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.38f).heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Icon(icon, null, Modifier.size(20.dp), tint = if (enabled) functionalIconColor(icon) else MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
                 supporting?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

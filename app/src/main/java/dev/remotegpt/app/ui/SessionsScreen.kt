@@ -252,7 +252,7 @@ import dev.remotegpt.client.*
                     }
                     val shownBanner = rememberLastNonNull(bannerText)
                     RiseIn(bannerText != null && !pendingInView) {
-                        PendingActionBanner(shownBanner.orEmpty()) {
+                        PendingActionBanner(shownBanner.orEmpty(), question = approvals.isEmpty()) {
                             userScrolling = false
                             followingLatest = false
                             scope.launch { listState.animateScrollToItem(firstPendingIndex) }

@@ -77,7 +77,7 @@ import dev.remotegpt.client.*
                                 Icon(if (file.directory) WorkbenchIcons.Folder else if (imageName(file.name)) WorkbenchIcons.Image else fileTypeIcon(file.name),
                                     null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             },
-                            trailingContent = { IconButton(onClick = { options = file }) { Icon(WorkbenchIcons.MoreVert, tr(R.string.ui_actions_for, file.name)) } },
+                            trailingContent = { IconButton(onClick = { options = file }) { Icon(WorkbenchIcons.MoreHoriz, tr(R.string.ui_actions_for, file.name), Modifier.size(20.dp)) } },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
                             // Hidden entries stay reachable but recede behind the project's own files.
                             modifier = Modifier.fillMaxWidth().alpha(if (file.name.startsWith('.')) .6f else 1f).then(Modifier.clickableFile {

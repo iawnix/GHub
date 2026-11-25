@@ -95,7 +95,7 @@ import java.util.Locale
                     WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
                         PreferenceRow(tr(R.string.ui_servers), WorkbenchIcons.Dns, tr(R.string.ui_servers_189 , hostCount), description = tr(R.string.ui_ssh_connections_keys_and_jump_hosts), onClick = onHosts)
                         GroupDivider()
-                        PreferenceRow(tr(R.string.ui_keep_connected_in_background), WorkbenchIcons.Connected,
+                        PreferenceRow(tr(R.string.ui_keep_connected_in_background), WorkbenchIcons.Lan,
                             trailing = { Switch(checked = backgroundKeepAlive, onCheckedChange = onKeepAlive) })
                     }
                 }
@@ -333,7 +333,7 @@ private fun formatStorageBytes(bytes: Long): String {
                     if (profile.codexPath == "codex" && profile.defaultCwd.isBlank() && profile.socketPath.isBlank()) null else tr(R.string.ui_custom_configuration)) { onEditSection(HostEditorSection.REMOTE) }
             }
             if (connected) item {
-                ServerSettingRow(tr(R.string.ui_remote_environment), WorkbenchIcons.Description) { showEnvironment = true }
+                ServerSettingRow(tr(R.string.ui_remote_environment), WorkbenchIcons.Info) { showEnvironment = true }
             }
         }
     }
@@ -359,11 +359,11 @@ private fun formatStorageBytes(bytes: Long): String {
         else -> if (workspace.needsBootstrap) R.string.ui_set_up_and_connect
             else if (status == ConnectionStatus.ERROR) R.string.ui_retry_now else R.string.ui_connect
     })
-    val icon = when {
-        status.busy -> WorkbenchIcons.Stop
+    // The glyph shows where the connection is; the label and tooltip name what a tap does.
+    val icon: ImageVector? = when {
+        status.busy && status != ConnectionStatus.WAITING_NETWORK -> null // the ring spinner says it
         status == ConnectionStatus.ONLINE -> WorkbenchIcons.Connected
-        workspace.needsBootstrap -> WorkbenchIcons.Download
-        status == ConnectionStatus.ERROR -> WorkbenchIcons.Refresh
+        status == ConnectionStatus.ERROR -> WorkbenchIcons.TaskError
         else -> WorkbenchIcons.Disconnected
     }
     val state = connectionLabel(status)
@@ -378,8 +378,8 @@ private fun formatStorageBytes(bytes: Long): String {
             if (canStop) onDisconnect() else onConnect()
         }).semantics { contentDescription = action; stateDescription = state }, contentAlignment = Alignment.Center) {
             Box(Modifier.size(36.dp).border(1.dp, connectionColor(status), CircleShape), contentAlignment = Alignment.Center) {
-                    Crossfade(icon, animationSpec = Motion.short(), label = "connectionAction") {
-                    Icon(it, null, Modifier.size(16.dp), tint = connectionColor(status))
+                Crossfade(icon, animationSpec = Motion.short(), label = "connectionAction") {
+                    if (it != null) Icon(it, null, Modifier.size(16.dp), tint = connectionColor(status))
                 }
                 if (status.busy && status != ConnectionStatus.WAITING_NETWORK) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 1.5.dp, color = connectionColor(status))
             }

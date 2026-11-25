@@ -316,7 +316,7 @@
     <string name="ui_add_project" formatted="false">Add project</string>
     <string name="ui_collapse_269" formatted="false">Collapse</string>
     <string name="ui_approval_needed">Approval needed · %1$s</string>
-    <string name="ui_completed">Completed · %1$s</string>
+    <string name="ui_new_results_count">New results · %1$s</string>
     <string name="ui_running_272" formatted="false">Running</string>
     <string name="ui_actions_for_project">Actions for project %1$s</string>
     <string name="ui_archiving" formatted="false">Archiving</string>
