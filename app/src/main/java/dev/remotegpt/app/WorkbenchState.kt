@@ -37,7 +37,7 @@ data class HostWorkspace(
     val serverVersion: String = "", val account: String = "", val needsBootstrap: Boolean = false,
     val threads: List<ThreadSummary> = emptyList(), val nextThreads: String? = null,
     val results: Map<String, ResultReceipt> = emptyMap(),
-    val archived: Boolean = false, val search: String = "", val loadingThreads: Boolean = false,
+    val archived: Boolean = false, val loadingThreads: Boolean = false,
     val selectedThread: String? = null, val conversations: Map<String, Conversation> = emptyMap(),
     val selectedSummary: ThreadSummary? = null,
     val threadProblems: Map<String, ThreadProblem> = emptyMap(),

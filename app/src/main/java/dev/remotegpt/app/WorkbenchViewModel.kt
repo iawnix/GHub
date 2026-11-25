@@ -332,8 +332,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         mutable.update { it.copy(tab = WorkspaceTab.SESSIONS) }
         state.value.activeHost?.let { host ->
             val ws = ui(host)
-            if (ws.search.isNotBlank() || ws.archived) {
-                update(host) { it.copy(search = "", archived = false) }
+            if (ws.archived) {
+                update(host) { it.copy(archived = false) }
                 refreshThreads(host)
             }
         }
@@ -986,8 +986,8 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         if (!background) update(id) { it.copy(loadingThreads = true) }
         try {
             val ws = ui(id)
-            val page = rt.api.threads(if (more) ws.nextThreads else null, ws.archived, ws.search)
-            if (runtimes[id] !== rt || ui(id).archived != ws.archived || ui(id).search != ws.search ||
+            val page = rt.api.threads(if (more) ws.nextThreads else null, ws.archived)
+            if (runtimes[id] !== rt || ui(id).archived != ws.archived ||
                 ui(id).threadListRevision != ws.threadListRevision) return
             // Empty threads are not listed by the daemon until the first message.
             // Preserve them locally, including across explicit refresh and filters.
@@ -995,7 +995,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
             val threads = (page.items + pending + if (background || more) ui(id).threads else emptyList()).distinctBy { it.id }
             update(id) { it.copy(threads = threads, nextThreads = if (background && ws.threads.isNotEmpty()) it.nextThreads else page.nextCursor) }
             rememberProjects(id, page.items.map { it.cwd })
-            if (!background && !more && !ws.archived && ws.search.isBlank()) {
+            if (!background && !more && !ws.archived) {
                 dao.deleteThreads(id)
                 rt.persistedThreads.clear()
             }
@@ -1012,7 +1012,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                     catch (e: CancellationException) { throw e }
                     catch (e: Exception) { record(name, e.javaClass.simpleName) }
                 }
-                if (ui(host).archived || ui(host).search.isNotBlank()) launch {
+                if (ui(host).archived) launch {
                     optional("filtered_list_sync_failed") { refreshThreadsNow(host, rt, background = true, observe = false) }
                 }
                 launch { optional("account_sync_failed") {
@@ -1129,7 +1129,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         if (runtimes[host] !== rt || ui(host).threadListRevision != revision || rt.overviewVersion != version) return
         page.items.forEach { rt.observedThreads[it.id] = it }
         update(host) { ws ->
-            if (ws.archived || ws.search.isNotBlank()) ws
+            if (ws.archived) ws
             else ws.copy(threads = (page.items + ws.threads).distinctBy { it.id },
                 nextThreads = if (ws.threads.isEmpty()) page.nextCursor else ws.nextThreads)
         }
@@ -1238,28 +1238,10 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
         persistResults(host)
     }
 
-    private val searchJobs = HashMap<String, Job>()
-
     fun showArchived(value: Boolean) {
         state.value.activeHost?.let { id ->
-            searchJobs.remove(id)?.cancel()
-            update(id) { it.copy(archived = value, search = "") }
+            update(id) { it.copy(archived = value) }
             refreshThreads(id)
-        }
-    }
-
-    fun searchThreads(query: String) {
-        val host = state.value.activeHost ?: return
-        if (ui(host).search == query) return
-        update(host) { it.copy(search = query) }
-        searchJobs.remove(host)?.cancel()
-        if (query.isBlank()) {
-            refreshThreads(host)
-        } else {
-            searchJobs[host] = viewModelScope.launch {
-                delay(280)
-                refreshThreads(host)
-            }
         }
     }
     fun createThread(cwd: String) = viewModelScope.launch {
@@ -1299,7 +1281,7 @@ class WorkbenchViewModel(application: Application) : AndroidViewModel(applicatio
                 ui(host).selectedProject == originProject && ui(host).selectedThread == originThread) {
                 switchProject(host, createdRoot)
                 update(host) { it.copy(selectedThread = summary.id, selectedSummary = summary,
-                    archived = false, search = "", loadingHistory = false) }
+                    archived = false, loadingHistory = false) }
                 mutable.update { it.copy(tab = WorkspaceTab.SESSIONS) }
                 launchStorage { app.settings.location(host, createdRoot, summary.id) }
             }

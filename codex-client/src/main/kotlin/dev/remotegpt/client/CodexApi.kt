@@ -8,9 +8,9 @@ class CodexApi(val rpc: RpcClient) {
         return thread.copy(model = result.string("model") ?: thread.model,
             reasoningEffort = result.string("reasoningEffort") ?: thread.reasoningEffort)
     }
-    suspend fun threads(cursor: String? = null, archived: Boolean = false, search: String = ""): Page<ThreadSummary> {
+    suspend fun threads(cursor: String? = null, archived: Boolean = false): Page<ThreadSummary> {
         val result = rpc.request("thread/list", jsonObject("limit" to JsonPrimitive(40), "cursor" to str(cursor),
-            "archived" to JsonPrimitive(archived), "searchTerm" to str(search.takeIf { it.isNotBlank() }),
+            "archived" to JsonPrimitive(archived),
             "modelProviders" to JsonArray(emptyList()), "sortKey" to JsonPrimitive("updated_at")))
         return Page(result.array("data").map { threadSummary(it.jsonObject, archived) }.distinctBy { it.id }, result.string("nextCursor"))
     }

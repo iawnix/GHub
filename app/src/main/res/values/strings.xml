@@ -654,9 +654,6 @@
     <string name="ui_permission_ask_detail" formatted="false">Prompt before running commands outside safe rules</string>
     <string name="ui_permission_auto_detail" formatted="false">Run commands without asking for confirmation</string>
     <string name="ui_permission_untrusted_detail" formatted="false">Ask only before untrusted commands</string>
-    <string name="ui_search_sessions" formatted="false">Search sessions</string>
-    <string name="ui_clear_search" formatted="false">Clear search</string>
-    <string name="ui_no_matching_sessions" formatted="false">No matching sessions</string>
     <string name="ui_switch_workspace" formatted="false">Switch workspace view</string>
     <string name="ui_unsaved_changes" formatted="false">Unsaved</string>
     <string name="ui_editor_line_count">%1$d lines</string>

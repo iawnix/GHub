@@ -27,7 +27,6 @@ import dev.remotegpt.app.WorkspaceTab
     onMenu: (() -> Unit)? = null, onHosts: (() -> Unit)? = null, onAdd: (() -> Unit)? = null,
     onArchive: (() -> Unit)? = null, archiveLabel: String = tr(R.string.ui_archived),
     archived: Boolean = false,
-    onSearch: (() -> Unit)? = null, searching: Boolean = false,
     workspaceTab: WorkspaceTab? = null, hasConversation: Boolean = false,
     onSelectTab: ((WorkspaceTab) -> Unit)? = null, onWorkspaceSheet: (() -> Unit)? = null,
     menuIcon: ImageVector = WorkbenchIcons.MoreHoriz, menuLabel: String = tr(R.string.ui_more_actions),
@@ -50,7 +49,6 @@ import dev.remotegpt.app.WorkspaceTab
     val wideBar = with(density) { LocalWindowInfo.current.containerSize.width.toDp() >= 360.dp } && density.fontScale <= 1.35f
     if (large) MediumTopAppBar(modifier = Modifier.workbenchGlass(), title = { ProvideTextStyle(MaterialTheme.typography.headlineMedium, heading) }, expandedHeight = 128.dp, navigationIcon = back, colors = colors, scrollBehavior = scrollBehavior)
     else TopAppBar(modifier = Modifier.workbenchGlass(), title = { ProvideTextStyle(MaterialTheme.typography.titleMedium, heading) }, navigationIcon = back, actions = {
-        onSearch?.let { HeaderToggleAction(searching, it, WorkbenchIcons.Search, tr(R.string.ui_search_sessions)) }
         onAdd?.let { IconButton(onClick = it) { Icon(WorkbenchIcons.Add, tr(R.string.ui_add_project), Modifier.size(20.dp)) } }
         onArchive?.let { HeaderToggleAction(archived, it, WorkbenchIcons.Archive, archiveLabel) }
         if (onSelectTab != null && workspaceTab != null) {
