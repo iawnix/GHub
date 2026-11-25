@@ -87,10 +87,8 @@
     <string name="ui_slash_plan_description" formatted="false">下一条消息使用计划模式</string>
     <string name="ui_slash_goal_description" formatted="false">编辑当前会话目标</string>
     <string name="ui_run_slash_command" formatted="false">执行斜杠指令</string>
-    <string name="ui_message_queue" formatted="false">消息队列</string>
     <string name="ui_queue_count" formatted="false">%1$d 条待发送</string>
     <string name="ui_queue_waiting" formatted="false">当前任务结束后，消息会按顺序发送。</string>
-    <string name="ui_queue_next" formatted="false">下一条</string>
     <string name="ui_queue_attachments" formatted="false">%1$d 个附件</string>
     <string name="ui_queue_short" formatted="false">排队</string>
     <string name="ui_steer_short" formatted="false">引导</string>
@@ -472,32 +470,12 @@
     <string name="ui_output_waiting_to_sync" formatted="false">等待同步</string>
     <string name="ui_output_live" formatted="false">实时</string>
     <string name="ui_output_command_short" formatted="false">命令</string>
-    <string name="ui_output_files_short" formatted="false">文件</string>
-    <string name="ui_output_reasoning_short" formatted="false">思考</string>
-    <string name="ui_output_plan_short" formatted="false">计划</string>
-    <string name="ui_output_reply_short" formatted="false">回复</string>
-    <string name="ui_output_event_short" formatted="false">记录</string>
 
     <plurals name="chat_turn_files">
         <item quantity="other">本轮更改 %1$d 个文件</item>
     </plurals>
     <plurals name="chat_more_files">
         <item quantity="other">查看另外 %1$d 个文件</item>
-    </plurals>
-    <plurals name="ui_output_events">
-        <item quantity="other">%1$d 条记录</item>
-    </plurals>
-    <plurals name="ui_output_commands">
-        <item quantity="other">%1$d 条命令</item>
-    </plurals>
-    <plurals name="ui_output_files">
-        <item quantity="other">%1$d 个文件</item>
-    </plurals>
-    <plurals name="ui_output_images">
-        <item quantity="other">%1$d 张图片</item>
-    </plurals>
-    <plurals name="ui_output_more_events">
-        <item quantity="other">另有 %1$d 条</item>
     </plurals>
     <string name="ui_background_without_notifications">后台连接已开启。通知未授权，可在系统的运行中应用中停止。</string>
     <string name="ui_zoom_in">放大</string>

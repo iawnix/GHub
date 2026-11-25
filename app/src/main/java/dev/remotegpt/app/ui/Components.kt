@@ -95,37 +95,27 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
     }
 }
 
-/** A single connection notice layout for reconnecting, offline and setup states. */
+/** A single connection notice for reconnecting, offline and setup states: one quiet line
+ * beside the header's status glyph, plus the next action when there is one. */
 @Composable internal fun ConnectionNotice(
     status: ConnectionStatus,
     detail: String,
     action: String? = null,
     onAction: () -> Unit = {},
 ) {
-    val tint = connectionColor(status)
+    val label = connectionLabel(status)
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, tint.copy(alpha = .28f)),
+        shape = MaterialTheme.shapes.medium,
     ) {
-        Column(Modifier.padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = if (action == null) 14.dp else 6.dp)) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier.size(32.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center,
-                ) { ConnectionIndicator(status, showLabel = false) }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(connectionLabel(status), style = MaterialTheme.typography.titleSmall)
-                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            action?.let {
-                TextButton(onClick = onAction, modifier = Modifier.align(Alignment.End), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-                    Text(it)
-                }
-            }
+        Row(Modifier.heightIn(min = 48.dp).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ConnectionIndicator(status, showLabel = false)
+            Text(if (detail.startsWith(label)) detail else "$label · $detail", Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            action?.let { TextButton(onClick = onAction) { Text(it) } }
         }
     }
 }

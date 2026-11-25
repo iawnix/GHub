@@ -181,12 +181,6 @@ import dev.remotegpt.client.*
         commands > 0 -> tr(R.string.ui_commands_run_view_details, commands)
         else -> tr(R.string.ui_events_view_details, steps.size)
     }
-    val meta = buildList {
-        if (steps.isNotEmpty()) add(trq(R.plurals.ui_output_events, steps.size))
-        if (commands > 0) add(trq(R.plurals.ui_output_commands, commands))
-        if (fileCount > 0) add(trq(R.plurals.ui_output_files, fileCount))
-        if (imageCount > 0) add(trq(R.plurals.ui_output_images, imageCount))
-    }.joinToString(" · ")
     // While a turn runs, the command in flight says more than event counts do.
     val runningCommand = if (!active) null else steps.lastOrNull { it.kind == "commandExecution" && !it.complete }
         ?.commandExecution?.command?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
@@ -212,14 +206,12 @@ import dev.remotegpt.client.*
                         Text("\$ $it", style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                             color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     }
-                    if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                // "Synced" is the quiet default and needs no badge.
-                if (active || syncing || !connected) OutputSyncBadge(active = active, syncing = syncing, connected = connected)
+                // "Synced" is the quiet default, and a live turn already shows its spinner.
+                if (syncing || !connected) OutputSyncBadge(active = active, syncing = syncing, connected = connected)
                 DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
                     MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (steps.isNotEmpty()) OutputEventRail(steps)
             Disclosure(expanded) {
                 Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,48 +225,6 @@ import dev.remotegpt.client.*
         }
     }
 }
-
-/** A compact visual trace of the last remote events. It mirrors event ordering
- * without exposing transport internals or forcing the user to open raw logs. */
-@Composable private fun OutputEventRail(items: List<TimelineItem>) {
-    val visible = items.takeLast(4)
-    FlowRow(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        visible.forEach { item ->
-            val status = itemTaskStatus(item)
-            val tint = taskStatusColor(status)
-            Surface(color = tint.copy(alpha = .08f), shape = RoundedCornerShape(50)) {
-                Row(
-                    Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    TaskStatusIcon(status, Modifier.size(13.dp))
-                    Text(eventShortLabel(item.kind), style = MaterialTheme.typography.labelSmall, color = tint)
-                }
-            }
-        }
-        if (items.size > visible.size) {
-            Text(trq(R.plurals.ui_output_more_events, items.size - visible.size),
-                Modifier.padding(horizontal = 4.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-private fun eventShortLabel(kind: String): String = tr(when (kind) {
-    "commandExecution" -> R.string.ui_output_command_short
-    "dynamicToolCall" -> R.string.ui_tool_call
-    "contextCompaction" -> R.string.ui_context_compaction
-    "fileChange" -> R.string.ui_output_files_short
-    "reasoning" -> R.string.ui_output_reasoning_short
-    "plan" -> R.string.ui_output_plan_short
-    "agentMessage" -> R.string.ui_output_reply_short
-    else -> R.string.ui_output_event_short
-})
 
 @Composable internal fun FileSummary(items: List<TimelineItem>, preview: (String) -> Unit) {
     var expanded by rememberSaveable { mutableStateOf(true) }
