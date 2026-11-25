@@ -232,7 +232,7 @@ import java.util.UUID
                 onSelectTab = if (!showHome && !showConversation && state.workspace.selectedProject?.startsWith('/') == true) ({ tab ->
                     if (tab == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(tab)
                 }) else null,
-                backLabel = if (state.tab != WorkspaceTab.SESSIONS) tr(R.string.ui_back_to_session) else tr(R.string.ui_back_to_projects),
+                backLabel = tr(if (state.tab != WorkspaceTab.SESSIONS && state.workspace.selectedThread != null) R.string.ui_back_to_session else R.string.ui_back_to_projects),
             )
         },
     ) { padding ->
