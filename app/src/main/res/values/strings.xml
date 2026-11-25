@@ -155,11 +155,11 @@
     <string name="ui_this_directory_is_empty" formatted="false">This directory is empty</string>
     <string name="ui_connect_to_browse_files_edit_text_or" formatted="false">Connect to browse files, edit text, or attach files to a session.</string>
     <string name="ui_actions_for">Actions for %1$s</string>
+    <string name="ui_empty_directory_hint" formatted="false">Pull down to refresh, or open another directory.</string>
     <string name="ui_directory" formatted="false">Directory</string>
     <string name="ui_parent_directory" formatted="false">Parent directory</string>
     <string name="ui_open_directory" formatted="false">Open directory</string>
     <string name="ui_project_root" formatted="false">Project root</string>
-    <string name="ui_refresh_directory" formatted="false">Refresh directory</string>
     <string name="ui_open_remote_directory" formatted="false">Open remote directory</string>
     <string name="ui_absolute_path" formatted="false">Absolute path</string>
     <string name="ui_image_119">Image · %1$s</string>
@@ -340,7 +340,6 @@
     <string name="ui_terminal_290" formatted="false">Terminal</string>
     <string name="ui_choose_project" formatted="false">Choose project</string>
     <string name="ui_switch_project" formatted="false">Switch project</string>
-    <string name="ui_refresh" formatted="false">Refresh</string>
     <string name="ui_selected" formatted="false">Selected</string>
     <string name="ui_project_name_optional" formatted="false">Project name (optional)</string>
     <string name="ui_project_directory_hint">Missing directories will be created on the server. Existing directories will be reused.</string>

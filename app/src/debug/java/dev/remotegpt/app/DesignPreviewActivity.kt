@@ -137,7 +137,7 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     }
     if (menu) ModalBottomSheet(onDismissRequest = { menu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         if (screen == "projects") ProjectWorkspaceMenu(project, WorkspaceTab.SESSIONS, false, onSelect = { menu = false },
-            onProjects = { menu = false; screen = "projects" }, onRefresh = { menu = false })
+            onProjects = { menu = false; screen = "projects" })
         else ConversationActions(project.path, false,
             onRefresh = { menu = false }, onRename = { menu = false }, onArchive = { menu = false })
     }

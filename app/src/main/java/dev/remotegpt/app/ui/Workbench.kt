@@ -303,7 +303,7 @@ import java.util.UUID
                                     vm.message(tr(R.string.ui_no_camera_app_found_choose_an_image))
                                 }
                             }, onVoice = { if (listening) speech.cancel() else microphone.launch(Manifest.permission.RECORD_AUDIO) }, optionsOpen = showConversationOptions, onOptionsChange = { showConversationOptions = it }, onBottomControls = { bottomControls = it })
-                        WorkspaceTab.FILES -> FilesScreen(state, vm, onWorkspace = { showWorkspace = true }, snackbar = snackbars) { file -> pendingDownload = file.path; saveFile.launch(file.name) }
+                        WorkspaceTab.FILES -> FilesScreen(state, vm, snackbar = snackbars) { file -> pendingDownload = file.path; saveFile.launch(file.name) }
                         WorkspaceTab.TERMINAL -> TerminalsScreen(state, vm, onWorkspace = { showWorkspace = true }, onBottomControls = { bottomControls = it })
                     }
                 }
@@ -347,15 +347,7 @@ import java.util.UUID
     if (showWorkspace) ModalBottomSheet(onDismissRequest = { showWorkspace = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         ProjectWorkspaceMenu(state.project, state.tab, state.workspace.selectedThread != null,
             onSelect = { if (it == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(it); showWorkspace = false },
-            onProjects = { vm.backToProjects(); showWorkspace = false },
-            onRefresh = {
-                showWorkspace = false
-                when {
-                    state.tab == WorkspaceTab.FILES -> vm.listFiles()
-                    showConversation -> vm.refreshConversation()
-                    else -> vm.refreshThreads()
-                }
-            })
+            onProjects = { vm.backToProjects(); showWorkspace = false })
     }
     if (showLegal) LegalNotices { showLegal = false }
     bootstrapHost?.let { host -> AlertDialog(onDismissRequest = { bootstrapHost = null }, title = { Text(tr(R.string.ui_set_up_the_official_daemon)) },

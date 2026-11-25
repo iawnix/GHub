@@ -262,7 +262,7 @@ import dev.remotegpt.app.*
 }
 
 @Composable fun ProjectWorkspaceMenu(project: ProjectProfile?, selected: WorkspaceTab, hasConversation: Boolean,
-    onSelect: (WorkspaceTab) -> Unit, onProjects: () -> Unit, onRefresh: () -> Unit) {
+    onSelect: (WorkspaceTab) -> Unit, onProjects: () -> Unit) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(project?.name ?: tr(R.string.ui_workspace), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleLarge)
         project?.let { Text(it.path, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -277,10 +277,6 @@ import dev.remotegpt.app.*
             }
         }
         SheetAction(if (project == null) tr(R.string.ui_choose_project) else tr(R.string.ui_switch_project), WorkbenchIcons.FolderCopy, onClick = onProjects)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            TextButton(onClick = onRefresh, modifier = Modifier.heightIn(min = 48.dp)) { Icon(WorkbenchIcons.Refresh, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(tr(R.string.ui_refresh)) }
-        }
         Spacer(Modifier.height(16.dp))
     }
 }

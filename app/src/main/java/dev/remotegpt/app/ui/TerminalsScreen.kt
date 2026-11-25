@@ -43,6 +43,7 @@ import kotlin.math.roundToInt
         onNew = { vm.newTerminal() }, onClose = vm::closeTerminal, onConnect = { vm.connect() },
         onFontSize = vm::terminalFontSize, onExtraKeys = vm::terminalExtraKeys, onBottomControls = onBottomControls,
         onFiles = if (ws.selectedProject?.startsWith('/') == true) ({ vm.selectTab(WorkspaceTab.FILES) }) else null,
+        backLabel = tr(if (ws.selectedThread != null) R.string.ui_back_to_session else R.string.ui_back_to_projects),
     )
 }
 
@@ -53,7 +54,7 @@ import kotlin.math.roundToInt
     onBack: () -> Unit, onWorkspace: () -> Unit, onSelect: (String) -> Unit,
     onNew: () -> Unit, onClose: (String) -> Unit, onConnect: () -> Unit,
     onFontSize: (Float) -> Unit, onExtraKeys: (Boolean) -> Unit, onBottomControls: (Int) -> Unit = {},
-    onFiles: (() -> Unit)? = null,
+    onFiles: (() -> Unit)? = null, backLabel: String = tr(R.string.ui_back_to_session),
 ) {
     val selected = terminals.firstOrNull { it.id == selectedId } ?: terminals.firstOrNull()
     var switching by rememberSaveable { mutableStateOf(false) }
@@ -137,7 +138,7 @@ import kotlin.math.roundToInt
                     }
                 }
             }, navigationIcon = {
-                IconButton(onClick = onBack) { Icon(WorkbenchIcons.ArrowBack, tr(R.string.ui_back_to_session)) }
+                IconButton(onClick = onBack) { Icon(WorkbenchIcons.ArrowBack, backLabel) }
             }, actions = {
                 onFiles?.let {
                     IconButton(onClick = it) { Icon(WorkbenchIcons.FolderOpen, tr(R.string.ui_files), Modifier.size(20.dp)) }
@@ -145,19 +146,7 @@ import kotlin.math.roundToInt
                 IconButton(onClick = ::keyboard, enabled = inputEnabled) {
                     Icon(WorkbenchIcons.Keyboard, tr(if (imeVisible) R.string.terminal_hide_keyboard else R.string.ui_show_keyboard), Modifier.size(20.dp))
                 }
-                Box {
-                    IconButton(onClick = { options = true }) { Icon(WorkbenchIcons.MoreHoriz, tr(R.string.terminal_options)) }
-                    DropdownMenu(expanded = options, onDismissRequest = { options = false }) {
-                        DropdownMenuItem(text = { Text(tr(if (extraKeys) R.string.terminal_hide_extra_keys else R.string.terminal_show_extra_keys)) }, onClick = {
-                            options = false; extraKeys = !extraKeys; onExtraKeys(extraKeys)
-                        })
-                        DropdownMenuItem(text = { Text(tr(R.string.terminal_font_size)) }, onClick = { options = false; sizing = true })
-                        DropdownMenuItem(text = { Text(tr(R.string.ui_new_terminal)) }, enabled = canCreate, onClick = { options = false; onNew() })
-                        DropdownMenuItem(text = { Text(tr(R.string.ui_close_terminal_339)) }, enabled = selected != null, onClick = { options = false; closing = selected?.id })
-                        HorizontalDivider()
-                        DropdownMenuItem(text = { Text(tr(R.string.ui_workspace)) }, onClick = { options = false; onWorkspace() })
-                    }
-                }
+                IconButton(onClick = { options = true }) { Icon(WorkbenchIcons.MoreHoriz, tr(R.string.terminal_options), Modifier.size(20.dp)) }
             })
             if (selected == null) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -268,6 +257,19 @@ import kotlin.math.roundToInt
                     )
                 }
             }
+        }
+    }
+    // Same bottom-sheet menu as the rest of the workbench, not a one-off dropdown.
+    if (options) ModalBottomSheet(onDismissRequest = { options = false }) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Text(tr(R.string.terminal_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            SheetAction(tr(R.string.ui_new_terminal), WorkbenchIcons.Add, enabled = canCreate) { options = false; onNew() }
+            SheetAction(tr(R.string.ui_close_terminal_339), WorkbenchIcons.Close, enabled = selected != null) { options = false; closing = selected?.id }
+            SheetAction(tr(if (extraKeys) R.string.terminal_hide_extra_keys else R.string.terminal_show_extra_keys), WorkbenchIcons.Keyboard) {
+                options = false; extraKeys = !extraKeys; onExtraKeys(extraKeys)
+            }
+            SheetAction(tr(R.string.terminal_font_size), WorkbenchIcons.TextIncrease) { options = false; sizing = true }
+            SheetAction(tr(R.string.ui_workspace), WorkbenchIcons.Menu) { options = false; onWorkspace() }
         }
     }
     if (switching) ModalBottomSheet(onDismissRequest = { switching = false }) {

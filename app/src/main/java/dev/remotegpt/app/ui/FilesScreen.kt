@@ -29,15 +29,24 @@ import androidx.compose.ui.window.DialogProperties
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
 
-@Composable fun FilesScreen(state: WorkbenchState, vm: WorkbenchViewModel, onWorkspace: () -> Unit, snackbar: SnackbarHostState? = null, onDownload: (RemoteFile) -> Unit) {
+@Composable fun FilesScreen(state: WorkbenchState, vm: WorkbenchViewModel, snackbar: SnackbarHostState? = null, onDownload: (RemoteFile) -> Unit) {
     val ws = state.workspace
     var goTo by rememberSaveable { mutableStateOf(false) }
     var directoryActions by rememberSaveable { mutableStateOf(false) }
     var options by remember { mutableStateOf<RemoteFile?>(null) }
     var discard by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        PathBreadcrumbs(ws.filePath, onNavigate = vm::listFiles)
-        if (ws.loadingFiles) LinearProgressIndicator(Modifier.fillMaxWidth())
+        // Directory tools sit with the path they act on; the app bar keeps workspace navigation.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { vm.listFiles(ws.filePath.trimEnd('/').substringBeforeLast('/', "").ifBlank { "/" }) },
+                enabled = ws.filePath.startsWith('/') && ws.filePath != "/") {
+                Icon(WorkbenchIcons.ArrowUpward, tr(R.string.ui_parent_directory), Modifier.size(20.dp))
+            }
+            PathBreadcrumbs(ws.filePath, onNavigate = vm::listFiles, modifier = Modifier.weight(1f))
+            IconButton(onClick = { directoryActions = true }) {
+                Icon(WorkbenchIcons.FolderOpen, tr(R.string.ui_directory), Modifier.size(20.dp))
+            }
+        }
         PullToRefreshBox(
             isRefreshing = ws.loadingFiles && ws.files.isNotEmpty(),
             onRefresh = { vm.listFiles() },
@@ -45,14 +54,14 @@ import dev.remotegpt.client.*
         ) {
             when {
                 ws.files.isEmpty() && ws.loadingFiles -> EmptyPanel(
-                    WorkbenchIcons.Connected,
+                    WorkbenchIcons.Refresh,
                     tr(R.string.ui_connecting_to_remote_files),
                     tr(R.string.ui_this_directory_will_load_automatically_when_the),
                 )
                 ws.files.isEmpty() -> EmptyPanel(
                     WorkbenchIcons.FolderOpen,
                     tr(R.string.ui_this_directory_is_empty),
-                    tr(R.string.ui_connect_to_browse_files_edit_text_or),
+                    tr(if (ws.connection == ConnectionStatus.ONLINE) R.string.ui_empty_directory_hint else R.string.ui_connect_to_browse_files_edit_text_or),
                 )
                 else -> LazyColumn(
                     Modifier.fillMaxSize(),
@@ -81,16 +90,12 @@ import dev.remotegpt.client.*
                 }
             }
         }
-        ReachableActions(onWorkspace, tr(R.string.ui_directory), { directoryActions = true }, primaryIcon = WorkbenchIcons.FolderOpen,
-            secondaryIcon = WorkbenchIcons.ArrowUpward, secondaryLabel = tr(R.string.ui_parent_directory), secondaryEnabled = ws.filePath != "/",
-            onSecondary = { vm.listFiles(ws.filePath.trimEnd('/').substringBeforeLast('/', "").ifBlank { "/" }) })
     }
     if (directoryActions) ModalBottomSheet(onDismissRequest = { directoryActions = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(ws.filePath, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
             SheetAction(tr(R.string.ui_open_directory), WorkbenchIcons.FolderOpen) { directoryActions = false; goTo = true }
             SheetAction(tr(R.string.ui_project_root), WorkbenchIcons.Home) { directoryActions = false; vm.listFiles(ws.selectedProject) }
-            SheetAction(tr(R.string.ui_refresh_directory), WorkbenchIcons.Refresh) { directoryActions = false; vm.listFiles() }
         }
     }
     if (goTo) TextPrompt(tr(R.string.ui_open_remote_directory), tr(R.string.ui_absolute_path), ws.filePath, onDismiss = { goTo = false }, onConfirm = { vm.listFiles(it); goTo = false }, validate = { it.startsWith('/') })
@@ -161,9 +166,9 @@ import dev.remotegpt.client.*
     }
 }
 
-@Composable private fun PathBreadcrumbs(path: String, onNavigate: (String) -> Unit) {
+@Composable private fun PathBreadcrumbs(path: String, onNavigate: (String) -> Unit, modifier: Modifier = Modifier) {
     if (!path.startsWith('/')) {
-        Text(path.ifBlank { tr(R.string.ui_project_directory) }, Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+        Text(path.ifBlank { tr(R.string.ui_project_directory) }, modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         return
@@ -183,7 +188,7 @@ import dev.remotegpt.client.*
     LaunchedEffect(path) { scroll.scrollTo(scroll.maxValue) }
     val haptic = rememberHaptic()
     Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = modifier.horizontalScroll(scroll).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         segments.forEachIndexed { index, (label, targetPath) ->
