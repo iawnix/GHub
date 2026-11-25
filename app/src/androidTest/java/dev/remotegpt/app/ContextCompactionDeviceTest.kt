@@ -37,9 +37,8 @@ class ContextCompactionDeviceTest {
         val item = TimelineItem("compact", "turn", "contextCompaction", placeholder, complete = true)
         compose.setContent { WorkbenchTheme { Column { TurnContent(listOf(item), false, {}) } } }
         compose.onNodeWithText(label(R.string.ui_execution_details_includes_unsupported_types)).assertDoesNotExist()
-        compose.onNodeWithText(label(R.string.ui_context_compaction)).assertIsDisplayed()
         val summary = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.ui_events_view_details, 1)
-        compose.onNodeWithText(summary).performClick()
+        compose.onNodeWithText(summary).assertIsDisplayed().performClick()
         compose.onNodeWithText(label(R.string.ui_context_compaction_completed)).assertIsDisplayed()
         compose.onNodeWithText(placeholder).assertDoesNotExist()
     }

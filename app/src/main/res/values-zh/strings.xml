@@ -550,7 +550,6 @@
     <string name="ui_tool_no_result">未返回内容</string>
     <string name="ui_tool_waiting_result">等待工具返回…</string>
     <string name="ui_tool_legacy_record">旧缓存未保存工具详情，请连接后刷新会话。</string>
-    <string name="ui_context_compaction">上下文整理</string>
     <string name="ui_context_compaction_running">正在整理上下文…</string>
     <string name="ui_context_compaction_completed">上下文已整理</string>
     <string name="ui_copy_message">复制消息</string>

@@ -26,15 +26,16 @@ class OutputVisualizationDeviceTest {
     @get:Rule val compose = createComposeRule()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    @Test fun liveOutputShowsReceivingStateAndRecentEvents() {
+    @Test fun liveOutputShowsOneReceivingStateWithoutEventChips() {
         val items = listOf(
             TimelineItem("command", "turn", "commandExecution", "pwd", true, executionStatus = "completed"),
             TimelineItem("answer", "turn", "agentMessage", "正在生成", false),
         )
         compose.setContent { WorkbenchTheme { OutputSample(items, active = true) } }
         compose.onNodeWithText(context.getString(R.string.ui_output_receiving)).assertIsDisplayed()
-        compose.onNodeWithContentDescription(context.getString(R.string.ui_output_live)).assertIsDisplayed()
-        compose.onNodeWithText(context.getString(R.string.ui_output_command_short)).assertIsDisplayed()
+        // The running spinner already says "live"; neither a second badge nor event chips repeat it.
+        compose.onNodeWithContentDescription(context.getString(R.string.ui_output_live)).assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.ui_output_command_short)).assertDoesNotExist()
     }
 
     @Test fun completedOutputCanShowReconciliationSeparately() {

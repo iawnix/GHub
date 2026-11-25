@@ -557,7 +557,6 @@
     <string name="ui_tool_no_result">No result content</string>
     <string name="ui_tool_waiting_result">Waiting for tool result…</string>
     <string name="ui_tool_legacy_record">Tool details are missing from this older cache. Connect and refresh the conversation to load them.</string>
-    <string name="ui_context_compaction">Context compaction</string>
     <string name="ui_context_compaction_running">Compacting context…</string>
     <string name="ui_context_compaction_completed">Context compacted</string>
     <string name="ui_copy_message">Copy message</string>
