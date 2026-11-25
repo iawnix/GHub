@@ -398,7 +398,7 @@ private fun workspaceTransition(from: String, to: String): ContentTransform {
     val toHome = to.endsWith(":home")
     val terminal = ":${WorkspaceTab.TERMINAL}:" in from || ":${WorkspaceTab.TERMINAL}:" in to
     return when {
-        terminal -> ContentTransform(fadeIn(tween(Motion.CONTENT, delayMillis = 40)), fadeOut(tween(Motion.SHORT - 40)), sizeTransform = null)
+        terminal -> ContentTransform(fadeIn(Motion.short()), fadeOut(tween(Motion.EXIT)), sizeTransform = null)
         sameHost && fromHome != toHome -> sharedAxisX(forward = fromHome)
         else -> fadeThrough()
     }

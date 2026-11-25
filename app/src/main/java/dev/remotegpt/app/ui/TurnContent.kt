@@ -300,8 +300,8 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
                         style = MaterialTheme.typography.labelMedium)
                     ChangeCounts(total)
                 }
-                DisclosureChevron(expanded, WorkbenchIcons.ExpandMore, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
-                    MaterialTheme.colorScheme.onSurfaceVariant, openDegrees = 180f)
+                DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
+                    MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Disclosure(expanded) {
                 Column {
@@ -315,7 +315,7 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
                         TextButton(onClick = { haptic(false); showAll = !showAll }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                             Text(if (showAll) tr(R.string.chat_fewer_files) else trq(R.plurals.chat_more_files, grouped.size - 3), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-                            DisclosureChevron(showAll, WorkbenchIcons.ChevronRight, null, LocalContentColor.current, openDegrees = -90f)
+                            DisclosureChevron(showAll, WorkbenchIcons.ChevronRight, null, LocalContentColor.current)
                         }
                     }
                     items.filter { it.fileEdits.isEmpty() }.forEach { key(it.identityKey) { Box(Modifier.padding(horizontal = 12.dp)) { TimelineCard(it, preview) } } }
@@ -355,11 +355,13 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
                 if (largeText) ChangeCounts(counts)
             }
             if (!largeText) ChangeCounts(counts)
-            Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ChevronRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, null, MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (expanded) {
-            SelectionContainer { Text(path, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall) }
-            DiffContent(edits.joinToString("\n\n") { it.diff.ifBlank { tr(R.string.ui_the_server_did_not_provide_a_diff) } })
+        Disclosure(expanded) {
+            Column {
+                SelectionContainer { Text(path, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall) }
+                DiffContent(edits.joinToString("\n\n") { it.diff.ifBlank { tr(R.string.ui_the_server_did_not_provide_a_diff) } })
+            }
         }
     }
 }

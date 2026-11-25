@@ -192,9 +192,10 @@ private val knownTimelineKinds = setOf(
                     Text(when (item.kind) { "fileChange" -> tr(R.string.ui_file_changes); "commandExecution" -> tr(R.string.ui_command_execution); "imageView" -> tr(R.string.ui_image_view); "plan" -> tr(R.string.ui_execution_plan); "reasoning" -> tr(R.string.ui_reasoning_summary); "dynamicToolCall" -> item.dynamicToolCall?.displayName?.takeIf { it.isNotBlank() } ?: tr(R.string.ui_tool_call); else -> item.kind }, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TaskStatusIcon(itemTaskStatus(item))
 
-                    Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ExpandMore, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand), MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (expanded) {
+                // Messages stay open; tool details share the app's one disclosure motion.
+                val details: @Composable () -> Unit = {
                     if (item.kind == "commandExecution") CommandExecutionContent(item)
                     else if (item.kind == "dynamicToolCall") DynamicToolCallContent(item)
                     else if (questionReply != null) QuestionReplyContent(questionReply)
@@ -232,6 +233,7 @@ private val knownTimelineKinds = setOf(
                         }
                     }
                 }
+                if (!tool) details() else Disclosure(expanded) { Column { details() } }
             }
         }
         if (user) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp),

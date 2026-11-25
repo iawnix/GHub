@@ -10,7 +10,6 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -109,7 +108,6 @@ import dev.remotegpt.app.*
                 item(key = "project:${project.path}") {
                     val visibility = remember { MutableTransitionState(open) }
                     visibility.targetState = open
-                    val angle by animateFloatAsState(if (open) 90f else 0f, tween(if (open) Motion.EXPAND else Motion.COLLAPSE, easing = FastOutSlowInEasing), label = "project-chevron")
                     val emphasis by animateFloatAsState(if (focusedProject == project.path && open) 1f else 0f, tween(Motion.SHORT), label = "project-focus")
                     val reveal = remember { BringIntoViewRequester() }
                     var headerHeight by remember { mutableIntStateOf(0) }
@@ -124,7 +122,7 @@ import dev.remotegpt.app.*
                         }
                     }
                     // Added or removed projects fade; no placement motion, which would chase the expand animation.
-                    Column(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))
+                    Column(Modifier.animateItem(fadeInSpec = tween(Motion.EXPAND), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))
                         .fillMaxWidth().bringIntoViewRequester(reveal).onSizeChanged { width = it.width }) {
                         Row(Modifier.fillMaxWidth().onSizeChanged { headerHeight = it.height }
                             .clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = emphasis)),
@@ -138,7 +136,7 @@ import dev.remotegpt.app.*
                                 }.heightIn(min = 56.dp).padding(horizontal = 8.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 // The chevron already marks the hierarchy; a folder glyph only cost width.
-                                Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(16.dp).rotate(angle), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                DisclosureChevron(open, WorkbenchIcons.ChevronRight, null, MaterialTheme.colorScheme.onSurfaceVariant)
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(project.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     // Collapsed rows otherwise look identical; size and recency tell them apart.
@@ -163,9 +161,7 @@ import dev.remotegpt.app.*
                             IconButton(onClick = { onProjectMenu(project.path) }) { Icon(WorkbenchIcons.MoreHoriz, tr(R.string.ui_actions_for_project, project.name), Modifier.size(18.dp)) }
                         }
                         // Only four rows participate in size animation. Older history remains lazy.
-                        AnimatedVisibility(visibleState = visibility,
-                            enter = expandVertically(tween(Motion.EXPAND, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) + fadeIn(tween(Motion.SHORT)),
-                            exit = shrinkVertically(tween(Motion.COLLAPSE, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(Motion.EXIT))) {
+                        Disclosure(visibility) {
                             // An archived or new session closes or opens its gap instead of jumping.
                             Column(Modifier.animateContentSize(tween(Motion.EXPAND, easing = Motion.Standard))) {
                                 threads.take(4).forEachIndexed { index, thread -> key(thread.id) {
@@ -181,16 +177,14 @@ import dev.remotegpt.app.*
                 }
                 if (open && project.path in all) {
                     items(threads.drop(4), key = { "thread:${it.id}" }) {
-                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = tween(Motion.EXPAND, easing = Motion.Standard),
+                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.EXPAND), placementSpec = tween(Motion.EXPAND, easing = Motion.Standard),
                             fadeOutSpec = tween(Motion.SHORT))) { ProjectThreadRow(ws, it, onContinue, onArchive) }
                     }
                 }
                 item(key = "project-actions:${project.path}") {
                     val visibility = remember { MutableTransitionState(open) }
                     visibility.targetState = open
-                    AnimatedVisibility(visibility,
-                        enter = expandVertically(tween(Motion.EXPAND), expandFrom = Alignment.Top) + fadeIn(tween(Motion.SHORT)),
-                        exit = shrinkVertically(tween(Motion.COLLAPSE), shrinkTowards = Alignment.Top) + fadeOut(tween(Motion.EXIT))) {
+                    Disclosure(visibility) {
                         Row(Modifier.fillMaxWidth().padding(start = ThreadIndent - 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { haptic(false); onCreate(project.path) }, enabled = ws.creatingThreadCwd == null && project.path.startsWith('/')) {
                                 if (ws.creatingThreadCwd == project.path) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)

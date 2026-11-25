@@ -12,7 +12,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
@@ -23,7 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
@@ -31,7 +29,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -355,12 +352,6 @@ private fun formatStorageBytes(bytes: Long): String {
     val status = workspace.connection
     val canStop = status == ConnectionStatus.ONLINE || status.busy
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        if (pressed) .96f else 1f,
-        androidx.compose.animation.core.tween(Motion.PRESS, easing = Motion.EmphasizedAccelerate),
-        label = "connection-press-scale",
-    )
     val action = tr(when (status) {
         ConnectionStatus.ONLINE, ConnectionStatus.CHECKING, ConnectionStatus.SYNCING -> R.string.ui_disconnect
         ConnectionStatus.CONNECTING -> R.string.ui_cancel_connection
@@ -379,7 +370,7 @@ private fun formatStorageBytes(bytes: Long): String {
     TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { PlainTooltip { Text("$state · $action") } }, state = rememberTooltipState()) {
         val haptic = rememberHaptic()
-        Box(Modifier.size(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clickable(
+        Box(Modifier.size(48.dp).workbenchPressScale(true, interactionSource).clickable(
             interactionSource = interactionSource,
             indication = LocalIndication.current,
             onClick = {
@@ -387,7 +378,7 @@ private fun formatStorageBytes(bytes: Long): String {
             if (canStop) onDisconnect() else onConnect()
         }).semantics { contentDescription = action; stateDescription = state }, contentAlignment = Alignment.Center) {
             Box(Modifier.size(36.dp).border(1.dp, connectionColor(status), CircleShape), contentAlignment = Alignment.Center) {
-                    Crossfade(icon, animationSpec = tween(Motion.STATE), label = "connectionAction") {
+                    Crossfade(icon, animationSpec = Motion.short(), label = "connectionAction") {
                     Icon(it, null, Modifier.size(16.dp), tint = connectionColor(status))
                 }
                 if (status.busy && status != ConnectionStatus.WAITING_NETWORK) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 1.5.dp, color = connectionColor(status))
