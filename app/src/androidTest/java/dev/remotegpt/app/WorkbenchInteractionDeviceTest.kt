@@ -38,7 +38,7 @@ class WorkbenchInteractionDeviceTest {
         val threads = projects.map { ThreadSummary(it.path, "Session ${it.name}", it.path) }
         val ws = HostWorkspace(connection = ConnectionStatus.ONLINE, projects = projects, threads = threads)
         compose.setContent { WorkbenchTheme {
-            GlassWorkbenchScaffold(topBar = { WorkbenchHeader("Host", "Connected", ConnectionStatus.ONLINE, false, {}) }) { padding ->
+            GlassWorkbenchScaffold(topBar = { WorkbenchHeader("Host", ConnectionStatus.ONLINE, false, {}) }) { padding ->
                 Box(Modifier.padding(padding).height(360.dp)) { ProjectsScreen(ws, {}, {}, {}) }
             }
         } }

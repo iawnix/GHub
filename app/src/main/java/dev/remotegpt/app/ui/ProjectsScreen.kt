@@ -10,7 +10,6 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -27,7 +26,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -50,7 +48,6 @@ import dev.remotegpt.app.*
     onArchive: (String) -> Unit = {},
     onExitArchive: () -> Unit = {},
 ) {
-    val haptic = rememberHaptic()
     val list = rememberLazyListState()
     val refresh = rememberPullToRefreshState()
     val topInset = LocalWorkbenchTopInset.current
@@ -77,14 +74,14 @@ import dev.remotegpt.app.*
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .55f),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = MaterialTheme.shapes.medium,
                 ) {
                     Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(WorkbenchIcons.Archive, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
                         Text(tr(R.string.ui_archived_sessions), Modifier.weight(1f),
                             style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        TextButton(onClick = { haptic(false); onExitArchive() }) {
+                        TextButton(onClick = { onExitArchive() }) {
                             Text(tr(R.string.ui_back_to_recent))
                         }
                     }
@@ -109,7 +106,6 @@ import dev.remotegpt.app.*
                 item(key = "project:${project.path}") {
                     val visibility = remember { MutableTransitionState(open) }
                     visibility.targetState = open
-                    val angle by animateFloatAsState(if (open) 90f else 0f, tween(if (open) Motion.EXPAND else Motion.COLLAPSE, easing = FastOutSlowInEasing), label = "project-chevron")
                     val emphasis by animateFloatAsState(if (focusedProject == project.path && open) 1f else 0f, tween(Motion.SHORT), label = "project-focus")
                     val reveal = remember { BringIntoViewRequester() }
                     var headerHeight by remember { mutableIntStateOf(0) }
@@ -124,21 +120,20 @@ import dev.remotegpt.app.*
                         }
                     }
                     // Added or removed projects fade; no placement motion, which would chase the expand animation.
-                    Column(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))
+                    Column(Modifier.animateItem(fadeInSpec = tween(Motion.EXPAND), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))
                         .fillMaxWidth().bringIntoViewRequester(reveal).onSizeChanged { width = it.width }) {
                         Row(Modifier.fillMaxWidth().onSizeChanged { headerHeight = it.height }
-                            .clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = emphasis)),
+                            .clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = emphasis)),
                             verticalAlignment = Alignment.CenterVertically) {
                             Row(Modifier.weight(1f).semantics { stateDescription = tr(if (open) R.string.ui_project_expanded else R.string.ui_project_collapsed) }
                                 .clickable(role = Role.Button, onClickLabel = tr(if (open) R.string.ui_collapse_269 else R.string.ui_expand)) {
-                                    haptic(false)
                                     focusedProject = project.path
                                     revealProject = if (open) null else project.path
                                     expanded = if (open) expanded - project.path else expanded + project.path
                                 }.heightIn(min = 56.dp).padding(horizontal = 8.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 // The chevron already marks the hierarchy; a folder glyph only cost width.
-                                Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(16.dp).rotate(angle), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                DisclosureChevron(open, WorkbenchIcons.ChevronRight, null, MaterialTheme.colorScheme.onSurfaceVariant)
                                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(project.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     // Collapsed rows otherwise look identical; size and recency tell them apart.
@@ -153,19 +148,20 @@ import dev.remotegpt.app.*
                                     unread > 0 -> TaskStatus.COMPLETED
                                     else -> null
                                 }
-                                projectStatus?.let { TaskStatusLabel(it, showLabel = true, text = when (it) {
-                                    TaskStatus.APPROVAL -> tr(R.string.ui_approval_needed, approvals)
-                                    TaskStatus.FAILED -> tr(R.string.task_failed_count, failures)
-                                    TaskStatus.COMPLETED -> tr(R.string.ui_completed, unread)
-                                    else -> taskStatusLabel(it)
-                                }) }
+                                when (projectStatus) {
+                                    null -> Unit
+                                    TaskStatus.COMPLETED -> UnreadResultLabel(tr(R.string.ui_new_results_count, unread))
+                                    else -> TaskStatusLabel(projectStatus, showLabel = true, text = when (projectStatus) {
+                                        TaskStatus.APPROVAL -> tr(R.string.ui_approval_needed, approvals)
+                                        TaskStatus.FAILED -> tr(R.string.task_failed_count, failures)
+                                        else -> taskStatusLabel(projectStatus)
+                                    })
+                                }
                             }
                             IconButton(onClick = { onProjectMenu(project.path) }) { Icon(WorkbenchIcons.MoreHoriz, tr(R.string.ui_actions_for_project, project.name), Modifier.size(18.dp)) }
                         }
                         // Only four rows participate in size animation. Older history remains lazy.
-                        AnimatedVisibility(visibleState = visibility,
-                            enter = expandVertically(tween(Motion.EXPAND, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) + fadeIn(tween(Motion.SHORT)),
-                            exit = shrinkVertically(tween(Motion.COLLAPSE, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) + fadeOut(tween(Motion.EXIT))) {
+                        Disclosure(visibility) {
                             // An archived or new session closes or opens its gap instead of jumping.
                             Column(Modifier.animateContentSize(tween(Motion.EXPAND, easing = Motion.Standard))) {
                                 threads.take(4).forEachIndexed { index, thread -> key(thread.id) {
@@ -181,18 +177,16 @@ import dev.remotegpt.app.*
                 }
                 if (open && project.path in all) {
                     items(threads.drop(4), key = { "thread:${it.id}" }) {
-                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.ENTER), placementSpec = tween(Motion.EXPAND, easing = Motion.Standard),
+                        Box(Modifier.animateItem(fadeInSpec = tween(Motion.EXPAND), placementSpec = tween(Motion.EXPAND, easing = Motion.Standard),
                             fadeOutSpec = tween(Motion.SHORT))) { ProjectThreadRow(ws, it, onContinue, onArchive) }
                     }
                 }
                 item(key = "project-actions:${project.path}") {
                     val visibility = remember { MutableTransitionState(open) }
                     visibility.targetState = open
-                    AnimatedVisibility(visibility,
-                        enter = expandVertically(tween(Motion.EXPAND), expandFrom = Alignment.Top) + fadeIn(tween(Motion.SHORT)),
-                        exit = shrinkVertically(tween(Motion.COLLAPSE), shrinkTowards = Alignment.Top) + fadeOut(tween(Motion.EXIT))) {
+                    Disclosure(visibility) {
                         Row(Modifier.fillMaxWidth().padding(start = ThreadIndent - 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { haptic(false); onCreate(project.path) }, enabled = ws.creatingThreadCwd == null && project.path.startsWith('/')) {
+                            TextButton(onClick = { onCreate(project.path) }, enabled = ws.creatingThreadCwd == null && project.path.startsWith('/')) {
                                 if (ws.creatingThreadCwd == project.path) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 else Icon(WorkbenchIcons.Add, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
@@ -244,25 +238,27 @@ import dev.remotegpt.app.*
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
                 unavailable -> Text(tr(R.string.ui_unavailable), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                status == TaskStatus.COMPLETED -> Row(Modifier.semantics(mergeDescendants = true) {},
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // An unread result is news, not a routine completed-state indicator.
-                    val unreadTint = accentColor(WorkbenchAccent.BLUE)
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(unreadTint))
-                    Text(tr(R.string.ui_new_result), style = MaterialTheme.typography.labelSmall, color = unreadTint, maxLines = 1)
-                }
-                status != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(taskStatusLabel(status), style = MaterialTheme.typography.labelSmall, color = taskStatusColor(status), maxLines = 1)
-                    TaskStatusIcon(status, label = null)
-                }
+                status == TaskStatus.COMPLETED -> UnreadResultLabel(tr(R.string.ui_new_result))
+                // Same order as the project row: glyph, then words.
+                status != null -> TaskStatusLabel(status, showLabel = true)
             }
         }
     }
 
 }
 
+/** An unread result is news, not a routine completed state: a blue dot, never a check. */
+@Composable private fun UnreadResultLabel(text: String) {
+    val tint = accentColor(WorkbenchAccent.BLUE)
+    Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(tint))
+        Text(text, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+    }
+}
+
 @Composable fun ProjectWorkspaceMenu(project: ProjectProfile?, selected: WorkspaceTab, hasConversation: Boolean,
-    onSelect: (WorkspaceTab) -> Unit, onProjects: () -> Unit, onRefresh: () -> Unit) {
+    onSelect: (WorkspaceTab) -> Unit, onProjects: () -> Unit) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(project?.name ?: tr(R.string.ui_workspace), Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleLarge)
         project?.let { Text(it.path, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -277,22 +273,17 @@ import dev.remotegpt.app.*
             }
         }
         SheetAction(if (project == null) tr(R.string.ui_choose_project) else tr(R.string.ui_switch_project), WorkbenchIcons.FolderCopy, onClick = onProjects)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            TextButton(onClick = onRefresh, modifier = Modifier.heightIn(min = 48.dp)) { Icon(WorkbenchIcons.Refresh, null, Modifier.size(20.dp)); Spacer(Modifier.width(6.dp)); Text(tr(R.string.ui_refresh)) }
-        }
         Spacer(Modifier.height(16.dp))
     }
 }
 
 @Composable fun SheetAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean = false, enabled: Boolean = true, supporting: String? = null, onClick: () -> Unit) {
-    val haptic = rememberHaptic()
-    Surface(onClick = { haptic(false); onClick() }, enabled = enabled, shape = RoundedCornerShape(16.dp),
+    Surface(onClick = { onClick() }, enabled = enabled, shape = MaterialTheme.shapes.medium,
         color = androidx.compose.ui.graphics.Color.Transparent) {
         Row(Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.38f).heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Icon(icon, null, Modifier.size(20.dp), tint = if (enabled) functionalIconColor(icon) else MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
                 supporting?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -307,7 +298,7 @@ import dev.remotegpt.app.*
     var path by rememberSaveable(initialPath) { mutableStateOf(initialPath) }
     var name by rememberSaveable { mutableStateOf("") }
     val saving by rememberUpdatedState(busy)
-    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() },
+    WorkbenchBottomSheet(onDismissRequest = { if (!busy) onDismiss() },
         properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !busy),
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true,
             confirmValueChange = { it != SheetValue.Hidden || !saving })) {
@@ -329,8 +320,7 @@ import dev.remotegpt.app.*
     SelectionList(tr(R.string.ui_choose_project), projects.map { project ->
         SelectionOption(project.path, project.name, detail = project.path.takeIf { project.name in duplicateNames })
     }, current, onSelect, footer = {
-        val haptic = rememberHaptic()
-        TextButton(onClick = { haptic(false); onAdd() }, modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(min = 48.dp)) {
+        TextButton(onClick = { onAdd() }, modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(min = 48.dp)) {
             Icon(WorkbenchIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(tr(R.string.ui_add_project))
         }
     })

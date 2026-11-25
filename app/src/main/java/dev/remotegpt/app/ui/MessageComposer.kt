@@ -18,7 +18,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.animation.AnimatedContent
@@ -92,7 +91,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
         permissions.approval == "untrusted" -> tr(R.string.ui_permission_untrusted)
         else -> tr(R.string.ui_permission_ask)
     }
-    val composerShape = RoundedCornerShape(22.dp)
+    val composerShape = MaterialTheme.shapes.large
     Surface(
         // ConversationViewport owns IME insets; typing never starts a separate layout animation.
         modifier = modifier.widthIn(max = 760.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
@@ -161,7 +160,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 items(inputDraft.attachments, key = { it.id }) { attachment ->
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(12.dp), modifier = Modifier.width(248.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small, modifier = Modifier.width(248.dp)) {
                         Row(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (attachment.image && attachment.localUri.isNotBlank()) ImageThumbnail(
@@ -176,7 +175,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
                                 }, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
                                     color = if (attachment.state == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            IconButton(onClick = { haptic(false); onRemoveAttachment(attachment.id) }, enabled = editable, modifier = Modifier.size(48.dp)) {
+                            IconButton(onClick = { onRemoveAttachment(attachment.id) }, enabled = editable, modifier = Modifier.size(48.dp)) {
                                 Icon(WorkbenchIcons.Close, tr(R.string.ui_remove_attachment, attachment.name), Modifier.size(16.dp))
                             }
                         }
@@ -205,20 +204,31 @@ import dev.remotegpt.client.sessionCommandSuggestions
             val command = sessionCommand(inputDraft.text)
             val commandSuggestions = if (editable) sessionCommandSuggestions(inputDraft.text) else emptyList()
             if (commandSuggestions.isNotEmpty()) SlashCommandSuggestions(commandSuggestions, onCommand)
-            val steerable = running && command == null && hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
-            if (steerable) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onSteer, enabled = online) { Text(tr(R.string.ui_steer_task)) }
+            val commandAction = command != null
+            val queueable = hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
+            // While a turn runs, the round button always stops it. Anything typed meanwhile is
+            // sent through these secondary actions, so a draft can never hide the stop control.
+            if (running && (commandAction || queueable)) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
+                if (commandAction) TextButton(onClick = { haptic(false); onSend() }, enabled = online && !stopping) {
+                    Text(tr(R.string.ui_run_slash_command))
+                } else {
+                    TextButton(onClick = { haptic(false); onSteer() }, enabled = online,
+                        modifier = Modifier.semantics { contentDescription = tr(R.string.ui_steer_task) }) { Text(tr(R.string.ui_steer_short)) }
+                    TextButton(onClick = { haptic(false); onQueue() }, enabled = online,
+                        modifier = Modifier.semantics { contentDescription = tr(R.string.ui_queue_message) }) { Text(tr(R.string.ui_queue_short)) }
+                }
             }
             // One solid outer capsule surface: no inner background seams while content scrolls behind it.
             BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
                 val compact = maxWidth < 344.dp || LocalDensity.current.fontScale > 1.3f
                 val modelLabel = currentModel?.name ?: model ?: tr(R.string.ui_choose_model)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { haptic(false); focus.clearFocus(); attachmentsMenu = true }, enabled = editable, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = { focus.clearFocus(); attachmentsMenu = true }, enabled = editable, modifier = Modifier.size(48.dp)) {
                         Icon(WorkbenchIcons.Add, tr(R.string.ui_add_attachment), Modifier.size(22.dp))
                     }
                     if (compact) {
-                        TextButton(onClick = { haptic(false); focus.clearFocus(); optionsMenu = true }, enabled = editable,
+                        TextButton(onClick = { focus.clearFocus(); optionsMenu = true }, enabled = editable,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                                 .semantics { contentDescription = tr(R.string.ui_message_options_current, modelLabel, effortLabel(effort)) },
                             contentPadding = PaddingValues(horizontal = 4.dp),
@@ -228,57 +238,53 @@ import dev.remotegpt.client.sessionCommandSuggestions
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
                     } else {
-                        TextButton(onClick = { haptic(false); focus.clearFocus(); modelsMenu = true }, enabled = editable,
+                        TextButton(onClick = { focus.clearFocus(); modelsMenu = true }, enabled = editable,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = tr(R.string.ui_choose_model_current, modelLabel) },
                             contentPadding = PaddingValues(horizontal = 4.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             Text(modelLabel, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
-                        TextButton(onClick = { haptic(false); focus.clearFocus(); effortMenu = true }, enabled = editable,
+                        TextButton(onClick = { focus.clearFocus(); effortMenu = true }, enabled = editable,
                             modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = tr(R.string.ui_reasoning_level_current, effortLabel(effort)) },
                             contentPadding = PaddingValues(horizontal = 6.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             Text(effortLabel(effort), maxLines = 1, style = MaterialTheme.typography.labelMedium)
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
                     }
-                    IconButton(onClick = { haptic(false); onVoice() }, enabled = editable, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = { onVoice() }, enabled = editable, modifier = Modifier.size(48.dp)) {
                         Icon(if (listening) WorkbenchIcons.StopCircle else WorkbenchIcons.MicNone,
                             tr(if (listening) R.string.ui_stop_voice_input else R.string.ui_voice_input), Modifier.size(20.dp),
                             tint = if (listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    val commandAction = command != null
-                    val queueable = hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
-                    val queueAction = running && queueable && !commandAction
                     val enabled = if (running) online && !stopping else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
                     val sendLabel = tr(when {
                         stopping -> R.string.ui_stopping_task
-                        commandAction -> R.string.ui_run_slash_command
-                        queueAction -> R.string.ui_queue_message
                         running -> R.string.ui_stop_task
+                        commandAction -> R.string.ui_run_slash_command
                         inputDraft.delivery == "sending" -> R.string.ui_resending_input
                         edit != null -> R.string.ui_edit_and_resend
                         else -> R.string.ui_send_message
                     })
                     val sendInteractionSource = remember { MutableInteractionSource() }
-                    IconButton(onClick = { haptic(running && !queueAction && !commandAction); if (commandAction) onSend() else if (queueAction) onQueue() else if (running) onStop() else onSend() }, enabled = enabled,
+                    IconButton(onClick = { haptic(true); if (running) onStop() else onSend() }, enabled = enabled,
                         interactionSource = sendInteractionSource,
                         modifier = Modifier.size(48.dp).workbenchPressScale(enabled, sendInteractionSource)
                             .semantics { contentDescription = sendLabel }) {
                         // Stop is destructive for the running turn, so it must not look like Send.
                         val container by animateColorAsState(when {
                             !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)
-                            running && !queueAction && !commandAction -> MaterialTheme.colorScheme.error
+                            running -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.onSurface
                         }, Motion.short(), label = "send-container")
                         Box(Modifier.size(34.dp).background(container, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
                             val tint by animateColorAsState(when {
                                 !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                                running && !queueAction && !commandAction -> MaterialTheme.colorScheme.onError
+                                running -> MaterialTheme.colorScheme.onError
                                 else -> MaterialTheme.colorScheme.surface
                             }, Motion.short(), label = "send-tint")
                             val glyph = when {
                                 inputDraft.delivery == "sending" && !running -> 2
-                                running && !queueAction && !commandAction -> 1
+                                running -> 1
                                 else -> 0
                             }
                             AnimatedContent(glyph, transitionSpec = { swap() }, contentAlignment = Alignment.Center, label = "send-glyph") { target ->
@@ -307,16 +313,16 @@ import dev.remotegpt.client.sessionCommandSuggestions
             }
         }
     }
-    if (optionsMenu) ModalBottomSheet(onDismissRequest = { optionsMenu = false }) {
+    if (optionsMenu) WorkbenchBottomSheet(onDismissRequest = { optionsMenu = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(tr(R.string.ui_message_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-            SheetAction(tr(R.string.ui_choose_model), WorkbenchIcons.AutoAwesome,
+            SheetAction(tr(R.string.ui_choose_model), WorkbenchIcons.Model,
                 supporting = currentModel?.name ?: model) { optionsMenu = false; modelsMenu = true }
-            SheetAction(tr(R.string.ui_reasoning_level), WorkbenchIcons.Checklist,
+            SheetAction(tr(R.string.ui_reasoning_level), WorkbenchIcons.Reasoning,
                 supporting = effortLabel(effort)) { optionsMenu = false; effortMenu = true }
         }
     }
-    if (attachmentsMenu) ModalBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
+    if (attachmentsMenu) WorkbenchBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(tr(R.string.ui_input_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
             // Keep the actions people use to add content at the top of the sheet.
@@ -329,7 +335,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
                 supporting = tr(if (inputDraft.mode == "plan") R.string.ui_mode_plan else R.string.ui_mode_execute)) {
                 attachmentsMenu = false; onOpenModeMenu()
             }
-            SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.AutoAwesome, enabled = online && !archived && edit == null) {
+            SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.Goal, enabled = online && !archived && edit == null) {
                 attachmentsMenu = false; onGoal()
             }
             SheetAction(tr(R.string.ui_permissions), WorkbenchIcons.Key, enabled = online && !archived && edit == null,
@@ -351,7 +357,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
 @Composable private fun SlashCommandSuggestions(commands: List<String>, onCommand: (String) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .7f)),
     ) {
@@ -364,7 +370,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
                     onClick = { onCommand(command) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                     color = Color.Transparent,
-                    shape = RoundedCornerShape(10.dp),
+                    shape = MaterialTheme.shapes.small,
                 ) {
                     Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(command, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -382,11 +388,9 @@ import dev.remotegpt.client.sessionCommandSuggestions
 @Composable internal fun PermissionPickerSheet(current: dev.remotegpt.app.PermissionSettings, onApply: (String, String) -> Unit, onDismiss: () -> Unit) {
     var approval by remember(current) { mutableStateOf(current.approval) }
     var sandbox by remember(current) { mutableStateOf(current.sandbox) }
-    ModalBottomSheet(
+    WorkbenchBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 2.dp,
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp),
@@ -432,7 +436,6 @@ import dev.remotegpt.client.sessionCommandSuggestions
 }
 
 @Composable private fun PermissionOptionRow(label: String, detail: String, selected: Boolean, risky: Boolean, onClick: () -> Unit) {
-    val haptic = rememberHaptic()
     val detailColor = when {
         risky && selected -> LocalWorkbenchSemanticColors.current.warning
         selected -> MaterialTheme.colorScheme.onPrimaryContainer
@@ -440,9 +443,9 @@ import dev.remotegpt.client.sessionCommandSuggestions
     }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.small)
             .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .86f) else Color.Transparent)
-            .selectable(selected, role = Role.RadioButton, onClick = { haptic(false); onClick() })
+            .selectable(selected, role = Role.RadioButton, onClick = { onClick() })
             .heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

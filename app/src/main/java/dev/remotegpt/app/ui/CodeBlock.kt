@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -130,7 +129,7 @@ private data class CodeDocument(val code: HighlightedCode, val pages: List<CodeS
         Box(
             modifier = Modifier.size(30.dp).background(
                 if (customized) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                RoundedCornerShape(8.dp),
+                MaterialTheme.shapes.extraSmall,
             ),
             contentAlignment = Alignment.Center,
         ) {

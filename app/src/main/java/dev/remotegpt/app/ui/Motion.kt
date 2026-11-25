@@ -3,6 +3,7 @@ package dev.remotegpt.app.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -44,15 +45,15 @@ import androidx.compose.ui.unit.dp
  * animator duration scale, so "Remove animations" turns them off without extra checks.
  */
 internal object Motion {
+    /** Icons, colors, presses and other small state changes. */
     const val SHORT = 120
-    const val PRESS = 150
-    const val STATE = 150
-    const val ICON = 300
-    const val ENTER = 200
-    const val CONTENT = 160
-    const val EXIT = 90
+    /** Content opening or arriving. */
     const val EXPAND = 180
+    /** Content closing. */
     const val COLLAPSE = 120
+    /** The fade of whatever is leaving; always shorter than what replaces it. */
+    const val EXIT = 90
+    /** Moving between pages. */
     const val PAGE = 260
 
     val Standard = FastOutSlowInEasing
@@ -71,7 +72,7 @@ internal object Motion {
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         if (enabled && pressed) .96f else 1f,
-        tween(Motion.PRESS, easing = Motion.EmphasizedAccelerate),
+        tween(Motion.SHORT, easing = Motion.EmphasizedAccelerate),
         label = "press-scale",
     )
     return graphicsLayer { scaleX = scale; scaleY = scale }
@@ -95,27 +96,32 @@ internal fun sharedAxisX(forward: Boolean): ContentTransform {
 internal fun fadeThrough(): ContentTransform = ContentTransform(
     // Sibling views do not keep a render snapshot of the old tab. Show the new view
     // immediately instead of fading through an empty frame between two state updates.
-    scaleIn(tween(140, easing = LinearOutSlowInEasing), initialScale = .98f),
-    fadeOut(tween(70, easing = FastOutLinearInEasing)),
+    scaleIn(tween(Motion.SHORT, easing = LinearOutSlowInEasing), initialScale = .98f),
+    fadeOut(tween(Motion.EXIT, easing = FastOutLinearInEasing)),
     sizeTransform = null,
 )
 
 /** Icon or label swaps in place (send ↔ stop, status changes). */
 internal fun swap(): ContentTransform = ContentTransform(
     fadeIn(Motion.short()) + scaleIn(Motion.short(), initialScale = .8f),
-    fadeOut(tween(80)) + scaleOut(tween(80), targetScale = .8f),
+    fadeOut(tween(Motion.EXIT)) + scaleOut(tween(Motion.EXIT), targetScale = .8f),
     sizeTransform = null,
 )
 
 /** Content revealed under a header. Shared by projects, execution details and file changes. */
 @Composable internal fun Disclosure(expanded: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    AnimatedVisibility(
-        visible = expanded,
-        modifier = modifier,
-        enter = expandVertically(tween(Motion.EXPAND, easing = Motion.Standard), expandFrom = Alignment.Top) + fadeIn(tween(Motion.SHORT)),
-        exit = shrinkVertically(tween(Motion.COLLAPSE, easing = Motion.Standard), shrinkTowards = Alignment.Top) + fadeOut(tween(Motion.EXIT)),
-    ) { content() }
+    AnimatedVisibility(visible = expanded, modifier = modifier, enter = disclosureEnter, exit = disclosureExit) { content() }
 }
+
+/** The same disclosure, driven by a caller that needs to know when the motion settles. */
+@Composable internal fun Disclosure(visibleState: MutableTransitionState<Boolean>, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    AnimatedVisibility(visibleState = visibleState, modifier = modifier, enter = disclosureEnter, exit = disclosureExit) { content() }
+}
+
+private val disclosureEnter =
+    expandVertically(tween(Motion.EXPAND, easing = Motion.Standard), expandFrom = Alignment.Top) + fadeIn(tween(Motion.SHORT))
+private val disclosureExit =
+    shrinkVertically(tween(Motion.COLLAPSE, easing = Motion.Standard), shrinkTowards = Alignment.Top) + fadeOut(tween(Motion.EXIT))
 
 /**
  * One chevron that turns instead of swapping glyphs, so the eye follows the change.
@@ -133,7 +139,7 @@ internal fun swap(): ContentTransform = ContentTransform(
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = slideInVertically(tween(Motion.ENTER, easing = Motion.EmphasizedDecelerate)) { it / 3 } + fadeIn(tween(Motion.CONTENT)),
+        enter = slideInVertically(tween(Motion.EXPAND, easing = Motion.EmphasizedDecelerate)) { it / 3 } + fadeIn(tween(Motion.SHORT)),
         exit = slideOutVertically(tween(Motion.SHORT, easing = Motion.EmphasizedAccelerate)) { it / 3 } + fadeOut(tween(Motion.EXIT)),
     ) { content() }
 }
@@ -144,7 +150,7 @@ internal fun swap(): ContentTransform = ContentTransform(
  */
 @Composable internal fun AppearOnce(animate: Boolean, content: @Composable () -> Unit) {
     val alpha = remember { Animatable(if (animate) 0f else 1f) }
-    LaunchedEffect(Unit) { if (alpha.value < 1f) alpha.animateTo(1f, tween(140, easing = LinearOutSlowInEasing)) }
+    LaunchedEffect(Unit) { if (alpha.value < 1f) alpha.animateTo(1f, tween(Motion.SHORT, easing = LinearOutSlowInEasing)) }
     Box(Modifier.graphicsLayer { this.alpha = alpha.value }) { content() }
 }
 

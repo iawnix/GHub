@@ -28,7 +28,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -155,12 +154,6 @@ import java.util.UUID
         else -> CrashScreen.SESSIONS
     }
     SideEffect { (context.applicationContext as RemoteApplication).crashes.screen(crashScreen) }
-    val largeHeader = false
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    LaunchedEffect(state.activeHost, state.workspace.selectedProject, showConversation) {
-        scrollBehavior.state.heightOffset = 0f
-        scrollBehavior.state.contentOffset = 0f
-    }
     BackHandler(!showHome && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) { vm.navigateBack() }
     BackHandler(showHome && state.workspace.archived && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) {
         vm.showArchived(false)
@@ -225,7 +218,6 @@ import java.util.UUID
                 status = state.workspace.connection,
                 conversation = !showHome,
                 onNavigate = { vm.navigateBack() },
-                large = largeHeader, scrollBehavior = if (largeHeader) scrollBehavior else null,
                 onHosts = if (!showConversation) ({ showHostSwitcher = true }) else null,
                 onMenu = { if (showHome) showSettings = true else if (showConversation) showConversationOptions = true else showWorkspace = true },
                 menuIcon = if (showHome) WorkbenchIcons.Settings else WorkbenchIcons.MoreHoriz,
@@ -236,14 +228,13 @@ import java.util.UUID
                 archived = state.workspace.archived,
                 workspaceTab = state.tab,
                 hasConversation = state.workspace.selectedThread != null,
-                onSelectTab = if (!showHome && state.workspace.selectedProject?.startsWith('/') == true) ({ tab ->
+                // The conversation reaches files and terminal from its options sheet.
+                onSelectTab = if (!showHome && !showConversation && state.workspace.selectedProject?.startsWith('/') == true) ({ tab ->
                     if (tab == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(tab)
                 }) else null,
-                onWorkspaceSheet = if (showConversation && state.workspace.selectedProject?.startsWith('/') == true) ({ showWorkspace = true }) else null,
-                backLabel = if (state.tab != WorkspaceTab.SESSIONS) tr(R.string.ui_back_to_session) else tr(R.string.ui_back_to_projects),
+                backLabel = tr(if (state.tab != WorkspaceTab.SESSIONS && state.workspace.selectedThread != null) R.string.ui_back_to_session else R.string.ui_back_to_projects),
             )
         },
-        modifier = Modifier.then(if (largeHeader) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier),
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             if (state.profile == null) {
@@ -303,7 +294,7 @@ import java.util.UUID
                                     vm.message(tr(R.string.ui_no_camera_app_found_choose_an_image))
                                 }
                             }, onVoice = { if (listening) speech.cancel() else microphone.launch(Manifest.permission.RECORD_AUDIO) }, optionsOpen = showConversationOptions, onOptionsChange = { showConversationOptions = it }, onBottomControls = { bottomControls = it })
-                        WorkspaceTab.FILES -> FilesScreen(state, vm, onWorkspace = { showWorkspace = true }, snackbar = snackbars) { file -> pendingDownload = file.path; saveFile.launch(file.name) }
+                        WorkspaceTab.FILES -> FilesScreen(state, vm, snackbar = snackbars) { file -> pendingDownload = file.path; saveFile.launch(file.name) }
                         WorkspaceTab.TERMINAL -> TerminalsScreen(state, vm, onWorkspace = { showWorkspace = true }, onBottomControls = { bottomControls = it })
                     }
                 }
@@ -326,7 +317,7 @@ import java.util.UUID
     )
     menuProject?.let { path ->
         val project = state.workspace.projects.firstOrNull { it.path == path }
-        ModalBottomSheet(onDismissRequest = { menuProject = null }) {
+        WorkbenchBottomSheet(onDismissRequest = { menuProject = null }) {
             Column(Modifier.padding(16.dp)) {
                 Text(project?.name ?: tr(R.string.ui_projects), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
                 Text(path, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -344,18 +335,10 @@ import java.util.UUID
     if (showProjectEditor) ProjectEditor(state.profile?.defaultCwd.orEmpty(), onDismiss = { showProjectEditor = false },
         busy = state.workspace.creatingProjectPath != null, error = state.workspace.projectCreationError,
         onSave = { name, path -> vm.createProject(name, path) { saved -> if (saved) showProjectEditor = false } })
-    if (showWorkspace) ModalBottomSheet(onDismissRequest = { showWorkspace = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    if (showWorkspace) WorkbenchBottomSheet(onDismissRequest = { showWorkspace = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         ProjectWorkspaceMenu(state.project, state.tab, state.workspace.selectedThread != null,
             onSelect = { if (it == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(it); showWorkspace = false },
-            onProjects = { vm.backToProjects(); showWorkspace = false },
-            onRefresh = {
-                showWorkspace = false
-                when {
-                    state.tab == WorkspaceTab.FILES -> vm.listFiles()
-                    showConversation -> vm.refreshConversation()
-                    else -> vm.refreshThreads()
-                }
-            })
+            onProjects = { vm.backToProjects(); showWorkspace = false })
     }
     if (showLegal) LegalNotices { showLegal = false }
     bootstrapHost?.let { host -> AlertDialog(onDismissRequest = { bootstrapHost = null }, title = { Text(tr(R.string.ui_set_up_the_official_daemon)) },
@@ -378,7 +361,7 @@ import java.util.UUID
 
 @Composable fun TextPrompt(title: String, label: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit, validate: (String) -> Boolean = { it.isNotBlank() }) {
     var value by rememberSaveable(title, initial) { mutableStateOf(initial) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    WorkbenchBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(value, { value = it }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -406,7 +389,7 @@ private fun workspaceTransition(from: String, to: String): ContentTransform {
     val toHome = to.endsWith(":home")
     val terminal = ":${WorkspaceTab.TERMINAL}:" in from || ":${WorkspaceTab.TERMINAL}:" in to
     return when {
-        terminal -> ContentTransform(fadeIn(tween(Motion.CONTENT, delayMillis = 40)), fadeOut(tween(Motion.SHORT - 40)), sizeTransform = null)
+        terminal -> ContentTransform(fadeIn(Motion.short()), fadeOut(tween(Motion.EXIT)), sizeTransform = null)
         sameHost && fromHome != toHome -> sharedAxisX(forward = fromHome)
         else -> fadeThrough()
     }

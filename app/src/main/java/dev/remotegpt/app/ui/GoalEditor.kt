@@ -33,7 +33,7 @@ internal fun goalStatusLabel(status: String): String = tr(when (status) {
     val canChange = supported && enabled && !busy
     val parsedBudget = budget.toLongOrNull()
     val validBudget = budget.isBlank() || (parsedBudget != null && parsedBudget > 0)
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    WorkbenchBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(tr(R.string.ui_goal_title), style = MaterialTheme.typography.titleLarge)

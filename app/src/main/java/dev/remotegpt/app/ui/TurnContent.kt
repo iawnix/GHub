@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -181,12 +180,6 @@ import dev.remotegpt.client.*
         commands > 0 -> tr(R.string.ui_commands_run_view_details, commands)
         else -> tr(R.string.ui_events_view_details, steps.size)
     }
-    val meta = buildList {
-        if (steps.isNotEmpty()) add(trq(R.plurals.ui_output_events, steps.size))
-        if (commands > 0) add(trq(R.plurals.ui_output_commands, commands))
-        if (fileCount > 0) add(trq(R.plurals.ui_output_files, fileCount))
-        if (imageCount > 0) add(trq(R.plurals.ui_output_images, imageCount))
-    }.joinToString(" · ")
     // While a turn runs, the command in flight says more than event counts do.
     val runningCommand = if (!active) null else steps.lastOrNull { it.kind == "commandExecution" && !it.complete }
         ?.commandExecution?.command?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
@@ -212,14 +205,12 @@ import dev.remotegpt.client.*
                         Text("\$ $it", style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                             color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     }
-                    if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                // "Synced" is the quiet default and needs no badge.
-                if (active || syncing || !connected) OutputSyncBadge(active = active, syncing = syncing, connected = connected)
+                // "Synced" is the quiet default, and a live turn already shows its spinner.
+                if (syncing || !connected) OutputSyncBadge(active = active, syncing = syncing, connected = connected)
                 DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
                     MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (steps.isNotEmpty()) OutputEventRail(steps)
             Disclosure(expanded) {
                 Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -234,52 +225,9 @@ import dev.remotegpt.client.*
     }
 }
 
-/** A compact visual trace of the last remote events. It mirrors event ordering
- * without exposing transport internals or forcing the user to open raw logs. */
-@Composable private fun OutputEventRail(items: List<TimelineItem>) {
-    val visible = items.takeLast(4)
-    FlowRow(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        visible.forEach { item ->
-            val status = itemTaskStatus(item)
-            val tint = taskStatusColor(status)
-            Surface(color = tint.copy(alpha = .08f), shape = RoundedCornerShape(50)) {
-                Row(
-                    Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    TaskStatusIcon(status, Modifier.size(13.dp))
-                    Text(eventShortLabel(item.kind), style = MaterialTheme.typography.labelSmall, color = tint)
-                }
-            }
-        }
-        if (items.size > visible.size) {
-            Text(trq(R.plurals.ui_output_more_events, items.size - visible.size),
-                Modifier.padding(horizontal = 4.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-private fun eventShortLabel(kind: String): String = tr(when (kind) {
-    "commandExecution" -> R.string.ui_output_command_short
-    "dynamicToolCall" -> R.string.ui_tool_call
-    "contextCompaction" -> R.string.ui_context_compaction
-    "fileChange" -> R.string.ui_output_files_short
-    "reasoning" -> R.string.ui_output_reasoning_short
-    "plan" -> R.string.ui_output_plan_short
-    "agentMessage" -> R.string.ui_output_reply_short
-    else -> R.string.ui_output_event_short
-})
-
 @Composable internal fun FileSummary(items: List<TimelineItem>, preview: (String) -> Unit) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     var showAll by rememberSaveable { mutableStateOf(false) }
-    val haptic = rememberHaptic()
     val edits = remember(items) { items.flatMap { it.fileEdits } }
     val grouped = remember(edits) { edits.groupBy { it.path }.entries.toList() }
     val repeatedNames = remember(grouped) { grouped.groupingBy { it.key.substringAfterLast('/') }.eachCount().filterValues { it > 1 }.keys }
@@ -291,7 +239,7 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f))) {
         Column {
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .clickable(role = Role.Button) { haptic(false); expanded = !expanded }
+                .clickable(role = Role.Button) { expanded = !expanded }
                 .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (failed || items.any { !it.complete }) TaskStatusIcon(if (failed) TaskStatus.FAILED else TaskStatus.RUNNING)
@@ -300,8 +248,8 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
                         style = MaterialTheme.typography.labelMedium)
                     ChangeCounts(total)
                 }
-                DisclosureChevron(expanded, WorkbenchIcons.ExpandMore, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
-                    MaterialTheme.colorScheme.onSurfaceVariant, openDegrees = 180f)
+                DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand),
+                    MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Disclosure(expanded) {
                 Column {
@@ -313,9 +261,9 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
                     }
                     if (grouped.size > 3) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
-                        TextButton(onClick = { haptic(false); showAll = !showAll }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                        TextButton(onClick = { showAll = !showAll }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                             Text(if (showAll) tr(R.string.chat_fewer_files) else trq(R.plurals.chat_more_files, grouped.size - 3), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-                            DisclosureChevron(showAll, WorkbenchIcons.ChevronRight, null, LocalContentColor.current, openDegrees = -90f)
+                            DisclosureChevron(showAll, WorkbenchIcons.ChevronRight, null, LocalContentColor.current)
                         }
                     }
                     items.filter { it.fileEdits.isEmpty() }.forEach { key(it.identityKey) { Box(Modifier.padding(horizontal = 12.dp)) { TimelineCard(it, preview) } } }
@@ -335,7 +283,6 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
 
 @Composable private fun FileDiffRow(path: String, edits: List<FileEdit>, showParent: Boolean) {
     var expanded by rememberSaveable(path) { mutableStateOf(false) }
-    val haptic = rememberHaptic()
     val largeText = LocalDensity.current.fontScale > 1.3f
     val counts = remember(edits) {
         val values = edits.map { it.lineCounts }
@@ -343,7 +290,7 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
     }
     Column {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
-        Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = tr(R.string.chat_show_diff, path)) { haptic(false); expanded = !expanded }
+        Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = tr(R.string.chat_show_diff, path)) { expanded = !expanded }
             .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(WorkbenchIcons.FileCode, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -355,11 +302,13 @@ private fun eventShortLabel(kind: String): String = tr(when (kind) {
                 if (largeText) ChangeCounts(counts)
             }
             if (!largeText) ChangeCounts(counts)
-            Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ChevronRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, null, MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (expanded) {
-            SelectionContainer { Text(path, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall) }
-            DiffContent(edits.joinToString("\n\n") { it.diff.ifBlank { tr(R.string.ui_the_server_did_not_provide_a_diff) } })
+        Disclosure(expanded) {
+            Column {
+                SelectionContainer { Text(path, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall) }
+                DiffContent(edits.joinToString("\n\n") { it.diff.ifBlank { tr(R.string.ui_the_server_did_not_provide_a_diff) } })
+            }
         }
     }
 }

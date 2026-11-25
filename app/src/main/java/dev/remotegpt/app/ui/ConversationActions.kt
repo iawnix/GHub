@@ -51,7 +51,7 @@ import kotlinx.coroutines.delay
             ),
         ) {
             // Compose respects the system animator duration scale, including zero.
-            Crossfade(icon, Modifier.size(20.dp), animationSpec = tween(Motion.ICON), label = "contentAction") {
+            Crossfade(icon, Modifier.size(20.dp), animationSpec = Motion.short(), label = "contentAction") {
                 Icon(it, contentDescription = null, modifier = Modifier.size(20.dp))
             }
         }

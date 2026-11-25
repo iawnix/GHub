@@ -12,7 +12,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
@@ -23,7 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
@@ -31,7 +29,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -60,11 +57,10 @@ import java.util.Locale
 @Composable fun PreferenceRow(title: String, icon: ImageVector, value: String? = null, description: String? = null, accent: WorkbenchAccent? = null, onClick: (() -> Unit)? = null,
     tint: androidx.compose.ui.graphics.Color? = null, descriptionColor: androidx.compose.ui.graphics.Color? = null,
     descriptionMonospace: Boolean = false, trailing: (@Composable () -> Unit)? = null) {
-    val haptic = rememberHaptic()
     val iconTint = tint ?: accent?.let { accentColor(it) } ?: functionalIconColor(icon)
-    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = { haptic(false); onClick() }) else Modifier)
+    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = { onClick() }) else Modifier)
         .heightIn(min = 60.dp).padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(36.dp).clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
             Icon(icon, null, Modifier.size(20.dp), tint = iconTint)
         }
         Spacer(Modifier.width(12.dp))
@@ -98,7 +94,7 @@ import java.util.Locale
                     WorkbenchSurface(Modifier.padding(horizontal = 20.dp)) {
                         PreferenceRow(tr(R.string.ui_servers), WorkbenchIcons.Dns, tr(R.string.ui_servers_189 , hostCount), description = tr(R.string.ui_ssh_connections_keys_and_jump_hosts), onClick = onHosts)
                         GroupDivider()
-                        PreferenceRow(tr(R.string.ui_keep_connected_in_background), WorkbenchIcons.Connected,
+                        PreferenceRow(tr(R.string.ui_keep_connected_in_background), WorkbenchIcons.Lan,
                             trailing = { Switch(checked = backgroundKeepAlive, onCheckedChange = onKeepAlive) })
                     }
                 }
@@ -133,7 +129,7 @@ import java.util.Locale
                             if (index > 0) GroupDivider()
                             val selected = theme == id
                             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(MaterialTheme.shapes.small)
                                 .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .72f) else androidx.compose.ui.graphics.Color.Transparent)
                                 .selectable(selected, role = Role.RadioButton, onClick = { onTheme(id) })
                                 .heightIn(min = 56.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -166,7 +162,7 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                             val select = { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag)) }
                             val selected = current == tag
                             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(MaterialTheme.shapes.small)
                                 .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .72f) else androidx.compose.ui.graphics.Color.Transparent)
                                 .selectable(selected, role = Role.RadioButton, onClick = select)
                                 .heightIn(min = 56.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -336,7 +332,7 @@ private fun formatStorageBytes(bytes: Long): String {
                     if (profile.codexPath == "codex" && profile.defaultCwd.isBlank() && profile.socketPath.isBlank()) null else tr(R.string.ui_custom_configuration)) { onEditSection(HostEditorSection.REMOTE) }
             }
             if (connected) item {
-                ServerSettingRow(tr(R.string.ui_remote_environment), WorkbenchIcons.Description) { showEnvironment = true }
+                ServerSettingRow(tr(R.string.ui_remote_environment), WorkbenchIcons.Info) { showEnvironment = true }
             }
         }
     }
@@ -355,12 +351,6 @@ private fun formatStorageBytes(bytes: Long): String {
     val status = workspace.connection
     val canStop = status == ConnectionStatus.ONLINE || status.busy
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        if (pressed) .96f else 1f,
-        androidx.compose.animation.core.tween(Motion.PRESS, easing = Motion.EmphasizedAccelerate),
-        label = "connection-press-scale",
-    )
     val action = tr(when (status) {
         ConnectionStatus.ONLINE, ConnectionStatus.CHECKING, ConnectionStatus.SYNCING -> R.string.ui_disconnect
         ConnectionStatus.CONNECTING -> R.string.ui_cancel_connection
@@ -368,18 +358,18 @@ private fun formatStorageBytes(bytes: Long): String {
         else -> if (workspace.needsBootstrap) R.string.ui_set_up_and_connect
             else if (status == ConnectionStatus.ERROR) R.string.ui_retry_now else R.string.ui_connect
     })
-    val icon = when {
-        status.busy -> WorkbenchIcons.Stop
+    // The glyph shows where the connection is; the label and tooltip name what a tap does.
+    val icon: ImageVector? = when {
+        status.busy && status != ConnectionStatus.WAITING_NETWORK -> null // the ring spinner says it
         status == ConnectionStatus.ONLINE -> WorkbenchIcons.Connected
-        workspace.needsBootstrap -> WorkbenchIcons.Download
-        status == ConnectionStatus.ERROR -> WorkbenchIcons.Refresh
+        status == ConnectionStatus.ERROR -> WorkbenchIcons.TaskError
         else -> WorkbenchIcons.Disconnected
     }
     val state = connectionLabel(status)
     TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { PlainTooltip { Text("$state · $action") } }, state = rememberTooltipState()) {
         val haptic = rememberHaptic()
-        Box(Modifier.size(48.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clickable(
+        Box(Modifier.size(48.dp).workbenchPressScale(true, interactionSource).clickable(
             interactionSource = interactionSource,
             indication = LocalIndication.current,
             onClick = {
@@ -387,8 +377,8 @@ private fun formatStorageBytes(bytes: Long): String {
             if (canStop) onDisconnect() else onConnect()
         }).semantics { contentDescription = action; stateDescription = state }, contentAlignment = Alignment.Center) {
             Box(Modifier.size(36.dp).border(1.dp, connectionColor(status), CircleShape), contentAlignment = Alignment.Center) {
-                    Crossfade(icon, animationSpec = tween(Motion.STATE), label = "connectionAction") {
-                    Icon(it, null, Modifier.size(16.dp), tint = connectionColor(status))
+                Crossfade(icon, animationSpec = Motion.short(), label = "connectionAction") {
+                    if (it != null) Icon(it, null, Modifier.size(16.dp), tint = connectionColor(status))
                 }
                 if (status.busy && status != ConnectionStatus.WAITING_NETWORK) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 1.5.dp, color = connectionColor(status))
             }

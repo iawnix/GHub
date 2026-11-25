@@ -10,7 +10,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -29,15 +28,24 @@ import androidx.compose.ui.window.DialogProperties
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
 
-@Composable fun FilesScreen(state: WorkbenchState, vm: WorkbenchViewModel, onWorkspace: () -> Unit, snackbar: SnackbarHostState? = null, onDownload: (RemoteFile) -> Unit) {
+@Composable fun FilesScreen(state: WorkbenchState, vm: WorkbenchViewModel, snackbar: SnackbarHostState? = null, onDownload: (RemoteFile) -> Unit) {
     val ws = state.workspace
     var goTo by rememberSaveable { mutableStateOf(false) }
     var directoryActions by rememberSaveable { mutableStateOf(false) }
     var options by remember { mutableStateOf<RemoteFile?>(null) }
     var discard by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        PathBreadcrumbs(ws.filePath, onNavigate = vm::listFiles)
-        if (ws.loadingFiles) LinearProgressIndicator(Modifier.fillMaxWidth())
+        // Directory tools sit with the path they act on; the app bar keeps workspace navigation.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { vm.listFiles(ws.filePath.trimEnd('/').substringBeforeLast('/', "").ifBlank { "/" }) },
+                enabled = ws.filePath.startsWith('/') && ws.filePath != "/") {
+                Icon(WorkbenchIcons.ArrowUpward, tr(R.string.ui_parent_directory), Modifier.size(20.dp))
+            }
+            PathBreadcrumbs(ws.filePath, onNavigate = vm::listFiles, modifier = Modifier.weight(1f))
+            IconButton(onClick = { directoryActions = true }) {
+                Icon(WorkbenchIcons.FolderOpen, tr(R.string.ui_directory), Modifier.size(20.dp))
+            }
+        }
         PullToRefreshBox(
             isRefreshing = ws.loadingFiles && ws.files.isNotEmpty(),
             onRefresh = { vm.listFiles() },
@@ -45,14 +53,14 @@ import dev.remotegpt.client.*
         ) {
             when {
                 ws.files.isEmpty() && ws.loadingFiles -> EmptyPanel(
-                    WorkbenchIcons.Connected,
+                    WorkbenchIcons.Refresh,
                     tr(R.string.ui_connecting_to_remote_files),
                     tr(R.string.ui_this_directory_will_load_automatically_when_the),
                 )
                 ws.files.isEmpty() -> EmptyPanel(
                     WorkbenchIcons.FolderOpen,
                     tr(R.string.ui_this_directory_is_empty),
-                    tr(R.string.ui_connect_to_browse_files_edit_text_or),
+                    tr(if (ws.connection == ConnectionStatus.ONLINE) R.string.ui_empty_directory_hint else R.string.ui_connect_to_browse_files_edit_text_or),
                 )
                 else -> LazyColumn(
                     Modifier.fillMaxSize(),
@@ -68,7 +76,7 @@ import dev.remotegpt.client.*
                                 Icon(if (file.directory) WorkbenchIcons.Folder else if (imageName(file.name)) WorkbenchIcons.Image else fileTypeIcon(file.name),
                                     null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             },
-                            trailingContent = { IconButton(onClick = { options = file }) { Icon(WorkbenchIcons.MoreVert, tr(R.string.ui_actions_for, file.name)) } },
+                            trailingContent = { IconButton(onClick = { options = file }) { Icon(WorkbenchIcons.MoreHoriz, tr(R.string.ui_actions_for, file.name), Modifier.size(20.dp)) } },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
                             // Hidden entries stay reachable but recede behind the project's own files.
                             modifier = Modifier.fillMaxWidth().alpha(if (file.name.startsWith('.')) .6f else 1f).then(Modifier.clickableFile {
@@ -81,23 +89,20 @@ import dev.remotegpt.client.*
                 }
             }
         }
-        ReachableActions(onWorkspace, tr(R.string.ui_directory), { directoryActions = true }, primaryIcon = WorkbenchIcons.FolderOpen,
-            secondaryIcon = WorkbenchIcons.ArrowUpward, secondaryLabel = tr(R.string.ui_parent_directory), secondaryEnabled = ws.filePath != "/",
-            onSecondary = { vm.listFiles(ws.filePath.trimEnd('/').substringBeforeLast('/', "").ifBlank { "/" }) })
     }
-    if (directoryActions) ModalBottomSheet(onDismissRequest = { directoryActions = false }) {
+    if (directoryActions) WorkbenchBottomSheet(onDismissRequest = { directoryActions = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text(ws.filePath, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+            Text(ws.filePath, Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.MiddleEllipsis)
             SheetAction(tr(R.string.ui_open_directory), WorkbenchIcons.FolderOpen) { directoryActions = false; goTo = true }
             SheetAction(tr(R.string.ui_project_root), WorkbenchIcons.Home) { directoryActions = false; vm.listFiles(ws.selectedProject) }
-            SheetAction(tr(R.string.ui_refresh_directory), WorkbenchIcons.Refresh) { directoryActions = false; vm.listFiles() }
         }
     }
     if (goTo) TextPrompt(tr(R.string.ui_open_remote_directory), tr(R.string.ui_absolute_path), ws.filePath, onDismiss = { goTo = false }, onConfirm = { vm.listFiles(it); goTo = false }, validate = { it.startsWith('/') })
-    options?.let { file -> ModalBottomSheet(onDismissRequest = { options = null }) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(file.name, style = MaterialTheme.typography.titleLarge)
-            if (!file.directory) Text(if (imageName(file.name)) tr(R.string.ui_image_119, formatSize(file.size)) else formatSize(file.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    options?.let { file -> WorkbenchBottomSheet(onDismissRequest = { options = null }) {
+        // Same layout as every action sheet: title aligned with the action icons.
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Text(file.name, Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            if (!file.directory) Text(if (imageName(file.name)) tr(R.string.ui_image_119, formatSize(file.size)) else formatSize(file.size), Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (file.directory) SheetAction(tr(R.string.ui_open_directory), WorkbenchIcons.FolderOpen) { vm.listFiles(file.path); options = null }
             else {
                 if (imageName(file.name)) SheetAction(tr(R.string.ui_preview_image), WorkbenchIcons.Image) { vm.previewImage(file.path); options = null }
@@ -161,9 +166,9 @@ import dev.remotegpt.client.*
     }
 }
 
-@Composable private fun PathBreadcrumbs(path: String, onNavigate: (String) -> Unit) {
+@Composable private fun PathBreadcrumbs(path: String, onNavigate: (String) -> Unit, modifier: Modifier = Modifier) {
     if (!path.startsWith('/')) {
-        Text(path.ifBlank { tr(R.string.ui_project_directory) }, Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+        Text(path.ifBlank { tr(R.string.ui_project_directory) }, modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         return
@@ -181,9 +186,8 @@ import dev.remotegpt.client.*
     }
     val scroll = rememberScrollState()
     LaunchedEffect(path) { scroll.scrollTo(scroll.maxValue) }
-    val haptic = rememberHaptic()
     Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = modifier.horizontalScroll(scroll).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         segments.forEachIndexed { index, (label, targetPath) ->
@@ -192,8 +196,8 @@ import dev.remotegpt.client.*
                 Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box(
-                modifier = Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(8.dp))
-                    .clickable(enabled = !current, role = Role.Button) { haptic(false); onNavigate(targetPath) }
+                modifier = Modifier.heightIn(min = 40.dp).clip(MaterialTheme.shapes.extraSmall)
+                    .clickable(enabled = !current, role = Role.Button) { onNavigate(targetPath) }
                     .padding(horizontal = 6.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {

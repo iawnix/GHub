@@ -5,11 +5,11 @@ import dev.remotegpt.app.tr
 import dev.remotegpt.app.R
 
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -109,7 +109,6 @@ import dev.remotegpt.client.*
     var userScrolling by remember(thread) { mutableStateOf(false) }
     var newContent by rememberSaveable(thread) { mutableStateOf(false) }
     val completedContentLoaded = timeline.any { it.turnId == completedTurn && it.complete }
-    val haptic = rememberHaptic()
     val scope = rememberCoroutineScope()
     var seenCompletion by rememberSaveable(thread) { mutableStateOf(completedTurn) }
     val latestVersion = timeline.lastOrNull()?.let { "${it.identityKey}:${it.text.hashCode()}:${it.complete}" }
@@ -251,7 +250,7 @@ import dev.remotegpt.client.*
                     }
                     val shownBanner = rememberLastNonNull(bannerText)
                     RiseIn(bannerText != null && !pendingInView) {
-                        PendingActionBanner(shownBanner.orEmpty()) {
+                        PendingActionBanner(shownBanner.orEmpty(), question = approvals.isEmpty()) {
                             userScrolling = false
                             followingLatest = false
                             scope.launch { listState.animateScrollToItem(firstPendingIndex) }
@@ -260,8 +259,6 @@ import dev.remotegpt.client.*
                     if (draft.delivery == "uncertain") {
                         InfoCard(tr(R.string.ui_your_last_message_has_an_unconfirmed_delivery), tr(R.string.ui_history_checked_unlock_draft)) { confirmRetry = true }
                     }
-                    if (thread in ws.stoppingTurns) Text(tr(R.string.ui_stopping_task),
-                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
                     if (draft.queued.isNotEmpty()) QueuedMessages(
                         items = draft.queued,
                         onEdit = vm::editQueuedInput,
@@ -339,7 +336,7 @@ import dev.remotegpt.client.*
                 RiseIn(!followingLatest && !nearBottom && timeline.isNotEmpty(),
                     Modifier.align(Alignment.BottomEnd).padding(bottom = dockHeight).padding(12.dp)) {
                     FilledTonalButton(
-                        onClick = { haptic(false); userScrolling = false; followingLatest = true },
+                        onClick = { userScrolling = false; followingLatest = true },
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                     ) {
                         Icon(WorkbenchIcons.ExpandMore, null, Modifier.size(18.dp))
@@ -357,9 +354,11 @@ import dev.remotegpt.client.*
         // Overlaid under the app bar so loading history never shifts the conversation.
         if (ws.loadingHistory) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = LocalWorkbenchTopInset.current))
     }
-    if (optionsOpen) ModalBottomSheet(onDismissRequest = { onOptionsChange(false) }) {
+    if (optionsOpen) WorkbenchBottomSheet(onDismissRequest = { onOptionsChange(false) }) {
         ConversationActions(
             cwd = state.thread?.cwd.orEmpty(), archived = archived,
+            onFiles = if (ws.selectedProject?.startsWith('/') == true) ({ onOptionsChange(false); vm.selectTab(WorkspaceTab.FILES) }) else null,
+            onTerminal = if (ws.selectedProject?.startsWith('/') == true) ({ onOptionsChange(false); vm.selectTab(WorkspaceTab.TERMINAL) }) else null,
             onRefresh = { onOptionsChange(false); vm.refreshConversation() },
             onRename = { onOptionsChange(false); rename = true },
             onArchive = { onOptionsChange(false); vm.archive(thread, !archived) },
@@ -371,74 +370,55 @@ import dev.remotegpt.client.*
 }
 
 @Composable private fun QueuedMessages(items: List<QueuedInput>, onEdit: (String) -> Unit, onRemove: (String) -> Unit) {
-    Card(
-        modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-            .heightIn(max = 184.dp),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .7f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    // A queue is secondary to the running turn: one quiet line until the user opens it.
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val failed = items.any { it.error != null }
+    fun preview(item: QueuedInput) = item.input.text.ifBlank {
+        item.input.attachments.joinToString { it.name }.ifBlank { tr(R.string.ui_queued_message) }
+    }
+    Surface(
+        modifier = Modifier.widthIn(max = 760.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Icon(WorkbenchIcons.TaskPending, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text(tr(R.string.ui_message_queue), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                    Text(tr(R.string.ui_queue_count, items.size), Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
+        Column {
+            Row(Modifier.fillMaxWidth().clickable(role = Role.Button,
+                onClickLabel = tr(if (expanded) R.string.ui_collapse else R.string.ui_expand)) { expanded = !expanded }
+                .heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(if (failed) WorkbenchIcons.TaskError else WorkbenchIcons.OutputPending, null, Modifier.size(16.dp),
+                    tint = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr(R.string.ui_queue_count, items.size), style = MaterialTheme.typography.labelMedium)
+                Text(if (expanded) tr(R.string.ui_queue_waiting) else preview(items.first()), Modifier.weight(1f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, null, MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(tr(R.string.ui_queue_waiting), Modifier.padding(start = 26.dp, top = 2.dp, bottom = 6.dp),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            items.forEachIndexed { index, item ->
-                val preview = item.input.text.ifBlank {
-                    item.input.attachments.joinToString { it.name }.ifBlank { tr(R.string.ui_queued_message) }
-                }
-                val selected = index == 0
-                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = CircleShape,
-                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
-                        modifier = Modifier.size(28.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("${index + 1}", style = MaterialTheme.typography.labelMedium,
-                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f).padding(vertical = 2.dp)) {
-                        Text(preview, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
-                            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (selected) {
-                                Icon(WorkbenchIcons.OutputPending, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
-                                Spacer(Modifier.width(4.dp)); Text(tr(R.string.ui_queue_next), style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary)
-                            }
-                            if (item.input.attachments.isNotEmpty()) {
-                                if (selected) Spacer(Modifier.width(8.dp))
-                                Icon(WorkbenchIcons.AttachFile, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(3.dp)); Text(tr(R.string.ui_queue_attachments, item.input.attachments.size),
+            Disclosure(expanded) {
+                Column(Modifier.heightIn(max = 184.dp).verticalScroll(rememberScrollState()).padding(start = 14.dp, end = 4.dp, bottom = 4.dp)) {
+                    items.forEachIndexed { index, item ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${index + 1}", Modifier.width(16.dp), style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                                Text(preview(item), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                                if (item.input.attachments.isNotEmpty()) Text(tr(R.string.ui_queue_attachments, item.input.attachments.size),
                                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                item.error?.let { error ->
+                                    Text(error, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                            IconButton(onClick = { onEdit(item.id) }, modifier = Modifier.size(48.dp)) {
+                                Icon(WorkbenchIcons.Edit, tr(R.string.ui_edit_queued_message), Modifier.size(18.dp))
+                            }
+                            IconButton(onClick = { onRemove(item.id) }, modifier = Modifier.size(48.dp)) {
+                                Icon(WorkbenchIcons.Close, tr(R.string.ui_remove_queued_message), Modifier.size(18.dp))
                             }
                         }
-                        item.error?.let { error ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(WorkbenchIcons.TaskError, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.error)
-                                Spacer(Modifier.width(4.dp))
-                                Text(error, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                    IconButton(onClick = { onEdit(item.id) }, modifier = Modifier.size(40.dp)) {
-                        Icon(WorkbenchIcons.Edit, tr(R.string.ui_edit_queued_message), Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = { onRemove(item.id) }, modifier = Modifier.size(40.dp)) {
-                        Icon(WorkbenchIcons.Close, tr(R.string.ui_remove_queued_message), Modifier.size(18.dp))
                     }
                 }
-                if (index != items.lastIndex) HorizontalDivider(Modifier.padding(start = 36.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
             }
         }
     }
@@ -448,10 +428,14 @@ import dev.remotegpt.client.*
 @Composable fun ConversationActions(
     cwd: String, archived: Boolean,
     onRefresh: () -> Unit, onRename: () -> Unit, onArchive: () -> Unit,
+    onFiles: (() -> Unit)? = null, onTerminal: (() -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(tr(R.string.ui_session_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
         if (cwd.isNotBlank()) Text(cwd, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Project tools live here rather than in the app bar, so the conversation header stays quiet.
+        onFiles?.let { SheetAction(tr(R.string.ui_files), WorkbenchIcons.FolderOpen, onClick = it) }
+        onTerminal?.let { SheetAction(tr(R.string.ui_terminal_290), WorkbenchIcons.Terminal, onClick = it) }
         SheetAction(tr(R.string.ui_sync_session), WorkbenchIcons.Refresh, onClick = onRefresh)
         SheetAction(tr(R.string.ui_rename), WorkbenchIcons.Edit, onClick = onRename)
         SheetAction(if (archived) tr(R.string.ui_restore_session) else tr(R.string.ui_archive_session), WorkbenchIcons.Archive, onClick = onArchive)

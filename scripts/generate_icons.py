@@ -35,6 +35,7 @@ ICONS = {
     'FileConfig': 'file-ini', 'FileArchive': 'file-zip',
     'ArrowBack': 'arrow-left', 'ArrowForward': 'arrow-right', 'WrapText': 'arrow-u-down-left',
     'SunMoon': 'circle-half', 'Database': 'database', 'Trash': 'trash', 'Route': 'tree-structure',
+    'Model': 'cpu', 'Reasoning': 'brain', 'Goal': 'target', 'Info': 'info',
 }
 
 

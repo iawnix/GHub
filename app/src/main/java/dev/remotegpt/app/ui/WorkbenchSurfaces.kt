@@ -2,7 +2,6 @@ package dev.remotegpt.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -48,8 +47,7 @@ enum class WorkbenchAccent { BLUE, TEAL, AMBER }
     onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit,
 ) {
     val base = glassSurfaceColor()
-    val haptic = rememberHaptic()
-    val shape = RoundedCornerShape(20.dp)
+    val shape = MaterialTheme.shapes.large
     val border = BorderStroke(1.dp, glassBorderColor())
     val elevated = modifier.shadow(6.dp, shape, ambientColor = Color.Black.copy(alpha = 0.06f),
         spotColor = Color.Black.copy(alpha = 0.08f))
@@ -58,7 +56,7 @@ enum class WorkbenchAccent { BLUE, TEAL, AMBER }
     }
     if (onClick == null) Surface(modifier = elevated, shape = shape, color = base,
         border = border, tonalElevation = 1.dp, content = body)
-    else Surface(onClick = { haptic(false); onClick() }, modifier = elevated, shape = shape, color = base,
+    else Surface(onClick = { onClick() }, modifier = elevated, shape = shape, color = base,
         border = border, tonalElevation = 1.dp, content = body)
 }
 

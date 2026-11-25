@@ -108,7 +108,7 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     GlassWorkbenchScaffold(
         glassEnabled = screen == "projects",
         topBar = { WorkbenchHeader(if (screen == "projects") "开发机" else title,
-            if (screen == "projects") null else project.name, ConnectionStatus.ONLINE, screen != "projects", back,
+            ConnectionStatus.ONLINE, screen != "projects", back,
             backLabel = "返回项目列表", onMenu = { if (screen == "projects") homeMenu = true else menu = true }, onAdd = if (screen == "projects") ({}) else null) },
         modifier = Modifier.imePadding(),
     ) { padding ->
@@ -137,7 +137,7 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     }
     if (menu) ModalBottomSheet(onDismissRequest = { menu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         if (screen == "projects") ProjectWorkspaceMenu(project, WorkspaceTab.SESSIONS, false, onSelect = { menu = false },
-            onProjects = { menu = false; screen = "projects" }, onRefresh = { menu = false })
+            onProjects = { menu = false; screen = "projects" })
         else ConversationActions(project.path, false,
             onRefresh = { menu = false }, onRename = { menu = false }, onArchive = { menu = false })
     }

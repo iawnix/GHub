@@ -87,11 +87,11 @@
     <string name="ui_slash_plan_description" formatted="false">下一条消息使用计划模式</string>
     <string name="ui_slash_goal_description" formatted="false">编辑当前会话目标</string>
     <string name="ui_run_slash_command" formatted="false">执行斜杠指令</string>
-    <string name="ui_message_queue" formatted="false">消息队列</string>
     <string name="ui_queue_count" formatted="false">%1$d 条待发送</string>
     <string name="ui_queue_waiting" formatted="false">当前任务结束后，消息会按顺序发送。</string>
-    <string name="ui_queue_next" formatted="false">下一条</string>
     <string name="ui_queue_attachments" formatted="false">%1$d 个附件</string>
+    <string name="ui_queue_short" formatted="false">排队</string>
+    <string name="ui_steer_short" formatted="false">引导</string>
     <string name="ui_queue_message" formatted="false">将消息加入队列</string>
     <string name="ui_queued_message" formatted="false">排队中的消息</string>
     <string name="ui_edit_queued_message" formatted="false">编辑排队消息</string>
@@ -150,11 +150,11 @@
     <string name="ui_this_directory_is_empty" formatted="false">目录中没有文件</string>
     <string name="ui_connect_to_browse_files_edit_text_or" formatted="false">连接主机后可以浏览目录、编辑文本或把文件附加到会话。</string>
     <string name="ui_actions_for">%1$s 的操作</string>
+    <string name="ui_empty_directory_hint" formatted="false">下拉可刷新，也可以打开其他目录。</string>
     <string name="ui_directory" formatted="false">目录</string>
     <string name="ui_parent_directory" formatted="false">上级目录</string>
     <string name="ui_open_directory" formatted="false">打开目录</string>
     <string name="ui_project_root" formatted="false">返回项目根目录</string>
-    <string name="ui_refresh_directory" formatted="false">刷新目录</string>
     <string name="ui_open_remote_directory" formatted="false">打开远端目录</string>
     <string name="ui_absolute_path" formatted="false">绝对路径</string>
     <string name="ui_image_119">图片 · %1$s</string>
@@ -313,7 +313,7 @@
     <string name="ui_add_project" formatted="false">添加项目</string>
     <string name="ui_collapse_269" formatted="false">收起</string>
     <string name="ui_approval_needed">待确认 · %1$s</string>
-    <string name="ui_completed">完成 · %1$s</string>
+    <string name="ui_new_results_count">新结果 · %1$s</string>
     <string name="ui_running_272" formatted="false">运行中</string>
     <string name="ui_actions_for_project">%1$s的项目操作</string>
     <string name="ui_archiving" formatted="false">归档中</string>
@@ -335,7 +335,6 @@
     <string name="ui_terminal_290" formatted="false">终端</string>
     <string name="ui_choose_project" formatted="false">选择项目</string>
     <string name="ui_switch_project" formatted="false">切换项目</string>
-    <string name="ui_refresh" formatted="false">刷新</string>
     <string name="ui_selected" formatted="false">已选择</string>
     <string name="ui_project_name_optional" formatted="false">项目名称（可选）</string>
     <string name="ui_project_directory_hint">目录不存在时会在服务器上创建，已有目录将直接使用。</string>
@@ -471,32 +470,12 @@
     <string name="ui_output_waiting_to_sync" formatted="false">等待同步</string>
     <string name="ui_output_live" formatted="false">实时</string>
     <string name="ui_output_command_short" formatted="false">命令</string>
-    <string name="ui_output_files_short" formatted="false">文件</string>
-    <string name="ui_output_reasoning_short" formatted="false">思考</string>
-    <string name="ui_output_plan_short" formatted="false">计划</string>
-    <string name="ui_output_reply_short" formatted="false">回复</string>
-    <string name="ui_output_event_short" formatted="false">记录</string>
 
     <plurals name="chat_turn_files">
         <item quantity="other">本轮更改 %1$d 个文件</item>
     </plurals>
     <plurals name="chat_more_files">
         <item quantity="other">查看另外 %1$d 个文件</item>
-    </plurals>
-    <plurals name="ui_output_events">
-        <item quantity="other">%1$d 条记录</item>
-    </plurals>
-    <plurals name="ui_output_commands">
-        <item quantity="other">%1$d 条命令</item>
-    </plurals>
-    <plurals name="ui_output_files">
-        <item quantity="other">%1$d 个文件</item>
-    </plurals>
-    <plurals name="ui_output_images">
-        <item quantity="other">%1$d 张图片</item>
-    </plurals>
-    <plurals name="ui_output_more_events">
-        <item quantity="other">另有 %1$d 条</item>
     </plurals>
     <string name="ui_background_without_notifications">后台连接已开启。通知未授权，可在系统的运行中应用中停止。</string>
     <string name="ui_zoom_in">放大</string>
@@ -571,7 +550,6 @@
     <string name="ui_tool_no_result">未返回内容</string>
     <string name="ui_tool_waiting_result">等待工具返回…</string>
     <string name="ui_tool_legacy_record">旧缓存未保存工具详情，请连接后刷新会话。</string>
-    <string name="ui_context_compaction">上下文整理</string>
     <string name="ui_context_compaction_running">正在整理上下文…</string>
     <string name="ui_context_compaction_completed">上下文已整理</string>
     <string name="ui_copy_message">复制消息</string>
@@ -640,7 +618,6 @@
     <string name="ui_permission_ask_detail" formatted="false">运行受控范围外的命令前先询问</string>
     <string name="ui_permission_auto_detail" formatted="false">自动批准命令，不再弹窗确认</string>
     <string name="ui_permission_untrusted_detail" formatted="false">仅在运行不受信任命令前询问</string>
-    <string name="ui_switch_workspace" formatted="false">切换工作区视图</string>
     <string name="ui_unsaved_changes" formatted="false">未保存</string>
     <string name="ui_editor_line_count">%1$d 行</string>
     <string name="terminal_page_up" formatted="false">上一页</string>

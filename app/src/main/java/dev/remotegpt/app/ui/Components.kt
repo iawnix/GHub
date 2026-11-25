@@ -6,7 +6,6 @@ import dev.remotegpt.app.R
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,7 +38,7 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
 
 @Composable fun EmptyPanel(icon: ImageVector, title: String, description: String, action: String? = null, onAction: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer) { Icon(icon, null, Modifier.padding(18.dp).size(28.dp), tint = MaterialTheme.colorScheme.primary) }
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer) { Icon(icon, null, Modifier.padding(18.dp).size(28.dp), tint = MaterialTheme.colorScheme.primary) }
         Spacer(Modifier.height(24.dp)); Text(title, style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp)); Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         if (action != null) { Spacer(Modifier.height(24.dp)); Button(onClick = onAction) { Text(action); Spacer(Modifier.width(8.dp)); Icon(WorkbenchIcons.ArrowForward, null, Modifier.size(18.dp)) } }
@@ -60,21 +59,20 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
         val queued = data.visuals.message == tr(R.string.ui_message_queued)
         Surface(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().widthIn(max = 560.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.inverseSurface,
             contentColor = MaterialTheme.colorScheme.inverseOnSurface,
             tonalElevation = 3.dp,
             shadowElevation = 4.dp,
         ) {
-            Column(Modifier.padding(start = 12.dp, top = 10.dp, end = 8.dp, bottom = if (data.visuals.actionLabel != null) 4.dp else 10.dp)) {
+            Column(Modifier.padding(start = 16.dp, top = 10.dp, end = 8.dp, bottom = if (data.visuals.actionLabel != null) 4.dp else 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (queued) WorkbenchIcons.OutputPending else WorkbenchIcons.Description,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.inverseOnSurface,
-                    )
-                    Spacer(Modifier.width(10.dp))
+                    // Messages carry their meaning in words; a generic glyph on every one
+                    // only made errors and confirmations look alike.
+                    if (queued) {
+                        Icon(WorkbenchIcons.OutputPending, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.inverseOnSurface)
+                        Spacer(Modifier.width(10.dp))
+                    }
                     Text(data.visuals.message, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     if (data.visuals.withDismissAction) {
                         IconButton(onClick = { data.dismiss() }, modifier = Modifier.size(40.dp)) {
@@ -95,43 +93,33 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
     }
 }
 
-/** A single connection notice layout for reconnecting, offline and setup states. */
+/** A single connection notice for reconnecting, offline and setup states: one quiet line
+ * beside the header's status glyph, plus the next action when there is one. */
 @Composable internal fun ConnectionNotice(
     status: ConnectionStatus,
     detail: String,
     action: String? = null,
     onAction: () -> Unit = {},
 ) {
-    val tint = connectionColor(status)
+    val label = connectionLabel(status)
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, tint.copy(alpha = .28f)),
+        shape = MaterialTheme.shapes.medium,
     ) {
-        Column(Modifier.padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = if (action == null) 14.dp else 6.dp)) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier.size(32.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center,
-                ) { ConnectionIndicator(status, showLabel = false) }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(connectionLabel(status), style = MaterialTheme.typography.titleSmall)
-                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            action?.let {
-                TextButton(onClick = onAction, modifier = Modifier.align(Alignment.End), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-                    Text(it)
-                }
-            }
+        Row(Modifier.heightIn(min = 48.dp).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ConnectionIndicator(status, showLabel = false)
+            Text(if (detail.startsWith(label)) detail else "$label · $detail", Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            action?.let { TextButton(onClick = onAction) { Text(it) } }
         }
     }
 }
 
 @Composable fun InfoCard(text: String, action: String? = null, onAction: () -> Unit = {}) {
-    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(14.dp)) {
+    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(14.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             if (action != null) TextButton(onClick = onAction, contentPadding = PaddingValues(top = 8.dp)) { Text(action) }
@@ -192,9 +180,10 @@ private val knownTimelineKinds = setOf(
                     Text(when (item.kind) { "fileChange" -> tr(R.string.ui_file_changes); "commandExecution" -> tr(R.string.ui_command_execution); "imageView" -> tr(R.string.ui_image_view); "plan" -> tr(R.string.ui_execution_plan); "reasoning" -> tr(R.string.ui_reasoning_summary); "dynamicToolCall" -> item.dynamicToolCall?.displayName?.takeIf { it.isNotBlank() } ?: tr(R.string.ui_tool_call); else -> item.kind }, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TaskStatusIcon(itemTaskStatus(item))
 
-                    Icon(if (expanded) WorkbenchIcons.ExpandLess else WorkbenchIcons.ExpandMore, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    DisclosureChevron(expanded, WorkbenchIcons.ChevronRight, if (expanded) tr(R.string.ui_collapse) else tr(R.string.ui_expand), MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (expanded) {
+                // Messages stay open; tool details share the app's one disclosure motion.
+                val details: @Composable () -> Unit = {
                     if (item.kind == "commandExecution") CommandExecutionContent(item)
                     else if (item.kind == "dynamicToolCall") DynamicToolCallContent(item)
                     else if (questionReply != null) QuestionReplyContent(questionReply)
@@ -232,9 +221,10 @@ private val knownTimelineKinds = setOf(
                         }
                     }
                 }
+                if (!tool) details() else Disclosure(expanded) { Column { details() } }
             }
         }
-        if (user) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp),
+        if (user) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium,
             contentColor = MaterialTheme.colorScheme.onSurface, content = content)
         else content()
     }
@@ -308,7 +298,7 @@ private val knownTimelineKinds = setOf(
     val req = pending.request
     val haptic = rememberHaptic()
     val amber = accentColor(WorkbenchAccent.AMBER)
-    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface,
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, amber.copy(alpha = .45f))) {
         Column(Modifier.fillMaxWidth()
             .drawBehind {
@@ -337,15 +327,15 @@ private val knownTimelineKinds = setOf(
 }
 
 /** Pinned above the composer while a blocking request is scrolled out of view. */
-@Composable internal fun PendingActionBanner(text: String, onView: () -> Unit) {
+@Composable internal fun PendingActionBanner(text: String, question: Boolean = false, onView: () -> Unit) {
     val amber = accentColor(WorkbenchAccent.AMBER)
-    val haptic = rememberHaptic()
-    Surface(onClick = { haptic(false); onView() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp),
-        shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
+    Surface(onClick = { onView() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp),
+        shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, amber.copy(alpha = .45f))) {
         Row(Modifier.fillMaxWidth().background(amber.copy(alpha = .08f)).heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(WorkbenchIcons.FrontHand, null, Modifier.size(18.dp), tint = amber)
+            // Same glyphs as TaskStatusIcon: a shield for approvals, a bubble for questions.
+            Icon(if (question) WorkbenchIcons.ChatBubbleOutline else WorkbenchIcons.FrontHand, null, Modifier.size(18.dp), tint = amber)
             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(tr(R.string.ui_approval_view), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }
