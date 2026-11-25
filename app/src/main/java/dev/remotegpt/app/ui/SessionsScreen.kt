@@ -359,6 +359,11 @@ import dev.remotegpt.client.*
             cwd = state.thread?.cwd.orEmpty(), archived = archived,
             onFiles = if (ws.selectedProject?.startsWith('/') == true) ({ onOptionsChange(false); vm.selectTab(WorkspaceTab.FILES) }) else null,
             onTerminal = if (ws.selectedProject?.startsWith('/') == true) ({ onOptionsChange(false); vm.selectTab(WorkspaceTab.TERMINAL) }) else null,
+            onMode = if (!archived) ({ onOptionsChange(false); vm.showModePicker() }) else null,
+            modeLabel = tr(if (composerDraft.mode == "plan") R.string.ui_mode_plan else R.string.ui_mode_execute),
+            onGoal = if (ws.connection == ConnectionStatus.ONLINE && !archived) ({ onOptionsChange(false); vm.showGoalEditor() }) else null,
+            onPermissions = if (ws.connection == ConnectionStatus.ONLINE && !archived) ({ onOptionsChange(false); vm.showPermissionEditor() }) else null,
+            permissionLabel = permissionSummaryText(ws.permissions[thread] ?: PermissionSettings()),
             onRefresh = { onOptionsChange(false); vm.refreshConversation() },
             onRename = { onOptionsChange(false); rename = true },
             onArchive = { onOptionsChange(false); vm.archive(thread, !archived) },
@@ -429,6 +434,8 @@ import dev.remotegpt.client.*
     cwd: String, archived: Boolean,
     onRefresh: () -> Unit, onRename: () -> Unit, onArchive: () -> Unit,
     onFiles: (() -> Unit)? = null, onTerminal: (() -> Unit)? = null,
+    onMode: (() -> Unit)? = null, modeLabel: String? = null,
+    onGoal: (() -> Unit)? = null, onPermissions: (() -> Unit)? = null, permissionLabel: String? = null,
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(tr(R.string.ui_session_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
@@ -436,6 +443,9 @@ import dev.remotegpt.client.*
         // Project tools live here rather than in the app bar, so the conversation header stays quiet.
         onFiles?.let { SheetAction(tr(R.string.ui_files), WorkbenchIcons.FolderOpen, onClick = it) }
         onTerminal?.let { SheetAction(tr(R.string.ui_terminal_290), WorkbenchIcons.Terminal, onClick = it) }
+        onMode?.let { SheetAction(tr(R.string.ui_mode_title), WorkbenchIcons.Checklist, supporting = modeLabel, onClick = it) }
+        onGoal?.let { SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.Goal, onClick = it) }
+        onPermissions?.let { SheetAction(tr(R.string.ui_permissions), WorkbenchIcons.Key, supporting = permissionLabel, onClick = it) }
         SheetAction(tr(R.string.ui_sync_session), WorkbenchIcons.Refresh, onClick = onRefresh)
         SheetAction(tr(R.string.ui_rename), WorkbenchIcons.Edit, onClick = onRename)
         SheetAction(if (archived) tr(R.string.ui_restore_session) else tr(R.string.ui_archive_session), WorkbenchIcons.Archive, onClick = onArchive)

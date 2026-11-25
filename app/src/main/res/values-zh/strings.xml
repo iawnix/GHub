@@ -286,7 +286,7 @@
     <string name="ui_voice_input" formatted="false">语音转文字</string>
     <string name="ui_stop_task" formatted="false">停止任务</string>
     <string name="ui_send_message" formatted="false">发送消息</string>
-    <string name="ui_input_options" formatted="false">输入选项</string>
+    <string name="ui_attachments" formatted="false">附件</string>
     <string name="ui_choose_image" formatted="false">选择图片</string>
     <string name="ui_take_photo" formatted="false">拍照</string>
     <string name="ui_choose_file" formatted="false">选择文件</string>

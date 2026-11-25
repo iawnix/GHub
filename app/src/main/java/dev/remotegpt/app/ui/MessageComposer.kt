@@ -43,6 +43,16 @@ import dev.remotegpt.client.ModelOption
 import dev.remotegpt.client.sessionCommand
 import dev.remotegpt.client.sessionCommandSuggestions
 
+internal fun permissionSummaryText(permissions: dev.remotegpt.app.PermissionSettings): String = when {
+    permissions.sandbox == "danger-full-access" && permissions.approval == "never" ->
+        "${tr(R.string.ui_permission_full)} · ${tr(R.string.ui_permission_auto)}"
+    permissions.sandbox == "danger-full-access" -> tr(R.string.ui_permission_full)
+    permissions.approval == "never" -> tr(R.string.ui_permission_auto)
+    permissions.sandbox == "read-only" -> tr(R.string.ui_permission_read_only)
+    permissions.approval == "untrusted" -> tr(R.string.ui_permission_untrusted)
+    else -> tr(R.string.ui_permission_ask)
+}
+
 @Composable fun MessageComposer(
     draft: Draft, models: List<Pair<String, String>>, model: String?, online: Boolean, archived: Boolean,
     listening: Boolean, onText: (String) -> Unit, onRemoveAttachment: (String) -> Unit,
@@ -82,15 +92,7 @@ import dev.remotegpt.client.sessionCommandSuggestions
     val editable = !archived && inputDraft.delivery == "draft"
     val riskyPermissions = permissions.sandbox == "danger-full-access" || permissions.approval == "never"
     val customPermissions = permissions.sandbox != "workspace-write" || permissions.approval != "on-request"
-    val permissionSummary = when {
-        permissions.sandbox == "danger-full-access" && permissions.approval == "never" ->
-            "${tr(R.string.ui_permission_full)} · ${tr(R.string.ui_permission_auto)}"
-        permissions.sandbox == "danger-full-access" -> tr(R.string.ui_permission_full)
-        permissions.approval == "never" -> tr(R.string.ui_permission_auto)
-        permissions.sandbox == "read-only" -> tr(R.string.ui_permission_read_only)
-        permissions.approval == "untrusted" -> tr(R.string.ui_permission_untrusted)
-        else -> tr(R.string.ui_permission_ask)
-    }
+    val permissionSummary = permissionSummaryText(permissions)
     val composerShape = MaterialTheme.shapes.large
     Surface(
         // ConversationViewport owns IME insets; typing never starts a separate layout animation.
@@ -324,24 +326,10 @@ import dev.remotegpt.client.sessionCommandSuggestions
     }
     if (attachmentsMenu) WorkbenchBottomSheet(onDismissRequest = { attachmentsMenu = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text(tr(R.string.ui_input_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-            // Keep the actions people use to add content at the top of the sheet.
-            // This is also important on short or narrow displays where the sheet
-            // cannot show every action without scrolling.
+            Text(tr(R.string.ui_attachments), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
             SheetAction(tr(R.string.ui_choose_image), WorkbenchIcons.Image, enabled = editable && online) { attachmentsMenu = false; onImage() }
             SheetAction(tr(R.string.ui_take_photo), WorkbenchIcons.PhotoCamera, enabled = editable && online) { attachmentsMenu = false; onCamera() }
             SheetAction(tr(R.string.ui_choose_file), WorkbenchIcons.AttachFile, enabled = editable && online) { attachmentsMenu = false; onFile() }
-            SheetAction(tr(R.string.ui_mode_title), WorkbenchIcons.Checklist, enabled = editable,
-                supporting = tr(if (inputDraft.mode == "plan") R.string.ui_mode_plan else R.string.ui_mode_execute)) {
-                attachmentsMenu = false; onOpenModeMenu()
-            }
-            SheetAction(tr(R.string.ui_goal_title), WorkbenchIcons.Goal, enabled = online && !archived && edit == null) {
-                attachmentsMenu = false; onGoal()
-            }
-            SheetAction(tr(R.string.ui_permissions), WorkbenchIcons.Key, enabled = online && !archived && edit == null,
-                supporting = permissionSummary) {
-                attachmentsMenu = false; onPermissions()
-            }
         }
     }
     if (modeMenu) SelectionSheet(tr(R.string.ui_mode_title),

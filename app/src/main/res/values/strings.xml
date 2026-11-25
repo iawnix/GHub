@@ -289,7 +289,7 @@
     <string name="ui_voice_input" formatted="false">Voice input</string>
     <string name="ui_stop_task" formatted="false">Stop task</string>
     <string name="ui_send_message" formatted="false">Send message</string>
-    <string name="ui_input_options" formatted="false">Input options</string>
+    <string name="ui_attachments" formatted="false">Attachments</string>
     <string name="ui_choose_image" formatted="false">Choose image</string>
     <string name="ui_take_photo" formatted="false">Take photo</string>
     <string name="ui_choose_file" formatted="false">Choose file</string>
