@@ -29,10 +29,6 @@
         <item quantity="one">%1$d question waiting</item>
         <item quantity="other">%1$d questions waiting</item>
     </plurals>
-    <string name="ui_speech_recognition_is_unavailable_you_can_use" formatted="false">Speech recognition is unavailable. You can use voice typing on your keyboard.</string>
-    <string name="ui_no_speech_detected_please_try_again" formatted="false">No speech detected. Please try again.</string>
-    <string name="ui_microphone_permission_is_required_for_voice_input" formatted="false">Microphone permission is required for voice input.</string>
-    <string name="ui_speech_recognition_is_unavailable_please_use_the" formatted="false">Speech recognition is unavailable. Please use the keyboard.</string>
     <string name="ui_root_directory" formatted="false">Root directory</string>
     <string name="ui_ungrouped" formatted="false">Ungrouped</string>
     <string name="ui_cannot_read_or_write_local_data_check" formatted="false">Cannot read or write local data. Check available storage. Drafts remain in memory; please keep the app open.</string>
@@ -282,11 +278,8 @@
     <string name="ui_upload_failed" formatted="false">Upload failed</string>
     <string name="ui_remove_attachment">Remove attachment %1$s</string>
     <string name="ui_message_input" formatted="false">Message input</string>
-    <string name="ui_listening" formatted="false">Listening…</string>
     <string name="ui_describe_a_task_or_ask_a_follow" formatted="false">Describe a task or ask a follow-up…</string>
     <string name="ui_add_attachment" formatted="false">Add attachment</string>
-    <string name="ui_stop_voice_input" formatted="false">Stop voice input</string>
-    <string name="ui_voice_input" formatted="false">Voice input</string>
     <string name="ui_stop_task" formatted="false">Stop task</string>
     <string name="ui_send_message" formatted="false">Send message</string>
     <string name="ui_attachments" formatted="false">Attachments</string>
@@ -397,7 +390,6 @@
     <string name="ui_files_changed">%1$s files changed</string>
     <string name="ui_file_change_details" formatted="false">File change details</string>
     <string name="ui_the_server_did_not_provide_a_diff" formatted="false">The server did not provide a diff</string>
-    <string name="ui_microphone_permission_was_denied_you_can_continue" formatted="false">Microphone permission was denied. You can continue typing.</string>
     <string name="ui_notification_permission_is_required_to_display_background" formatted="false">Notification permission is required to display background connection status.</string>
     <string name="ui_archived_353">Archived: %1$s</string>
     <string name="ui_undo" formatted="false">Undo</string>

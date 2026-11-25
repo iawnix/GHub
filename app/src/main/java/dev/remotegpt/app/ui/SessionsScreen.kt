@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
 import dev.remotegpt.app.*
 import dev.remotegpt.client.*
 
-@Composable fun ChatScreen(state: WorkbenchState, vm: WorkbenchViewModel, listening: Boolean, onImage: () -> Unit, onFile: () -> Unit, onCamera: () -> Unit, onVoice: () -> Unit, optionsOpen: Boolean = false, onOptionsChange: (Boolean) -> Unit = {}, onBottomControls: (Int) -> Unit = {}) {
+@Composable fun ChatScreen(state: WorkbenchState, vm: WorkbenchViewModel, onImage: () -> Unit, onFile: () -> Unit, onCamera: () -> Unit, optionsOpen: Boolean = false, onOptionsChange: (Boolean) -> Unit = {}, onBottomControls: (Int) -> Unit = {}) {
     val ws = state.workspace
     val thread = ws.selectedThread ?: return
     SideEffect { state.activeHost?.let { vm.conversationComposed(it, state.conversation) } }
@@ -193,8 +193,8 @@ import dev.remotegpt.client.*
     val revision = MessageRevisionActions(
         editableItemId = editableMessage?.id?.takeIf { draft.delivery == "draft" }, edit = draft.edit,
         canResend = ws.connection == ConnectionStatus.ONLINE && editableMessage?.let { it.id == draft.edit?.itemId && it.turnId == draft.edit?.turnId } == true,
-        onBegin = { id -> if (listening) onVoice(); followingLatest = false; vm.editInterruptedInput(id) },
-        onCancel = { if (listening) onVoice(); vm.cancelInterruptedEdit() },
+        onBegin = { id -> followingLatest = false; vm.editInterruptedInput(id) },
+        onCancel = { vm.cancelInterruptedEdit() },
         onRefresh = { vm.refreshConversation() }, onResolveUncertain = { confirmRetry = true },
     )
     if (ws.goalEditorThread == thread) GoalEditorSheet(
@@ -278,10 +278,9 @@ import dev.remotegpt.client.*
                         goal = ws.goals[thread], onGoal = { vm.showGoalEditor() },
                         permissions = ws.permissions[thread] ?: PermissionSettings(), onPermissions = { vm.showPermissionEditor() },
                         onEffort = vm::selectEffort, onReloadModels = { vm.reloadModels() },
-                        online = ws.connection == ConnectionStatus.ONLINE && problem == null && !ws.loadingHistory, archived = archived, listening = listening,
+                        online = ws.connection == ConnectionStatus.ONLINE && problem == null && !ws.loadingHistory, archived = archived,
                         onText = vm::draftText, onRemoveAttachment = vm::removeAttachment, onModel = vm::selectModel,
-                        onImage = onImage, onFile = onFile, onCamera = onCamera, onVoice = onVoice, onSend = {
-                            if (listening) onVoice()
+                        onImage = onImage, onFile = onFile, onCamera = onCamera, onSend = {
                             userScrolling = false; followingLatest = true
                             if (draft.edit != null) vm.resendInterruptedInput() else vm.send()
                         },

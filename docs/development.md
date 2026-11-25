@@ -38,7 +38,7 @@ Release 构建与签名见[发布指南](releasing.md)，日常检查见[测试�
 
 | 目录 | 职责 |
 |---|---|
-| `app/` | Compose 界面、ViewModel、Room 缓存、凭据存储、文件选择与语音等系统集成 |
+| `app/` | Compose 界面、ViewModel、Room 缓存、凭据存储、文件选择与系统集成 |
 | `codex-client/` | 纯 JVM 的 SSH、App Server 协议、会话同步和 SFTP |
 | `terminal/` | Termux 终端模拟器、渲染与 SSH PTY 适配 |
 | `scripts/` | 协议探针、隔离测试环境、设备测试与图标生成 |

@@ -65,8 +65,8 @@ class WorkbenchInteractionDeviceTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
                 Box(Modifier.width(320.dp).height(420.dp)) {
                     ConversationViewport(dock = {
-                        MessageComposer(draft, listOf("m" to "Long model name"), "m", true, false, false,
-                            { draft = draft.copy(text = it) }, {}, {}, {}, {}, {}, {}, {})
+                        MessageComposer(draft, listOf("m" to "Long model name"), "m", true, false,
+                            { draft = draft.copy(text = it) }, {}, {}, {}, {}, {}, {})
                     }) { _, _ -> }
                 }
             }
@@ -76,7 +76,7 @@ class WorkbenchInteractionDeviceTest {
         val inputNode = input.fetchSemanticsNode()
         val optionsDescription = context.getString(R.string.ui_message_options_current, "m", context.getString(R.string.ui_default))
         val actionNodes = listOf(context.getString(R.string.ui_add_attachment), optionsDescription,
-            context.getString(R.string.ui_voice_input), context.getString(R.string.ui_send_message))
+            context.getString(R.string.ui_send_message))
             .map { compose.onNodeWithContentDescription(it).assertIsDisplayed().fetchSemanticsNode() }
         // Read all coordinates in one UI frame; IME insets can move the dock between test queries.
         compose.runOnIdle {

@@ -63,13 +63,12 @@ class ConversationLayoutDeviceTest {
         val options = listOf(ModelOption("main", "Main model", listOf("medium", "high"), "medium", true),
             ModelOption("fast", "Fast model", listOf("medium", "high"), "medium", false))
         compose.setContent { WorkbenchTheme {
-            MessageComposer(draft, options.map { it.id to it.name }, draft.model, true, false, false,
+            MessageComposer(draft, options.map { it.id to it.name }, draft.model, true, false,
                 onText = { draft = draft.copy(text = it) }, onRemoveAttachment = {}, onModel = { draft = draft.copy(model = it) },
-                onImage = {}, onFile = {}, onCamera = {}, onVoice = {}, onSend = { sends++ },
+                onImage = {}, onFile = {}, onCamera = {}, onSend = { sends++ },
                 running = running, onStop = { stops++ }, modifier = Modifier.width(320.dp),
                 modelOptions = options, effort = draft.effort, onEffort = { draft = draft.copy(effort = it) })
         } }
-        compose.onNodeWithContentDescription(context.getString(R.string.ui_voice_input)).assertIsDisplayed()
         compose.onNodeWithContentDescription(context.getString(R.string.ui_message_options_current,
             "Main model", context.getString(R.string.ui_default))).performClick()
         compose.onNodeWithText(context.getString(R.string.ui_choose_model)).performClick()

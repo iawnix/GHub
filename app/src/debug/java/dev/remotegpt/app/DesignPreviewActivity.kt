@@ -124,8 +124,8 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
                 if (screen == "approval") item { ApprovalCard(PendingApproval(ServerRequest("preview", JsonPrimitive(1), "item/commandExecution/requestApproval",
                     buildJsonObject { put("threadId", "reconnect"); put("command", "./gradlew :app:assembleDebug"); put("cwd", "/home/dev/ghub"); put("reason", "构建 APK，确认改动能正常编译。") }))) {} }
             }
-            MessageComposer(Draft(text), listOf("默认模型" to "默认模型"), null, true, false, false,
-                onText = { text = it }, onRemoveAttachment = {}, onModel = {}, onImage = {}, onFile = {}, onCamera = {}, onVoice = {}, onSend = {})
+            MessageComposer(Draft(text), listOf("默认模型" to "默认模型"), null, true, false,
+                onText = { text = it }, onRemoveAttachment = {}, onModel = {}, onImage = {}, onFile = {}, onCamera = {}, onSend = {})
         }
     }
     if (homeMenu) ModalBottomSheet(onDismissRequest = { homeMenu = false }) {

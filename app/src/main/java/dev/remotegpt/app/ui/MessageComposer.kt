@@ -55,9 +55,9 @@ internal fun permissionSummaryText(permissions: dev.remotegpt.app.PermissionSett
 
 @Composable fun MessageComposer(
     draft: Draft, models: List<Pair<String, String>>, model: String?, online: Boolean, archived: Boolean,
-    listening: Boolean, onText: (String) -> Unit, onRemoveAttachment: (String) -> Unit,
+    onText: (String) -> Unit, onRemoveAttachment: (String) -> Unit,
     onModel: (String?) -> Unit, onImage: () -> Unit, onFile: () -> Unit,
-    onCamera: () -> Unit, onVoice: () -> Unit, onSend: () -> Unit,
+    onCamera: () -> Unit, onSend: () -> Unit,
     onQueue: () -> Unit = {},
     onSteer: () -> Unit = {},
     running: Boolean = false, stopping: Boolean = false, onStop: () -> Unit = {}, modifier: Modifier = Modifier,
@@ -197,7 +197,7 @@ internal fun permissionSummaryText(permissions: dev.remotegpt.app.PermissionSett
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { inner ->
                     Box {
-                        if (inputDraft.text.isEmpty()) Text(if (listening) tr(R.string.ui_listening) else tr(R.string.chat_message_placeholder),
+                        if (inputDraft.text.isEmpty()) Text(tr(R.string.chat_message_placeholder),
                             style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         inner()
                     }
@@ -252,11 +252,6 @@ internal fun permissionSummaryText(permissions: dev.remotegpt.app.PermissionSett
                             Text(effortLabel(effort), maxLines = 1, style = MaterialTheme.typography.labelMedium)
                             Icon(WorkbenchIcons.ExpandMore, null, Modifier.padding(start = 2.dp).size(12.dp))
                         }
-                    }
-                    IconButton(onClick = { onVoice() }, enabled = editable, modifier = Modifier.size(48.dp)) {
-                        Icon(if (listening) WorkbenchIcons.StopCircle else WorkbenchIcons.MicNone,
-                            tr(if (listening) R.string.ui_stop_voice_input else R.string.ui_voice_input), Modifier.size(20.dp),
-                            tint = if (listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     val enabled = if (running) online && !stopping else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
                     val sendLabel = tr(when {

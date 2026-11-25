@@ -86,33 +86,6 @@ import java.util.UUID
     val snackbars = remember { SnackbarHostState() }
     var bottomControls by remember(state.activeHost, state.workspace.selectedThread, state.tab) { mutableIntStateOf(0) }
     val holder = rememberSaveableStateHolder()
-    var speechTarget by remember { mutableStateOf<Triple<String?, String?, String?>?>(null) }
-    val speech = remember { SpeechInput(context, { result ->
-        val current = vm.state.value
-        if (speechTarget == Triple(current.activeHost, current.workspace.selectedThread, current.draft.edit?.id)) {
-            val text = current.draft.edit?.input?.text ?: current.draft.text
-            vm.draftText(listOf(text, result).filter(String::isNotBlank).joinToString(" "))
-        }
-    }, vm::message) }
-    LaunchedEffect(state.activeHost, state.workspace.selectedThread, state.tab, state.draft.edit?.id,
-        state.draft.edit?.delivery ?: state.draft.delivery) { speech.cancel() }
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) speech.cancel()
-        }
-        lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer) }
-    }
-    val listening by speech.listening.collectAsState()
-    DisposableEffect(Unit) { onDispose { speech.cancel() } }
-    val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            val current = vm.state.value
-            speechTarget = Triple(current.activeHost, current.workspace.selectedThread, current.draft.edit?.id)
-            speech.start()
-        } else vm.message(tr(R.string.ui_microphone_permission_was_denied_you_can_continue))
-    }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         runCatching { RemoteConnectionService.start(context) }
             .onSuccess { if (!granted) vm.message(tr(R.string.ui_background_without_notifications)) }
@@ -280,7 +253,7 @@ import java.util.UUID
                         onArchive = { vm.archive(it, true, host = state.activeHost, allowUndo = true) },
                         onExitArchive = { vm.showArchived(false) })
                     else when (state.tab) {
-                        WorkspaceTab.SESSIONS -> ChatScreen(state, vm, listening,
+                        WorkspaceTab.SESSIONS -> ChatScreen(state, vm,
                             onImage = { imagePicker.launch(arrayOf("image/*")) }, onFile = { filePicker.launch(arrayOf("*/*")) },
                             onCamera = {
                                 val file = File(context.cacheDir, "shared/${UUID.randomUUID()}.jpg").apply { parentFile?.mkdirs() }
@@ -293,7 +266,7 @@ import java.util.UUID
                                     cameraUri = null
                                     vm.message(tr(R.string.ui_no_camera_app_found_choose_an_image))
                                 }
-                            }, onVoice = { if (listening) speech.cancel() else microphone.launch(Manifest.permission.RECORD_AUDIO) }, optionsOpen = showConversationOptions, onOptionsChange = { showConversationOptions = it }, onBottomControls = { bottomControls = it })
+                            }, optionsOpen = showConversationOptions, onOptionsChange = { showConversationOptions = it }, onBottomControls = { bottomControls = it })
                         WorkspaceTab.FILES -> FilesScreen(state, vm, snackbar = snackbars) { file -> pendingDownload = file.path; saveFile.launch(file.name) }
                         WorkspaceTab.TERMINAL -> TerminalsScreen(state, vm, onWorkspace = { showWorkspace = true }, onBottomControls = { bottomControls = it })
                     }

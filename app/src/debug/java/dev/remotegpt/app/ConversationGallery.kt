@@ -20,8 +20,8 @@ import dev.remotegpt.client.*
     GlassWorkbenchScaffold(topBar = { WorkbenchHeader("优化会话体验", ConnectionStatus.ONLINE, true, {}, onMenu = {}) }) { padding ->
         ConversationViewport(Modifier.padding(padding).consumeWindowInsets(padding), dock = {
             MessageComposer(Draft(text = text, model = model, effort = effort), listOf("gpt-5.4" to "GPT-5.4"), model,
-                true, false, false, onText = { text = it }, onRemoveAttachment = {}, onModel = { model = it },
-                onImage = {}, onFile = {}, onCamera = {}, onVoice = {}, onSend = {},
+                true, false, onText = { text = it }, onRemoveAttachment = {}, onModel = { model = it },
+                onImage = {}, onFile = {}, onCamera = {}, onSend = {},
                 modelOptions = listOf(ModelOption("gpt-5.4", "GPT-5.4", listOf("low", "medium", "high"), "medium", true)),
                 effort = effort, onEffort = { effort = it })
         }) { listPadding, _ ->

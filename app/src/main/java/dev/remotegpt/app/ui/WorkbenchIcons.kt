@@ -125,9 +125,6 @@ object WorkbenchIcons {
     val Menu: ImageVector by lazy { vector("layout", 256f, false,
         "M216,36H40A20,20,0,0,0,20,56V200a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V56A20,20,0,0,0,216,36Zm-4,24V92H44V60ZM44,116H92v80H44Zm72,80V116h96v80Z" to PathFillType.NonZero
     ) }
-    val MicNone: ImageVector by lazy { vector("microphone", 256f, false,
-        "M128,180a52.06,52.06,0,0,0,52-52V64A52,52,0,0,0,76,64v64A52.06,52.06,0,0,0,128,180ZM100,64a28,28,0,0,1,56,0v64a28,28,0,0,1-56,0Zm40,155.22V240a12,12,0,0,1-24,0V219.22A92.14,92.14,0,0,1,36,128a12,12,0,0,1,24,0,68,68,0,0,0,136,0,12,12,0,0,1,24,0A92.14,92.14,0,0,1,140,219.22Z" to PathFillType.NonZero
-    ) }
     val MoreHoriz: ImageVector by lazy { vector("dots-three", 256f, false,
         "M144,128a16,16,0,1,1-16-16A16,16,0,0,1,144,128ZM60,112a16,16,0,1,0,16,16A16,16,0,0,0,60,112Zm136,0a16,16,0,1,0,16,16A16,16,0,0,0,196,112Z" to PathFillType.NonZero
     ) }

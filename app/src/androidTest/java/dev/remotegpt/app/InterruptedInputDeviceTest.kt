@@ -29,7 +29,7 @@ class InterruptedInputDeviceTest {
 
     @Composable private fun Composer(draft: Draft, actions: MessageRevisionActions, onText: (String) -> Unit = {}, onSend: () -> Unit = {}) {
         val input = draft.composerDraft()
-        MessageComposer(draft, emptyList(), input.model, true, false, false, onText, {}, {}, {}, {}, {}, {}, onSend,
+        MessageComposer(draft, emptyList(), input.model, true, false, onText, {}, {}, {}, {}, {}, onSend,
             effort = input.effort, revision = actions, modifier = Modifier.testTag("composer"))
     }
 
