@@ -205,9 +205,20 @@ import dev.remotegpt.client.sessionCommandSuggestions
             val command = sessionCommand(inputDraft.text)
             val commandSuggestions = if (editable) sessionCommandSuggestions(inputDraft.text) else emptyList()
             if (commandSuggestions.isNotEmpty()) SlashCommandSuggestions(commandSuggestions, onCommand)
-            val steerable = running && command == null && hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
-            if (steerable) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onSteer, enabled = online) { Text(tr(R.string.ui_steer_task)) }
+            val commandAction = command != null
+            val queueable = hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
+            // While a turn runs, the round button always stops it. Anything typed meanwhile is
+            // sent through these secondary actions, so a draft can never hide the stop control.
+            if (running && (commandAction || queueable)) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
+                if (commandAction) TextButton(onClick = { haptic(false); onSend() }, enabled = online && !stopping) {
+                    Text(tr(R.string.ui_run_slash_command))
+                } else {
+                    TextButton(onClick = { haptic(false); onSteer() }, enabled = online,
+                        modifier = Modifier.semantics { contentDescription = tr(R.string.ui_steer_task) }) { Text(tr(R.string.ui_steer_short)) }
+                    TextButton(onClick = { haptic(false); onQueue() }, enabled = online,
+                        modifier = Modifier.semantics { contentDescription = tr(R.string.ui_queue_message) }) { Text(tr(R.string.ui_queue_short)) }
+                }
             }
             // One solid outer capsule surface: no inner background seams while content scrolls behind it.
             BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
@@ -246,39 +257,35 @@ import dev.remotegpt.client.sessionCommandSuggestions
                             tr(if (listening) R.string.ui_stop_voice_input else R.string.ui_voice_input), Modifier.size(20.dp),
                             tint = if (listening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    val commandAction = command != null
-                    val queueable = hasContent && inputDraft.attachments.all { it.state == "ready" } && edit == null
-                    val queueAction = running && queueable && !commandAction
                     val enabled = if (running) online && !stopping else editable && online && inputDraft.attachments.all { it.state == "ready" } && hasContent && (edit == null || revision?.canResend == true)
                     val sendLabel = tr(when {
                         stopping -> R.string.ui_stopping_task
-                        commandAction -> R.string.ui_run_slash_command
-                        queueAction -> R.string.ui_queue_message
                         running -> R.string.ui_stop_task
+                        commandAction -> R.string.ui_run_slash_command
                         inputDraft.delivery == "sending" -> R.string.ui_resending_input
                         edit != null -> R.string.ui_edit_and_resend
                         else -> R.string.ui_send_message
                     })
                     val sendInteractionSource = remember { MutableInteractionSource() }
-                    IconButton(onClick = { haptic(running && !queueAction && !commandAction); if (commandAction) onSend() else if (queueAction) onQueue() else if (running) onStop() else onSend() }, enabled = enabled,
+                    IconButton(onClick = { haptic(true); if (running) onStop() else onSend() }, enabled = enabled,
                         interactionSource = sendInteractionSource,
                         modifier = Modifier.size(48.dp).workbenchPressScale(enabled, sendInteractionSource)
                             .semantics { contentDescription = sendLabel }) {
                         // Stop is destructive for the running turn, so it must not look like Send.
                         val container by animateColorAsState(when {
                             !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = .10f)
-                            running && !queueAction && !commandAction -> MaterialTheme.colorScheme.error
+                            running -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.onSurface
                         }, Motion.short(), label = "send-container")
                         Box(Modifier.size(34.dp).background(container, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
                             val tint by animateColorAsState(when {
                                 !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                                running && !queueAction && !commandAction -> MaterialTheme.colorScheme.onError
+                                running -> MaterialTheme.colorScheme.onError
                                 else -> MaterialTheme.colorScheme.surface
                             }, Motion.short(), label = "send-tint")
                             val glyph = when {
                                 inputDraft.delivery == "sending" && !running -> 2
-                                running && !queueAction && !commandAction -> 1
+                                running -> 1
                                 else -> 0
                             }
                             AnimatedContent(glyph, transitionSpec = { swap() }, contentAlignment = Alignment.Center, label = "send-glyph") { target ->
