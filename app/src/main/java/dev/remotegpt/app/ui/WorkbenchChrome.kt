@@ -28,7 +28,7 @@ import dev.remotegpt.app.WorkspaceTab
     onArchive: (() -> Unit)? = null, archiveLabel: String = tr(R.string.ui_archived),
     archived: Boolean = false,
     workspaceTab: WorkspaceTab? = null, hasConversation: Boolean = false,
-    onSelectTab: ((WorkspaceTab) -> Unit)? = null, onWorkspaceSheet: (() -> Unit)? = null,
+    onSelectTab: ((WorkspaceTab) -> Unit)? = null,
     menuIcon: ImageVector = WorkbenchIcons.MoreHoriz, menuLabel: String = tr(R.string.ui_more_actions),
 ) {
     val heading: @Composable () -> Unit = {
@@ -67,10 +67,6 @@ import dev.remotegpt.app.WorkspaceTab
                     IconButton(onClick = { onSelectTab(WorkspaceTab.TERMINAL) }) {
                         Icon(WorkbenchIcons.Terminal, tr(R.string.ui_terminal_290), Modifier.size(20.dp))
                     }
-                }
-            } else if (onWorkspaceSheet != null) {
-                IconButton(onClick = onWorkspaceSheet) {
-                    Icon(WorkbenchIcons.Menu, tr(R.string.ui_switch_workspace), Modifier.size(20.dp))
                 }
             }
         }

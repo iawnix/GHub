@@ -236,10 +236,10 @@ import java.util.UUID
                 archived = state.workspace.archived,
                 workspaceTab = state.tab,
                 hasConversation = state.workspace.selectedThread != null,
-                onSelectTab = if (!showHome && state.workspace.selectedProject?.startsWith('/') == true) ({ tab ->
+                // The conversation reaches files and terminal from its options sheet.
+                onSelectTab = if (!showHome && !showConversation && state.workspace.selectedProject?.startsWith('/') == true) ({ tab ->
                     if (tab == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(tab)
                 }) else null,
-                onWorkspaceSheet = if (showConversation && state.workspace.selectedProject?.startsWith('/') == true) ({ showWorkspace = true }) else null,
                 backLabel = if (state.tab != WorkspaceTab.SESSIONS) tr(R.string.ui_back_to_session) else tr(R.string.ui_back_to_projects),
             )
         },

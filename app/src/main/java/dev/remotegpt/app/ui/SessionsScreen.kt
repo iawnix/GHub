@@ -360,6 +360,8 @@ import dev.remotegpt.client.*
     if (optionsOpen) ModalBottomSheet(onDismissRequest = { onOptionsChange(false) }) {
         ConversationActions(
             cwd = state.thread?.cwd.orEmpty(), archived = archived,
+            onFiles = if (ws.selectedProject?.startsWith('/') == true) ({ onOptionsChange(false); vm.selectTab(WorkspaceTab.FILES) }) else null,
+            onTerminal = if (ws.selectedProject?.startsWith('/') == true) ({ onOptionsChange(false); vm.selectTab(WorkspaceTab.TERMINAL) }) else null,
             onRefresh = { onOptionsChange(false); vm.refreshConversation() },
             onRename = { onOptionsChange(false); rename = true },
             onArchive = { onOptionsChange(false); vm.archive(thread, !archived) },
@@ -448,10 +450,14 @@ import dev.remotegpt.client.*
 @Composable fun ConversationActions(
     cwd: String, archived: Boolean,
     onRefresh: () -> Unit, onRename: () -> Unit, onArchive: () -> Unit,
+    onFiles: (() -> Unit)? = null, onTerminal: (() -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(tr(R.string.ui_session_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
         if (cwd.isNotBlank()) Text(cwd, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Project tools live here rather than in the app bar, so the conversation header stays quiet.
+        onFiles?.let { SheetAction(tr(R.string.ui_files), WorkbenchIcons.FolderOpen, onClick = it) }
+        onTerminal?.let { SheetAction(tr(R.string.ui_terminal_290), WorkbenchIcons.Terminal, onClick = it) }
         SheetAction(tr(R.string.ui_sync_session), WorkbenchIcons.Refresh, onClick = onRefresh)
         SheetAction(tr(R.string.ui_rename), WorkbenchIcons.Edit, onClick = onRename)
         SheetAction(if (archived) tr(R.string.ui_restore_session) else tr(R.string.ui_archive_session), WorkbenchIcons.Archive, onClick = onArchive)
