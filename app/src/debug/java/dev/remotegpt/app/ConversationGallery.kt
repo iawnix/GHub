@@ -17,7 +17,7 @@ import dev.remotegpt.client.*
     var model by remember { mutableStateOf<String?>(null) }
     var effort by remember { mutableStateOf<String?>("high") }
     val items = remember { referenceConversation() }
-    GlassWorkbenchScaffold(topBar = { WorkbenchHeader("优化会话体验", "GHub", ConnectionStatus.ONLINE, true, {}, onMenu = {}) }) { padding ->
+    GlassWorkbenchScaffold(topBar = { WorkbenchHeader("优化会话体验", ConnectionStatus.ONLINE, true, {}, onMenu = {}) }) { padding ->
         ConversationViewport(Modifier.padding(padding).consumeWindowInsets(padding), dock = {
             MessageComposer(Draft(text = text, model = model, effort = effort), listOf("gpt-5.4" to "GPT-5.4"), model,
                 true, false, false, onText = { text = it }, onRemoveAttachment = {}, onModel = { model = it },

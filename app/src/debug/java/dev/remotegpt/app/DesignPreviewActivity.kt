@@ -108,7 +108,7 @@ class DesignPreviewActivity : androidx.appcompat.app.AppCompatActivity() {
     GlassWorkbenchScaffold(
         glassEnabled = screen == "projects",
         topBar = { WorkbenchHeader(if (screen == "projects") "开发机" else title,
-            if (screen == "projects") null else project.name, ConnectionStatus.ONLINE, screen != "projects", back,
+            ConnectionStatus.ONLINE, screen != "projects", back,
             backLabel = "返回项目列表", onMenu = { if (screen == "projects") homeMenu = true else menu = true }, onAdd = if (screen == "projects") ({}) else null) },
         modifier = Modifier.imePadding(),
     ) { padding ->

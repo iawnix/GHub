@@ -76,7 +76,7 @@ private fun imageDimensions(path: String): IntSize? = runCatching {
             val naturalWidth = with(density) { size.width.toDp() }
             val naturalHeight = with(density) { size.height.toDp() }
             val factor = minOf(1f, maxWidth / naturalWidth, 260.dp / naturalHeight)
-            val shape = RoundedCornerShape(10.dp)
+            val shape = MaterialTheme.shapes.small
             val edge = if (LocalWorkbenchDarkTheme.current) Color.White else Color.Black
             key(local, retryGeneration) {
                 var decoding by remember { mutableStateOf(true) }
@@ -105,7 +105,7 @@ private fun imageDimensions(path: String): IntSize? = runCatching {
         val retry = (requested && !busy) || invalid
         val action = tr(if (retry) R.string.ui_retry_now else R.string.ui_load_image_preview)
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
                 .clickable(enabled = !busy, role = Role.Button, onClickLabel = action) {
                     requested = true
                     if (invalid) {
@@ -138,7 +138,7 @@ private fun imageDimensions(path: String): IntSize? = runCatching {
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     var state by remember { mutableStateOf<AsyncImagePainter.State>(AsyncImagePainter.State.Empty) }
-    Box(modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainer)) {
+    Box(modifier.clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.surfaceContainer)) {
         AsyncImage(
             model = model,
             contentDescription = name,

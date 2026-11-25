@@ -5,7 +5,6 @@ import dev.remotegpt.app.R
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,7 +30,7 @@ fun SwipeArchiveRow(enabled: Boolean, onArchive: () -> Unit, content: @Composabl
         gesturesEnabled = enabled && !committing,
         enableDismissFromStartToEnd = enabled,
         enableDismissFromEndToStart = enabled,
-        modifier = Modifier.clip(RoundedCornerShape(12.dp)).semantics {
+        modifier = Modifier.clip(MaterialTheme.shapes.small).semantics {
             if (enabled) customActions = listOf(CustomAccessibilityAction(tr(R.string.ui_archive_session)) {
                 haptic(false)
                 onArchive()

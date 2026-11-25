@@ -10,7 +10,6 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -122,7 +121,7 @@ import kotlin.math.roundToInt
                             val index = terminals.indexOfFirst { it.id == selected.id } + 1
                             Surface(
                                 color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = RoundedCornerShape(6.dp),
+                                shape = MaterialTheme.shapes.extraSmall,
                                 modifier = Modifier.padding(start = 6.dp),
                             ) {
                                 Text(
@@ -260,7 +259,7 @@ import kotlin.math.roundToInt
         }
     }
     // Same bottom-sheet menu as the rest of the workbench, not a one-off dropdown.
-    if (options) ModalBottomSheet(onDismissRequest = { options = false }) {
+    if (options) WorkbenchBottomSheet(onDismissRequest = { options = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(tr(R.string.terminal_options), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
             SheetAction(tr(R.string.ui_new_terminal), WorkbenchIcons.Add, enabled = canCreate) { options = false; onNew() }
@@ -272,10 +271,10 @@ import kotlin.math.roundToInt
             SheetAction(tr(R.string.ui_workspace), WorkbenchIcons.Menu) { options = false; onWorkspace() }
         }
     }
-    if (switching) ModalBottomSheet(onDismissRequest = { switching = false }) {
-        Text(tr(R.string.terminal_sessions), Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge)
-        Text(project, Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.titleMedium)
-        Text(projectPath, Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
+    if (switching) WorkbenchBottomSheet(onDismissRequest = { switching = false }) {
+        Text(tr(R.string.terminal_sessions), Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge)
+        Text(project, Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium)
+        Text(projectPath, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
         LazyColumn(Modifier.weight(1f, fill = false)) {
             items(terminals, key = { it.id }) { tab ->
                 ListItem(headlineContent = { Text(tab.name) }, supportingContent = { if (!tab.session.isRunning()) Text(tr(R.string.terminal_ended)) },
@@ -370,7 +369,7 @@ private fun controlCodePoint(codePoint: Int): Int = when {
 @Composable private fun TerminalKey(label: String, description: String, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val haptic = rememberHaptic()
     TextButton(onClick = { haptic(false); onClick() }, enabled = enabled, modifier = modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
-        .semantics { contentDescription = description }, shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
+        .semantics { contentDescription = description }, shape = MaterialTheme.shapes.extraSmall, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }
@@ -379,7 +378,7 @@ private fun controlCodePoint(codePoint: Int): Int = when {
     onTap: () -> Unit, onLock: () -> Unit) {
     val haptic = rememberHaptic()
     val description = tr(when (state) { TerminalModifier.OFF -> R.string.terminal_modifier_off; TerminalModifier.ONCE -> R.string.terminal_modifier_once; TerminalModifier.LOCKED -> R.string.terminal_modifier_locked })
-    Box(modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
+    Box(modifier.heightIn(min = 48.dp).clip(MaterialTheme.shapes.extraSmall)
         .background(if (state.active) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
         .combinedClickable(enabled = enabled, role = Role.Button, onClick = { haptic(false); onTap() },
             onLongClickLabel = tr(if (state == TerminalModifier.LOCKED) R.string.terminal_unlock_modifier else R.string.terminal_lock_modifier, label),

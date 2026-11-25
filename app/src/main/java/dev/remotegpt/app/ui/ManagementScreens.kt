@@ -57,11 +57,10 @@ import java.util.Locale
 @Composable fun PreferenceRow(title: String, icon: ImageVector, value: String? = null, description: String? = null, accent: WorkbenchAccent? = null, onClick: (() -> Unit)? = null,
     tint: androidx.compose.ui.graphics.Color? = null, descriptionColor: androidx.compose.ui.graphics.Color? = null,
     descriptionMonospace: Boolean = false, trailing: (@Composable () -> Unit)? = null) {
-    val haptic = rememberHaptic()
     val iconTint = tint ?: accent?.let { accentColor(it) } ?: functionalIconColor(icon)
-    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = { haptic(false); onClick() }) else Modifier)
+    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = { onClick() }) else Modifier)
         .heightIn(min = 60.dp).padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(36.dp).clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .10f)), contentAlignment = Alignment.Center) {
             Icon(icon, null, Modifier.size(20.dp), tint = iconTint)
         }
         Spacer(Modifier.width(12.dp))
@@ -130,7 +129,7 @@ import java.util.Locale
                             if (index > 0) GroupDivider()
                             val selected = theme == id
                             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(MaterialTheme.shapes.small)
                                 .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .72f) else androidx.compose.ui.graphics.Color.Transparent)
                                 .selectable(selected, role = Role.RadioButton, onClick = { onTheme(id) })
                                 .heightIn(min = 56.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -163,7 +162,7 @@ private fun languageLabel(): String = when (AppCompatDelegate.getApplicationLoca
                             val select = { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag)) }
                             val selected = current == tag
                             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(MaterialTheme.shapes.small)
                                 .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .72f) else androidx.compose.ui.graphics.Color.Transparent)
                                 .selectable(selected, role = Role.RadioButton, onClick = select)
                                 .heightIn(min = 56.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {

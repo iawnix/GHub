@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -110,7 +109,6 @@ import dev.remotegpt.client.*
     var userScrolling by remember(thread) { mutableStateOf(false) }
     var newContent by rememberSaveable(thread) { mutableStateOf(false) }
     val completedContentLoaded = timeline.any { it.turnId == completedTurn && it.complete }
-    val haptic = rememberHaptic()
     val scope = rememberCoroutineScope()
     var seenCompletion by rememberSaveable(thread) { mutableStateOf(completedTurn) }
     val latestVersion = timeline.lastOrNull()?.let { "${it.identityKey}:${it.text.hashCode()}:${it.complete}" }
@@ -338,7 +336,7 @@ import dev.remotegpt.client.*
                 RiseIn(!followingLatest && !nearBottom && timeline.isNotEmpty(),
                     Modifier.align(Alignment.BottomEnd).padding(bottom = dockHeight).padding(12.dp)) {
                     FilledTonalButton(
-                        onClick = { haptic(false); userScrolling = false; followingLatest = true },
+                        onClick = { userScrolling = false; followingLatest = true },
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                     ) {
                         Icon(WorkbenchIcons.ExpandMore, null, Modifier.size(18.dp))
@@ -356,7 +354,7 @@ import dev.remotegpt.client.*
         // Overlaid under the app bar so loading history never shifts the conversation.
         if (ws.loadingHistory) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = LocalWorkbenchTopInset.current))
     }
-    if (optionsOpen) ModalBottomSheet(onDismissRequest = { onOptionsChange(false) }) {
+    if (optionsOpen) WorkbenchBottomSheet(onDismissRequest = { onOptionsChange(false) }) {
         ConversationActions(
             cwd = state.thread?.cwd.orEmpty(), archived = archived,
             onFiles = if (ws.selectedProject?.startsWith('/') == true) ({ onOptionsChange(false); vm.selectTab(WorkspaceTab.FILES) }) else null,

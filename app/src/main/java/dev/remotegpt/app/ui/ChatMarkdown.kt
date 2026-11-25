@@ -6,7 +6,6 @@ import dev.remotegpt.app.R
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -158,7 +157,7 @@ internal fun chatMarkdownComponents(): MarkdownComponents {
             if (!fullScreen) ConversationActionButton(WorkbenchIcons.Fullscreen, tr(R.string.ui_expand_table), { expanded = true })
             ConversationCopyButton(text, tr(R.string.ui_copy_table))
         }
-        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(10.dp)) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small) {
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val minimum = (if (count == 2) 120 else 152).dp * fontScale
                 val total = maxOf(maxWidth, minimum * count)

@@ -18,12 +18,22 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import dev.remotegpt.app.ConnectionStatus
 import dev.remotegpt.app.R
 import dev.remotegpt.app.tr
 
 internal data class SelectionOption(val id: String, val label: String, val detail: String? = null, val connection: ConnectionStatus? = null)
+
+/** Every bottom sheet in the app: menus, pickers and editors share one surface.
+ * It sits one level above the dark canvas; using the page surface for both the
+ * sheet and its rows made sheets read as one flat black block in dark mode. */
+@Composable internal fun WorkbenchBottomSheet(
+    onDismissRequest: () -> Unit,
+    sheetState: SheetState = rememberModalBottomSheetState(),
+    properties: ModalBottomSheetProperties = ModalBottomSheetDefaults.properties,
+    content: @Composable ColumnScope.() -> Unit,
+) = ModalBottomSheet(onDismissRequest = onDismissRequest, sheetState = sheetState, properties = properties,
+    containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 2.dp, content = content)
 
 /** A value picker, separate from the icon-led action menus. Material owns gestures/insets. */
 @Composable internal fun SelectionSheet(
@@ -31,13 +41,8 @@ internal data class SelectionOption(val id: String, val label: String, val detai
     onDismiss: () -> Unit, hint: String? = null, emptyText: String? = null,
     onRefresh: (() -> Unit)? = null, refreshEnabled: Boolean = true,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        // Keep the sheet one surface level above the dark canvas. Using the
-        // page surface for both the sheet and every row made the switcher read
-        // as one flat black block in dark mode.
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 2.dp) {
+    WorkbenchBottomSheet(onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         SelectionList(title, options, selected, onSelect, hint, emptyText, onRefresh, refreshEnabled)
     }
 }
@@ -57,13 +62,12 @@ internal data class SelectionOption(val id: String, val label: String, val detai
             positioned = true
         }
     }
-    val haptic = rememberHaptic()
     val maxHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() * .75f }
     Column(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 24.dp, end = if (onRefresh == null) 24.dp else 12.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f).padding(vertical = 8.dp), style = MaterialTheme.typography.titleLarge)
-            if (onRefresh != null) IconButton(onClick = { haptic(false); onRefresh() }, enabled = refreshEnabled) {
+            if (onRefresh != null) IconButton(onClick = { onRefresh() }, enabled = refreshEnabled) {
                 Icon(WorkbenchIcons.Refresh, tr(R.string.ui_reload_models), Modifier.size(20.dp))
             }
         }
@@ -82,12 +86,11 @@ internal data class SelectionOption(val id: String, val label: String, val detai
 }
 
 @Composable private fun SelectionRow(option: SelectionOption, selected: Boolean, onClick: () -> Unit) {
-    val haptic = rememberHaptic()
     val stackedStatus = LocalDensity.current.fontScale > 1.3f || with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < 360.dp
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-        .clip(RoundedCornerShape(12.dp))
+        .clip(MaterialTheme.shapes.small)
         .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .86f) else androidx.compose.ui.graphics.Color.Transparent)
-        .selectable(selected, role = Role.RadioButton, onClick = { haptic(false); onClick() })
+        .selectable(selected, role = Role.RadioButton, onClick = { onClick() })
         .heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {

@@ -28,7 +28,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -155,12 +154,6 @@ import java.util.UUID
         else -> CrashScreen.SESSIONS
     }
     SideEffect { (context.applicationContext as RemoteApplication).crashes.screen(crashScreen) }
-    val largeHeader = false
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    LaunchedEffect(state.activeHost, state.workspace.selectedProject, showConversation) {
-        scrollBehavior.state.heightOffset = 0f
-        scrollBehavior.state.contentOffset = 0f
-    }
     BackHandler(!showHome && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) { vm.navigateBack() }
     BackHandler(showHome && state.workspace.archived && editProfile == null && !showSettings && !showHostList && !showWorkspace && !showProjectEditor && !showHostDetail) {
         vm.showArchived(false)
@@ -225,7 +218,6 @@ import java.util.UUID
                 status = state.workspace.connection,
                 conversation = !showHome,
                 onNavigate = { vm.navigateBack() },
-                large = largeHeader, scrollBehavior = if (largeHeader) scrollBehavior else null,
                 onHosts = if (!showConversation) ({ showHostSwitcher = true }) else null,
                 onMenu = { if (showHome) showSettings = true else if (showConversation) showConversationOptions = true else showWorkspace = true },
                 menuIcon = if (showHome) WorkbenchIcons.Settings else WorkbenchIcons.MoreHoriz,
@@ -243,7 +235,6 @@ import java.util.UUID
                 backLabel = if (state.tab != WorkspaceTab.SESSIONS) tr(R.string.ui_back_to_session) else tr(R.string.ui_back_to_projects),
             )
         },
-        modifier = Modifier.then(if (largeHeader) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier),
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
             if (state.profile == null) {
@@ -326,7 +317,7 @@ import java.util.UUID
     )
     menuProject?.let { path ->
         val project = state.workspace.projects.firstOrNull { it.path == path }
-        ModalBottomSheet(onDismissRequest = { menuProject = null }) {
+        WorkbenchBottomSheet(onDismissRequest = { menuProject = null }) {
             Column(Modifier.padding(16.dp)) {
                 Text(project?.name ?: tr(R.string.ui_projects), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
                 Text(path, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -344,7 +335,7 @@ import java.util.UUID
     if (showProjectEditor) ProjectEditor(state.profile?.defaultCwd.orEmpty(), onDismiss = { showProjectEditor = false },
         busy = state.workspace.creatingProjectPath != null, error = state.workspace.projectCreationError,
         onSave = { name, path -> vm.createProject(name, path) { saved -> if (saved) showProjectEditor = false } })
-    if (showWorkspace) ModalBottomSheet(onDismissRequest = { showWorkspace = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    if (showWorkspace) WorkbenchBottomSheet(onDismissRequest = { showWorkspace = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         ProjectWorkspaceMenu(state.project, state.tab, state.workspace.selectedThread != null,
             onSelect = { if (it == WorkspaceTab.SESSIONS && state.workspace.selectedThread == null) vm.backToProjects() else vm.selectTab(it); showWorkspace = false },
             onProjects = { vm.backToProjects(); showWorkspace = false })
@@ -370,7 +361,7 @@ import java.util.UUID
 
 @Composable fun TextPrompt(title: String, label: String, initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit, validate: (String) -> Boolean = { it.isNotBlank() }) {
     var value by rememberSaveable(title, initial) { mutableStateOf(initial) }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    WorkbenchBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(value, { value = it }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth())

@@ -10,7 +10,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -91,18 +90,19 @@ import dev.remotegpt.client.*
             }
         }
     }
-    if (directoryActions) ModalBottomSheet(onDismissRequest = { directoryActions = false }) {
+    if (directoryActions) WorkbenchBottomSheet(onDismissRequest = { directoryActions = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text(ws.filePath, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+            Text(ws.filePath, Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.MiddleEllipsis)
             SheetAction(tr(R.string.ui_open_directory), WorkbenchIcons.FolderOpen) { directoryActions = false; goTo = true }
             SheetAction(tr(R.string.ui_project_root), WorkbenchIcons.Home) { directoryActions = false; vm.listFiles(ws.selectedProject) }
         }
     }
     if (goTo) TextPrompt(tr(R.string.ui_open_remote_directory), tr(R.string.ui_absolute_path), ws.filePath, onDismiss = { goTo = false }, onConfirm = { vm.listFiles(it); goTo = false }, validate = { it.startsWith('/') })
-    options?.let { file -> ModalBottomSheet(onDismissRequest = { options = null }) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(file.name, style = MaterialTheme.typography.titleLarge)
-            if (!file.directory) Text(if (imageName(file.name)) tr(R.string.ui_image_119, formatSize(file.size)) else formatSize(file.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    options?.let { file -> WorkbenchBottomSheet(onDismissRequest = { options = null }) {
+        // Same layout as every action sheet: title aligned with the action icons.
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Text(file.name, Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            if (!file.directory) Text(if (imageName(file.name)) tr(R.string.ui_image_119, formatSize(file.size)) else formatSize(file.size), Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (file.directory) SheetAction(tr(R.string.ui_open_directory), WorkbenchIcons.FolderOpen) { vm.listFiles(file.path); options = null }
             else {
                 if (imageName(file.name)) SheetAction(tr(R.string.ui_preview_image), WorkbenchIcons.Image) { vm.previewImage(file.path); options = null }
@@ -186,7 +186,6 @@ import dev.remotegpt.client.*
     }
     val scroll = rememberScrollState()
     LaunchedEffect(path) { scroll.scrollTo(scroll.maxValue) }
-    val haptic = rememberHaptic()
     Row(
         modifier = modifier.horizontalScroll(scroll).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -197,8 +196,8 @@ import dev.remotegpt.client.*
                 Icon(WorkbenchIcons.ChevronRight, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box(
-                modifier = Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(8.dp))
-                    .clickable(enabled = !current, role = Role.Button) { haptic(false); onNavigate(targetPath) }
+                modifier = Modifier.heightIn(min = 40.dp).clip(MaterialTheme.shapes.extraSmall)
+                    .clickable(enabled = !current, role = Role.Button) { onNavigate(targetPath) }
                     .padding(horizontal = 6.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {

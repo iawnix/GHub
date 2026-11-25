@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -229,7 +228,6 @@ import dev.remotegpt.client.*
 @Composable internal fun FileSummary(items: List<TimelineItem>, preview: (String) -> Unit) {
     var expanded by rememberSaveable { mutableStateOf(true) }
     var showAll by rememberSaveable { mutableStateOf(false) }
-    val haptic = rememberHaptic()
     val edits = remember(items) { items.flatMap { it.fileEdits } }
     val grouped = remember(edits) { edits.groupBy { it.path }.entries.toList() }
     val repeatedNames = remember(grouped) { grouped.groupingBy { it.key.substringAfterLast('/') }.eachCount().filterValues { it > 1 }.keys }
@@ -241,7 +239,7 @@ import dev.remotegpt.client.*
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f))) {
         Column {
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .clickable(role = Role.Button) { haptic(false); expanded = !expanded }
+                .clickable(role = Role.Button) { expanded = !expanded }
                 .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (failed || items.any { !it.complete }) TaskStatusIcon(if (failed) TaskStatus.FAILED else TaskStatus.RUNNING)
@@ -263,7 +261,7 @@ import dev.remotegpt.client.*
                     }
                     if (grouped.size > 3) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
-                        TextButton(onClick = { haptic(false); showAll = !showAll }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                        TextButton(onClick = { showAll = !showAll }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                             Text(if (showAll) tr(R.string.chat_fewer_files) else trq(R.plurals.chat_more_files, grouped.size - 3), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
                             DisclosureChevron(showAll, WorkbenchIcons.ChevronRight, null, LocalContentColor.current)
                         }
@@ -285,7 +283,6 @@ import dev.remotegpt.client.*
 
 @Composable private fun FileDiffRow(path: String, edits: List<FileEdit>, showParent: Boolean) {
     var expanded by rememberSaveable(path) { mutableStateOf(false) }
-    val haptic = rememberHaptic()
     val largeText = LocalDensity.current.fontScale > 1.3f
     val counts = remember(edits) {
         val values = edits.map { it.lineCounts }
@@ -293,7 +290,7 @@ import dev.remotegpt.client.*
     }
     Column {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
-        Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = tr(R.string.chat_show_diff, path)) { haptic(false); expanded = !expanded }
+        Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = tr(R.string.chat_show_diff, path)) { expanded = !expanded }
             .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(WorkbenchIcons.FileCode, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)

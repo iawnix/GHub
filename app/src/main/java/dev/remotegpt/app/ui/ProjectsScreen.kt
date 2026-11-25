@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -49,7 +48,6 @@ import dev.remotegpt.app.*
     onArchive: (String) -> Unit = {},
     onExitArchive: () -> Unit = {},
 ) {
-    val haptic = rememberHaptic()
     val list = rememberLazyListState()
     val refresh = rememberPullToRefreshState()
     val topInset = LocalWorkbenchTopInset.current
@@ -76,14 +74,14 @@ import dev.remotegpt.app.*
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = .55f),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = MaterialTheme.shapes.medium,
                 ) {
                     Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(WorkbenchIcons.Archive, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
                         Text(tr(R.string.ui_archived_sessions), Modifier.weight(1f),
                             style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        TextButton(onClick = { haptic(false); onExitArchive() }) {
+                        TextButton(onClick = { onExitArchive() }) {
                             Text(tr(R.string.ui_back_to_recent))
                         }
                     }
@@ -125,11 +123,10 @@ import dev.remotegpt.app.*
                     Column(Modifier.animateItem(fadeInSpec = tween(Motion.EXPAND), placementSpec = null, fadeOutSpec = tween(Motion.SHORT))
                         .fillMaxWidth().bringIntoViewRequester(reveal).onSizeChanged { width = it.width }) {
                         Row(Modifier.fillMaxWidth().onSizeChanged { headerHeight = it.height }
-                            .clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = emphasis)),
+                            .clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = emphasis)),
                             verticalAlignment = Alignment.CenterVertically) {
                             Row(Modifier.weight(1f).semantics { stateDescription = tr(if (open) R.string.ui_project_expanded else R.string.ui_project_collapsed) }
                                 .clickable(role = Role.Button, onClickLabel = tr(if (open) R.string.ui_collapse_269 else R.string.ui_expand)) {
-                                    haptic(false)
                                     focusedProject = project.path
                                     revealProject = if (open) null else project.path
                                     expanded = if (open) expanded - project.path else expanded + project.path
@@ -189,7 +186,7 @@ import dev.remotegpt.app.*
                     visibility.targetState = open
                     Disclosure(visibility) {
                         Row(Modifier.fillMaxWidth().padding(start = ThreadIndent - 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { haptic(false); onCreate(project.path) }, enabled = ws.creatingThreadCwd == null && project.path.startsWith('/')) {
+                            TextButton(onClick = { onCreate(project.path) }, enabled = ws.creatingThreadCwd == null && project.path.startsWith('/')) {
                                 if (ws.creatingThreadCwd == project.path) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                 else Icon(WorkbenchIcons.Add, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
@@ -282,8 +279,7 @@ import dev.remotegpt.app.*
 
 @Composable fun SheetAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean = false, enabled: Boolean = true, supporting: String? = null, onClick: () -> Unit) {
-    val haptic = rememberHaptic()
-    Surface(onClick = { haptic(false); onClick() }, enabled = enabled, shape = RoundedCornerShape(16.dp),
+    Surface(onClick = { onClick() }, enabled = enabled, shape = MaterialTheme.shapes.medium,
         color = androidx.compose.ui.graphics.Color.Transparent) {
         Row(Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.38f).heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -302,7 +298,7 @@ import dev.remotegpt.app.*
     var path by rememberSaveable(initialPath) { mutableStateOf(initialPath) }
     var name by rememberSaveable { mutableStateOf("") }
     val saving by rememberUpdatedState(busy)
-    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() },
+    WorkbenchBottomSheet(onDismissRequest = { if (!busy) onDismiss() },
         properties = ModalBottomSheetProperties(shouldDismissOnBackPress = !busy),
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true,
             confirmValueChange = { it != SheetValue.Hidden || !saving })) {
@@ -324,8 +320,7 @@ import dev.remotegpt.app.*
     SelectionList(tr(R.string.ui_choose_project), projects.map { project ->
         SelectionOption(project.path, project.name, detail = project.path.takeIf { project.name in duplicateNames })
     }, current, onSelect, footer = {
-        val haptic = rememberHaptic()
-        TextButton(onClick = { haptic(false); onAdd() }, modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(min = 48.dp)) {
+        TextButton(onClick = { onAdd() }, modifier = Modifier.padding(horizontal = 12.dp).fillMaxWidth().heightIn(min = 48.dp)) {
             Icon(WorkbenchIcons.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(tr(R.string.ui_add_project))
         }
     })

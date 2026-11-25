@@ -6,7 +6,6 @@ import dev.remotegpt.app.R
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,7 +38,7 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
 
 @Composable fun EmptyPanel(icon: ImageVector, title: String, description: String, action: String? = null, onAction: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer) { Icon(icon, null, Modifier.padding(18.dp).size(28.dp), tint = MaterialTheme.colorScheme.primary) }
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer) { Icon(icon, null, Modifier.padding(18.dp).size(28.dp), tint = MaterialTheme.colorScheme.primary) }
         Spacer(Modifier.height(24.dp)); Text(title, style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp)); Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         if (action != null) { Spacer(Modifier.height(24.dp)); Button(onClick = onAction) { Text(action); Spacer(Modifier.width(8.dp)); Icon(WorkbenchIcons.ArrowForward, null, Modifier.size(18.dp)) } }
@@ -60,7 +59,7 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
         val queued = data.visuals.message == tr(R.string.ui_message_queued)
         Surface(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().widthIn(max = 560.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.inverseSurface,
             contentColor = MaterialTheme.colorScheme.inverseOnSurface,
             tonalElevation = 3.dp,
@@ -120,7 +119,7 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
 }
 
 @Composable fun InfoCard(text: String, action: String? = null, onAction: () -> Unit = {}) {
-    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(14.dp)) {
+    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(14.dp)) {
             Text(text, style = MaterialTheme.typography.bodyMedium)
             if (action != null) TextButton(onClick = onAction, contentPadding = PaddingValues(top = 8.dp)) { Text(action) }
@@ -225,7 +224,7 @@ private val knownTimelineKinds = setOf(
                 if (!tool) details() else Disclosure(expanded) { Column { details() } }
             }
         }
-        if (user) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(18.dp),
+        if (user) Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium,
             contentColor = MaterialTheme.colorScheme.onSurface, content = content)
         else content()
     }
@@ -299,7 +298,7 @@ private val knownTimelineKinds = setOf(
     val req = pending.request
     val haptic = rememberHaptic()
     val amber = accentColor(WorkbenchAccent.AMBER)
-    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface,
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, amber.copy(alpha = .45f))) {
         Column(Modifier.fillMaxWidth()
             .drawBehind {
@@ -330,9 +329,8 @@ private val knownTimelineKinds = setOf(
 /** Pinned above the composer while a blocking request is scrolled out of view. */
 @Composable internal fun PendingActionBanner(text: String, question: Boolean = false, onView: () -> Unit) {
     val amber = accentColor(WorkbenchAccent.AMBER)
-    val haptic = rememberHaptic()
-    Surface(onClick = { haptic(false); onView() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp),
-        shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
+    Surface(onClick = { onView() }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp),
+        shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, amber.copy(alpha = .45f))) {
         Row(Modifier.fillMaxWidth().background(amber.copy(alpha = .08f)).heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

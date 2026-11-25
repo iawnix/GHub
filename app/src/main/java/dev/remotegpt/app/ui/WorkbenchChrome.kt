@@ -21,9 +21,8 @@ import dev.remotegpt.app.ConnectionStatus
 import dev.remotegpt.app.WorkspaceTab
 
 @Composable fun WorkbenchHeader(
-    title: String, @Suppress("UNUSED_PARAMETER") host: String? = null, status: ConnectionStatus, conversation: Boolean,
-    onNavigate: () -> Unit, backLabel: String = tr(R.string.ui_back), large: Boolean = false,
-    scrollBehavior: TopAppBarScrollBehavior? = null,
+    title: String, status: ConnectionStatus, conversation: Boolean,
+    onNavigate: () -> Unit, backLabel: String = tr(R.string.ui_back),
     onMenu: (() -> Unit)? = null, onHosts: (() -> Unit)? = null, onAdd: (() -> Unit)? = null,
     onArchive: (() -> Unit)? = null, archiveLabel: String = tr(R.string.ui_archived),
     archived: Boolean = false,
@@ -47,8 +46,7 @@ import dev.remotegpt.app.WorkspaceTab
     )
     val density = LocalDensity.current
     val wideBar = with(density) { LocalWindowInfo.current.containerSize.width.toDp() >= 360.dp } && density.fontScale <= 1.35f
-    if (large) MediumTopAppBar(modifier = Modifier.workbenchGlass(), title = { ProvideTextStyle(MaterialTheme.typography.headlineMedium, heading) }, expandedHeight = 128.dp, navigationIcon = back, colors = colors, scrollBehavior = scrollBehavior)
-    else TopAppBar(modifier = Modifier.workbenchGlass(), title = { ProvideTextStyle(MaterialTheme.typography.titleMedium, heading) }, navigationIcon = back, actions = {
+    TopAppBar(modifier = Modifier.workbenchGlass(), title = { ProvideTextStyle(MaterialTheme.typography.titleMedium, heading) }, navigationIcon = back, actions = {
         onAdd?.let { IconButton(onClick = it) { Icon(WorkbenchIcons.Add, tr(R.string.ui_add_project), Modifier.size(20.dp)) } }
         onArchive?.let { HeaderToggleAction(archived, it, WorkbenchIcons.Archive, archiveLabel) }
         if (onSelectTab != null && workspaceTab != null) {
