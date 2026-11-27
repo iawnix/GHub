@@ -127,6 +127,17 @@ internal val LocalWorkbenchMessage = staticCompositionLocalOf<(String) -> Unit> 
     }
 }
 
+@Composable internal fun SyncStatusRow(text: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = accentColor(WorkbenchAccent.BLUE))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
 private val knownTimelineKinds = setOf(
     "userMessage", "agentMessage", "plan", "commandExecution",
     "fileChange", "imageView", "dynamicToolCall", "contextCompaction", "reasoning",

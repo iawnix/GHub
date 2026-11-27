@@ -87,7 +87,10 @@ import dev.remotegpt.app.*
                     }
                 }
             }
-            if (ws.projects.isEmpty() && !ws.loadingThreads) item(key = "control:empty") {
+            if (ws.projects.isEmpty() && ws.loadingThreads) item(key = "control:syncing") {
+                SyncStatusRow(tr(R.string.ui_syncing_projects_and_sessions))
+            }
+            if (ws.projects.isEmpty() && !ws.loadingThreads && ws.connection == ConnectionStatus.ONLINE) item(key = "control:empty") {
                 EmptyPanel(WorkbenchIcons.FolderOpen, tr(R.string.ui_add_your_project), tr(R.string.ui_choose_a_remote_working_directory_to_start), tr(R.string.ui_add_project), onAdd)
             }
             val projectEntries = ws.projects.map { project ->

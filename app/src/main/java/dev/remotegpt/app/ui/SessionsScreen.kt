@@ -294,6 +294,9 @@ import dev.remotegpt.client.*
                 }) { listPadding, dockHeight ->
                 LazyColumn(Modifier.align(Alignment.TopCenter).widthIn(max = 760.dp).fillMaxSize().workbenchBackdropSource().nestedScroll(scrollIntent), state = listState, contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (state.conversation?.nextCursor != null) item(key = "control:older") { TextButton(onClick = { followingLatest = false; vm.loadOlder() }, modifier = Modifier.fillMaxWidth()) { Text(tr(R.string.ui_load_earlier_messages)) } }
+                    if (ws.loadingHistory && timeline.isEmpty()) item(key = "control:syncing") {
+                        SyncStatusRow(tr(R.string.ui_syncing_session_messages), Modifier.padding(vertical = 18.dp))
+                    }
                     if (showEmpty) item(key = "control:empty") { Column(Modifier.padding(vertical = 38.dp)) {
                         Icon(WorkbenchIcons.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(12.dp)); Text(tr(R.string.ui_ready_to_start), style = MaterialTheme.typography.titleLarge)

@@ -360,6 +360,8 @@
     <string name="ui_session_options" formatted="false">会话选项</string>
     <string name="ui_project_files" formatted="false">项目文件</string>
     <string name="ui_sync_session" formatted="false">同步会话</string>
+    <string name="ui_syncing_projects_and_sessions" formatted="false">正在同步项目与会话…</string>
+    <string name="ui_syncing_session_messages" formatted="false">正在同步会话消息…</string>
     <string name="ui_rename" formatted="false">重命名</string>
     <string name="ui_archive" formatted="false">归档</string>
     <string name="ui_open_remote_terminal" formatted="false">打开远端终端</string>
